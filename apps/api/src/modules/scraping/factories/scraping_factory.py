@@ -1,7 +1,5 @@
 """Composicao das dependencias concretas do modulo de scraping."""
 
-from uuid import UUID
-
 from apps.api.src.modules.scraping.application.quality_scoring_service import (
     QualityScoringService,
 )
@@ -36,8 +34,10 @@ from apps.api.src.modules.scraping.domain.repositories import ScrapingAttemptRep
 from apps.api.src.modules.scraping.infrastructure.database.postgres_unit_of_work import (
     PostgresScrapingUnitOfWork,
 )
-from apps.api.src.modules.scraping.infrastructure.queue.local_task_dispatcher import (
-    LocalTaskDispatcher,
+from apps.api.src.modules.scraping.infrastructure.queue.dramatiq_broker import broker
+from apps.api.src.modules.scraping.infrastructure.queue.dramatiq_task_dispatcher import (
+    DramatiqJobPublisher,
+    DramatiqTaskDispatcher,
 )
 from apps.api.src.modules.scraping.infrastructure.scrapers.beautifulsoup_scraper import (
     BeautifulSoupScraper,
@@ -52,7 +52,7 @@ class ScrapingFactory:
     """Cria casos de uso com todas as dependencias concretas necessarias.
 
     Este e o ponto de composicao: ele conhece PostgreSQL, BeautifulSoup e o
-    dispatcher local, enquanto os casos de uso continuam dependendo apenas de
+    dispatcher Dramatiq, enquanto os casos de uso continuam dependendo apenas de
     contratos definidos pelas camadas internas.
     """
 
@@ -98,13 +98,11 @@ class ScrapingFactory:
     def create_create_scraping_job(cls) -> CreateScrapingJob:
         """Cria o caso de uso que persiste e despacha novos jobs."""
 
-        async def execute_locally(job_id: UUID) -> None:
-            use_case = cls.create_execute_scraping_job()
-            await use_case.execute(job_id)
-
         return CreateScrapingJob(
             unit_of_work_factory=cls.create_unit_of_work,
-            task_dispatcher=LocalTaskDispatcher(execute_locally),
+            task_dispatcher=DramatiqTaskDispatcher(
+                DramatiqJobPublisher(broker),
+            ),
         )
 
     @classmethod

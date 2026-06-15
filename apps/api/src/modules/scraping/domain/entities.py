@@ -88,6 +88,19 @@ class ScrapingJob:
         self.finished_at = utc_now()
 
 
+    def fail_dispatch(self, reason: str) -> None:
+        """Falha um job pendente que nao conseguiu chegar ate a fila."""
+
+        if self.status is not JobStatus.PENDING:
+            raise InvalidJobTransitionError(
+                "Somente jobs pendentes podem falhar durante o dispatch."
+            )
+
+        self.status = JobStatus.FAILED
+        self.error_message = reason
+        self.finished_at = utc_now()
+
+
 @dataclass
 class ScrapingAttempt:
     """Representa uma tentativa feita com uma estratégia de scraping.

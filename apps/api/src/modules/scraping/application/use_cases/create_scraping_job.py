@@ -5,6 +5,7 @@ from apps.api.src.modules.scraping.application.unit_of_work import (
     ScrapingUnitOfWorkFactory,
 )
 from apps.api.src.modules.scraping.domain.entities import ScrapingJob
+from apps.api.src.modules.scraping.domain.exceptions import TaskDispatchError
 
 
 class CreateScrapingJob:
@@ -35,6 +36,15 @@ class CreateScrapingJob:
             await unit_of_work.commit()
 
         # Mensagens de fila devem transportar IDs, não entidades completas.
-        await self.task_dispatcher.dispatch(job.id)
+        try:
+            await self.task_dispatcher.dispatch(job.id)
+        except TaskDispatchError as error:
+            # O job ja foi confirmado no banco. Mantemos seu historico e
+            # registramos que ele falhou antes de chegar ao worker.
+            job.fail_dispatch(str(error))
+            async with self.unit_of_work_factory() as unit_of_work:
+                await unit_of_work.job_repository.save(job)
+                await unit_of_work.commit()
+            raise
 
         return job

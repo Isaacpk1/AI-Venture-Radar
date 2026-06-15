@@ -10,6 +10,7 @@ from apps.api.src.modules.scraping.application.unit_of_work import (
     ScrapingUnitOfWorkFactory,
 )
 from apps.api.src.modules.scraping.domain.entities import ScrapingJob
+from apps.api.src.modules.scraping.domain.enums import JobStatus
 from apps.api.src.modules.scraping.domain.exceptions import (
     ScrapingError,
     ScrapingJobNotFoundError,
@@ -42,6 +43,12 @@ class ExecuteScrapingJob:
                 raise ScrapingJobNotFoundError(
                     f"O job de scraping {job_id} nao foi encontrado."
                 )
+
+            # Filas trabalham com entrega "pelo menos uma vez", portanto a
+            # mesma mensagem pode chegar novamente. Somente jobs pending podem
+            # iniciar; os demais estados retornam sem repetir o scraping.
+            if job.status is not JobStatus.PENDING:
+                return job
 
             # Confirmamos running antes da operacao demorada. Assim, outras
             # sessoes conseguem consultar que o processamento ja comecou.

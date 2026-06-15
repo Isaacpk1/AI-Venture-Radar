@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, status
 from apps.api.src.modules.scraping.domain.exceptions import (
     ScrapingJobNotFoundError,
     ScrapingResultNotFoundError,
+    TaskDispatchError,
 )
 from apps.api.src.modules.scraping.factories.scraping_factory import ScrapingFactory
 
@@ -36,7 +37,13 @@ async def create_scraping_job(
     """Cria e despacha um novo job de scraping."""
 
     use_case = ScrapingFactory.create_create_scraping_job()
-    job = await use_case.execute(str(request.url))
+    try:
+        job = await use_case.execute(str(request.url))
+    except TaskDispatchError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(error),
+        ) from error
 
     return ScrapingJobResponse.from_entity(job)
 

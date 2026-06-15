@@ -14,3 +14,5 @@ sqlalchemy[asyncio]>=2.0,<3
 asyncpg>=0.30,<1
 alembic>=1.14,<2
 
+# Fila de tarefas distribuida
+dramatiq[redis]>=2.1,<3

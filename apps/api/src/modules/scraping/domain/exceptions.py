@@ -32,6 +32,10 @@ class ScrapingResultNotFoundError(ScrapingError):
     """O resultado de scraping solicitado não existe."""
 
 
+class TaskDispatchError(ScrapingError):
+    """O job foi persistido, mas nao foi possivel publica-lo na fila."""
+
+
 class ScrapingFailedError(ScrapingError):
     """Nenhuma estratégia conseguiu produzir conteúdo válido."""
 
