@@ -42,6 +42,9 @@ from apps.api.src.modules.scraping.infrastructure.queue.dramatiq_task_dispatcher
 from apps.api.src.modules.scraping.infrastructure.scrapers.beautifulsoup_scraper import (
     BeautifulSoupScraper,
 )
+from apps.api.src.modules.scraping.infrastructure.scrapers.playwright_scraper import (
+    PlaywrightScraper,
+)
 from apps.api.src.modules.scraping.infrastructure.security.url_guard import UrlGuard
 from apps.api.src.modules.scraping.infrastructure.validators.deterministic_validator import (
     BasicDeterministicValidator,
@@ -72,9 +75,17 @@ class ScrapingFactory:
             url_guard=UrlGuard(),
             limits=ScrapingLimits(),
         )
+        playwright_scraper = PlaywrightScraper(
+            url_guard=UrlGuard(),
+            # Renderizar JavaScript normalmente exige mais tempo que baixar
+            # HTML estatico, por isso esta estrategia recebe timeout maior.
+            limits=ScrapingLimits(timeout_seconds=30),
+        )
 
         return ScrapingPipeline(
-            strategy_selector=ScrapingStrategySelector([beautifulsoup_scraper]),
+            strategy_selector=ScrapingStrategySelector(
+                [beautifulsoup_scraper, playwright_scraper]
+            ),
             validator=BasicDeterministicValidator(),
             scoring_service=QualityScoringService(),
             decision_policy=ValidationDecisionPolicy(

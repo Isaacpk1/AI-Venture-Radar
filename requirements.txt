@@ -6,6 +6,7 @@ uvicorn[standard]>=0.34,<1
 # Scraping HTTP e extração de HTML
 beautifulsoup4>=4.12,<5
 httpx>=0.28,<1
+playwright>=1.52,<2
 
 # Testes
 pytest>=8.3,<9
