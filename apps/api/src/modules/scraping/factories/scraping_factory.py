@@ -45,9 +45,21 @@ from apps.api.src.modules.scraping.infrastructure.scrapers.beautifulsoup_scraper
 from apps.api.src.modules.scraping.infrastructure.scrapers.playwright_scraper import (
     PlaywrightScraper,
 )
+from apps.api.src.modules.scraping.infrastructure.scrapers.trafilatura_scraper import (
+    TrafilaturaScraper,
+)
 from apps.api.src.modules.scraping.infrastructure.security.url_guard import UrlGuard
-from apps.api.src.modules.scraping.infrastructure.validators.deterministic_validator import (
-    BasicDeterministicValidator,
+from apps.api.src.modules.scraping.infrastructure.validators.composite_deterministic_validator import (
+    CompositeDeterministicValidator,
+)
+from apps.api.src.modules.scraping.infrastructure.validators.evidence_validator import (
+    EvidenceValidator,
+)
+from apps.api.src.modules.scraping.infrastructure.validators.technical_validator import (
+    TechnicalValidator,
+)
+from apps.api.src.modules.scraping.infrastructure.validators.textual_validator import (
+    TextualValidator,
 )
 
 
@@ -81,12 +93,23 @@ class ScrapingFactory:
             # HTML estatico, por isso esta estrategia recebe timeout maior.
             limits=ScrapingLimits(timeout_seconds=30),
         )
+        trafilatura_scraper = TrafilaturaScraper(
+            source_scraper=beautifulsoup_scraper,
+        )
 
         return ScrapingPipeline(
             strategy_selector=ScrapingStrategySelector(
-                [beautifulsoup_scraper, playwright_scraper]
+                [
+                    beautifulsoup_scraper,
+                    trafilatura_scraper,
+                    playwright_scraper,
+                ]
             ),
-            validator=BasicDeterministicValidator(),
+            validator=CompositeDeterministicValidator(
+                technical_validator=TechnicalValidator(),
+                textual_validator=TextualValidator(),
+                evidence_validator=EvidenceValidator(),
+            ),
             scoring_service=QualityScoringService(),
             decision_policy=ValidationDecisionPolicy(
                 ContentAcceptancePolicy(),

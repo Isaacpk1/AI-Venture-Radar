@@ -49,6 +49,19 @@ class ScrapingOutput:
 
 
 @dataclass(frozen=True)
+class ValidationComponentResult:
+    """Resultado padronizado produzido por um validador especializado.
+
+    Validadores tecnico, textual e evidencial analisam aspectos diferentes,
+    mas todos devolvem este mesmo formato para o validador composto combinar.
+    """
+
+    score: float
+    problems: set[str] = field(default_factory=set)
+    warnings: set[str] = field(default_factory=set)
+
+
+@dataclass(frozen=True)
 class DeterministicValidationResult:
     """Medições objetivas produzidas pelos validadores.
 

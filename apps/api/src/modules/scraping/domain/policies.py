@@ -37,6 +37,10 @@ class ContentAcceptancePolicy:
         "blocked_status",
         "captcha",
         "empty_content",
+        "high_boilerplate",
+        "insufficient_text",
+        "javascript_required",
+        "link_farm",
         "missing_source_url",
         "unsupported_content_type",
     }

@@ -106,6 +106,7 @@ class ScrapingResultModel(Base):
         String(64),
         nullable=False,
         index=True,
+        unique=True,
     )
 
     # Campo flexível para informações extras que não merecem coluna própria

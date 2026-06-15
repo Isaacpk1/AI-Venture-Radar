@@ -53,6 +53,7 @@ class ScrapingMethod(StrEnum):
     BEAUTIFULSOUP = "beautifulsoup"
 
     # Estratégia futura para páginas que dependem de JavaScript.
+    TRAFILATURA = "trafilatura"
     PLAYWRIGHT = "playwright"
 
 

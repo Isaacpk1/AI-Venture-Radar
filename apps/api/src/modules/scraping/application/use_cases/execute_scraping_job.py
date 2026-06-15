@@ -3,6 +3,9 @@
 from collections.abc import Callable
 from uuid import UUID
 
+from apps.api.src.modules.scraping.application.content_deduplication_service import (
+    ContentDeduplicationService,
+)
 from apps.api.src.modules.scraping.application.scraping_pipeline import (
     ScrapingPipeline,
 )
@@ -12,6 +15,7 @@ from apps.api.src.modules.scraping.application.unit_of_work import (
 from apps.api.src.modules.scraping.domain.entities import ScrapingJob
 from apps.api.src.modules.scraping.domain.enums import JobStatus
 from apps.api.src.modules.scraping.domain.exceptions import (
+    DuplicateScrapingContentError,
     ScrapingError,
     ScrapingJobNotFoundError,
 )
@@ -60,6 +64,18 @@ class ExecuteScrapingJob:
 
             try:
                 result = await pipeline.execute(job.id, job.url)
+
+                # A validacao garante qualidade. Esta consulta separada garante
+                # que o conteudo aprovado tambem seja novo para o banco.
+                deduplication_service = ContentDeduplicationService(
+                    unit_of_work.result_repository
+                )
+                duplicate = await deduplication_service.find_duplicate(result)
+                if duplicate is not None:
+                    raise DuplicateScrapingContentError(
+                        "O conteudo coletado ja foi persistido pelo resultado "
+                        f"{duplicate.id}."
+                    )
 
                 # Resultado, tentativas e estado final compartilham a mesma
                 # sessao e serao confirmados juntos no commit final.

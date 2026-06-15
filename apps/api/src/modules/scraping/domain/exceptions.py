@@ -40,6 +40,10 @@ class ScrapingFailedError(ScrapingError):
     """Nenhuma estratégia conseguiu produzir conteúdo válido."""
 
 
+class DuplicateScrapingContentError(ScrapingError):
+    """O conteudo aprovado ja foi persistido por outro job de scraping."""
+
+
 class RecoverableScrapingError(ScrapingError):
     """Falha técnica que permite tentar outra estratégia de coleta.
 
@@ -54,6 +58,10 @@ class ScrapingLimitExceededError(RecoverableScrapingError):
 
 class ScrapingRequestError(RecoverableScrapingError):
     """A requisição HTTP falhou por timeout, conexão ou protocolo."""
+
+
+class ContentExtractionError(RecoverableScrapingError):
+    """A coleta funcionou, mas a estrategia nao extraiu conteudo utilizavel."""
 
 
 class GlobalScrapingLimitExceededError(ScrapingError):
