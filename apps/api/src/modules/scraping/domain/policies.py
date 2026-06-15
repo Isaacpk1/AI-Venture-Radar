@@ -84,6 +84,31 @@ class FallbackPolicy:
         return has_next_strategy and has_recoverable_problem
 
 
+class LLMReviewPolicy:
+    """Decide quando vale pagar o custo de uma revisao semantica."""
+
+    minimum_quality_score = 0.45
+    maximum_quality_score = 0.75
+    minimum_technical_score = 0.70
+    minimum_text_score = 0.60
+
+    blocking_problems = ContentAcceptancePolicy.blocking_problems
+
+    def requires_review(self, summary: ValidationSummary) -> bool:
+        """Seleciona apenas conteudo utilizavel, mas semanticamente ambiguo."""
+
+        has_blocker = bool(self.blocking_problems.intersection(summary.problems))
+
+        return (
+            not has_blocker
+            and summary.technical_score >= self.minimum_technical_score
+            and summary.text_score >= self.minimum_text_score
+            and self.minimum_quality_score
+            <= summary.quality_score
+            < self.maximum_quality_score
+        )
+
+
 class ValidationDecisionPolicy:
     """Combina as políticas menores e produz uma única decisão final."""
 

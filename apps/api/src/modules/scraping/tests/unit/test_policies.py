@@ -6,6 +6,7 @@ from apps.api.src.modules.scraping.domain.enums import ValidationDecision
 from apps.api.src.modules.scraping.domain.policies import (
     ContentAcceptancePolicy,
     FallbackPolicy,
+    LLMReviewPolicy,
     ValidationDecisionPolicy,
     ValidationSummary,
 )
@@ -102,3 +103,35 @@ def test_recoverable_problem_rejects_without_another_strategy(
     )
 
     assert decision is ValidationDecision.REJECT
+
+
+def test_llm_review_policy_selects_only_ambiguous_usable_content() -> None:
+    policy = LLMReviewPolicy()
+    ambiguous = ValidationSummary(
+        technical_score=0.90,
+        text_score=0.80,
+        evidence_score=0.30,
+        quality_score=0.62,
+    )
+
+    assert policy.requires_review(ambiguous) is True
+
+
+def test_llm_review_policy_ignores_clear_or_blocked_content() -> None:
+    policy = LLMReviewPolicy()
+    clear = ValidationSummary(
+        technical_score=1.0,
+        text_score=0.95,
+        evidence_score=0.90,
+        quality_score=0.90,
+    )
+    blocked = ValidationSummary(
+        technical_score=1.0,
+        text_score=0.80,
+        evidence_score=0.30,
+        quality_score=0.62,
+        problems={"captcha"},
+    )
+
+    assert policy.requires_review(clear) is False
+    assert policy.requires_review(blocked) is False

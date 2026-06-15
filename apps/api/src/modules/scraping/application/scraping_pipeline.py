@@ -7,6 +7,7 @@ from uuid import UUID
 from apps.api.src.modules.scraping.domain.entities import ScrapingAttempt, ScrapingResult
 from apps.api.src.modules.scraping.domain.enums import (
     AttemptStatus,
+    SemanticReviewDecision,
     ValidationDecision,
 )
 from apps.api.src.modules.scraping.domain.exceptions import (
@@ -14,13 +15,17 @@ from apps.api.src.modules.scraping.domain.exceptions import (
     RecoverableScrapingError,
     ScrapingFailedError,
 )
-from apps.api.src.modules.scraping.domain.policies import ValidationDecisionPolicy
+from apps.api.src.modules.scraping.domain.policies import (
+    LLMReviewPolicy,
+    ValidationDecisionPolicy,
+)
 from apps.api.src.modules.scraping.domain.repositories import ScrapingAttemptRepository
 
-from .dto import ScrapingInput
-from .ports import DeterministicValidator
+from .dto import ScrapingInput, SemanticValidationInput
+from .ports import DeterministicValidator, SemanticValidator
 from .quality_scoring_service import QualityScoringService
 from .scraping_limits import PipelineLimits
+from .semantic_confidence_service import SemanticConfidenceService
 from .strategy_selector import ScrapingStrategySelector
 
 
@@ -40,6 +45,9 @@ class ScrapingPipeline:
         decision_policy: ValidationDecisionPolicy,
         attempt_repository: ScrapingAttemptRepository,
         limits: PipelineLimits | None = None,
+        llm_review_policy: LLMReviewPolicy | None = None,
+        semantic_validator: SemanticValidator | None = None,
+        semantic_confidence_service: SemanticConfidenceService | None = None,
     ) -> None:
         """Recebe todas as dependências necessárias para executar o fluxo."""
 
@@ -49,6 +57,11 @@ class ScrapingPipeline:
         self.decision_policy = decision_policy
         self.attempt_repository = attempt_repository
         self.limits = limits or PipelineLimits()
+        self.llm_review_policy = llm_review_policy or LLMReviewPolicy()
+        self.semantic_validator = semantic_validator
+        self.semantic_confidence_service = (
+            semantic_confidence_service or SemanticConfidenceService()
+        )
 
     async def execute(
         self,
@@ -108,6 +121,46 @@ class ScrapingPipeline:
                     validation.to_summary(),
                     has_next_strategy=has_next_strategy,
                 )
+                attempt_warnings = set(validation.warnings)
+                semantic_metadata: dict[str, str | float | bool] = {}
+
+                # A revisao semantica interpreta somente conteudo ambiguo que
+                # ja passou pelos requisitos tecnicos e textuais minimos.
+                if (
+                    decision is ValidationDecision.REJECT
+                    and self.semantic_validator is not None
+                    and self.llm_review_policy.requires_review(
+                        validation.to_summary()
+                    )
+                ):
+                    assessment = await self.semantic_validator.validate(
+                        SemanticValidationInput(
+                            url=output.final_url,
+                            title=output.title,
+                            raw_text=output.raw_text,
+                            deterministic=validation,
+                        )
+                    )
+                    semantic = self.semantic_confidence_service.calculate(assessment)
+                    attempt_warnings.add("semantic_reviewed")
+                    attempt_warnings.add(
+                        f"semantic_decision_{assessment.decision.value}"
+                    )
+                    semantic_metadata = {
+                        "semantic_reviewed": True,
+                        "semantic_decision": assessment.decision.value,
+                        "semantic_confidence": semantic.semantic_confidence,
+                        "semantic_reason": assessment.reason,
+                        "semantic_contradiction_detected": (
+                            assessment.contradiction_detected
+                        ),
+                    }
+
+                    if (
+                        assessment.decision is SemanticReviewDecision.ACCEPTED
+                        and semantic.semantic_confidence >= 0.80
+                    ):
+                        decision = ValidationDecision.ACCEPT
 
                 attempt.finish_validation(
                     decision=decision,
@@ -116,7 +169,7 @@ class ScrapingPipeline:
                     evidence_score=validation.evidence_score,
                     quality_score=validation.quality_score,
                     problems=list(validation.problems),
-                    warnings=list(validation.warnings),
+                    warnings=list(attempt_warnings),
                 )
                 await self.attempt_repository.save(attempt)
 
@@ -147,7 +200,7 @@ class ScrapingPipeline:
                     content_hash=sha256(
                         output.raw_text.encode("utf-8")
                     ).hexdigest(),
-                    metadata=output.metadata,
+                    metadata={**output.metadata, **semantic_metadata},
                 )
             except Exception as error:
                 if attempt.status is AttemptStatus.RUNNING:

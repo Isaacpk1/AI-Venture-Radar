@@ -7,7 +7,10 @@ formato estável para a comunicação entre as partes do módulo.
 
 from dataclasses import dataclass, field
 
-from apps.api.src.modules.scraping.domain.enums import ScrapingMethod
+from apps.api.src.modules.scraping.domain.enums import (
+    ScrapingMethod,
+    SemanticReviewDecision,
+)
 from apps.api.src.modules.scraping.domain.policies import ValidationSummary
 
 
@@ -88,3 +91,35 @@ class DeterministicValidationResult:
             problems=self.problems,
             warnings=self.warnings,
         )
+
+
+@dataclass(frozen=True)
+class SemanticValidationInput:
+    """Contexto minimo entregue a uma implementacao de LLM."""
+
+    url: str
+    title: str | None
+    raw_text: str
+    deterministic: DeterministicValidationResult
+
+
+@dataclass(frozen=True)
+class SemanticAssessment:
+    """Fatores estruturados produzidos pela LLM, sem confianca calculada."""
+
+    startup_match_score: float
+    evidence_clarity_score: float
+    source_reliability_score: float
+    statement_specificity_score: float
+    context_completeness_score: float
+    contradiction_detected: bool
+    decision: SemanticReviewDecision
+    reason: str
+
+
+@dataclass(frozen=True)
+class SemanticValidationResult:
+    """Resultado final depois que o sistema calcula a confianca semantica."""
+
+    assessment: SemanticAssessment
+    semantic_confidence: float

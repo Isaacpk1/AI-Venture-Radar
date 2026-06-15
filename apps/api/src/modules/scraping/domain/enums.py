@@ -68,3 +68,11 @@ class ValidationDecision(StrEnum):
 
     # O conteúdo não deve ser utilizado.
     REJECT = "reject"
+
+
+class SemanticReviewDecision(StrEnum):
+    """Decisoes permitidas para uma revisao semantica simples."""
+
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    NEEDS_AGENT_REVIEW = "needs_agent_review"

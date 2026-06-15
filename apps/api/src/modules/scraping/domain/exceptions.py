@@ -64,6 +64,10 @@ class ContentExtractionError(RecoverableScrapingError):
     """A coleta funcionou, mas a estrategia nao extraiu conteudo utilizavel."""
 
 
+class SemanticValidationError(ScrapingError):
+    """O provedor semantico falhou ou devolveu uma resposta invalida."""
+
+
 class GlobalScrapingLimitExceededError(ScrapingError):
     """O job inteiro excedeu um limite e nenhuma estratégia deve continuar."""
 

@@ -1,5 +1,6 @@
 """Composicao das dependencias concretas do modulo de scraping."""
 
+from apps.api.src.config.settings import get_settings
 from apps.api.src.modules.scraping.application.quality_scoring_service import (
     QualityScoringService,
 )
@@ -49,6 +50,9 @@ from apps.api.src.modules.scraping.infrastructure.scrapers.trafilatura_scraper i
     TrafilaturaScraper,
 )
 from apps.api.src.modules.scraping.infrastructure.security.url_guard import UrlGuard
+from apps.api.src.modules.scraping.infrastructure.semantic_validators.gemini_semantic_validator import (
+    GeminiSemanticValidator,
+)
 from apps.api.src.modules.scraping.infrastructure.validators.composite_deterministic_validator import (
     CompositeDeterministicValidator,
 )
@@ -83,6 +87,7 @@ class ScrapingFactory:
     ) -> ScrapingPipeline:
         """Monta a pipeline usando o repositorio da transacao atual."""
 
+        settings = get_settings()
         beautifulsoup_scraper = BeautifulSoupScraper(
             url_guard=UrlGuard(),
             limits=ScrapingLimits(),
@@ -95,6 +100,14 @@ class ScrapingFactory:
         )
         trafilatura_scraper = TrafilaturaScraper(
             source_scraper=beautifulsoup_scraper,
+        )
+        semantic_validator = (
+            GeminiSemanticValidator(
+                api_key=settings.gemini_api_key,
+                model=settings.gemini_model,
+            )
+            if settings.gemini_api_key
+            else None
         )
 
         return ScrapingPipeline(
@@ -117,6 +130,7 @@ class ScrapingFactory:
             ),
             attempt_repository=attempt_repository,
             limits=PipelineLimits(),
+            semantic_validator=semantic_validator,
         )
 
     @classmethod

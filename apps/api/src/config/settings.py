@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     # External APIs
     firecrawl_api_key: str = ""
     llm_api_key: str = ""
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
     cohere_api_key: str = ""
 
     # Runtime

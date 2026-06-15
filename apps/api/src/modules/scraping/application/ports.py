@@ -10,7 +10,13 @@ from uuid import UUID
 
 from apps.api.src.modules.scraping.domain.enums import ScrapingMethod
 
-from .dto import DeterministicValidationResult, ScrapingInput, ScrapingOutput
+from .dto import (
+    DeterministicValidationResult,
+    ScrapingInput,
+    ScrapingOutput,
+    SemanticAssessment,
+    SemanticValidationInput,
+)
 
 
 class Scraper(ABC):
@@ -34,6 +40,17 @@ class DeterministicValidator(ABC):
         output: ScrapingOutput,
     ) -> DeterministicValidationResult:
         """Avalia aspectos técnicos, textuais e evidenciais básicos."""
+
+
+class SemanticValidator(ABC):
+    """Contrato para interpretar conteudo ambiguo usando uma LLM simples."""
+
+    @abstractmethod
+    async def validate(
+        self,
+        semantic_input: SemanticValidationInput,
+    ) -> SemanticAssessment:
+        """Retorna fatores estruturados; a confianca e calculada pelo sistema."""
 
 
 class TaskDispatcher(ABC):
