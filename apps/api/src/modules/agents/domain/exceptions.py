@@ -20,3 +20,15 @@ class AgentInvestigationError(AgentError):
     ``scraping``) decide como reagir a este erro — por exemplo, tratando a
     investigação como inconclusiva.
     """
+
+
+class AgentPlanningError(AgentError):
+    """O agente nao conseguiu gerar um plano de busca valido."""
+
+
+class AgentTaskDispatchError(AgentError):
+    """O job de agente nao foi publicado na fila."""
+
+
+class UnsupportedAgentJobError(AgentError):
+    """O worker recebeu um tipo de job de agente ainda nao suportado."""

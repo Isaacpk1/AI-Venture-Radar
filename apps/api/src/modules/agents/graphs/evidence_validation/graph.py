@@ -25,6 +25,10 @@ class EvidenceValidationGraph(EvidenceValidationService):
 
     def __init__(self, *, evidence_judge: EvidenceValidationService) -> None:
         self.evidence_judge = evidence_judge
+        # Mantemos ``model`` quando o avaliador interno expuser esse atributo.
+        # Isso ajuda logs/testes de composicao sem vazar detalhes do grafo para
+        # o contrato publico.
+        self.model = getattr(evidence_judge, "model", None)
         self.graph = self._compile_graph()
 
     async def investigate(

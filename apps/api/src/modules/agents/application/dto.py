@@ -61,3 +61,39 @@ class EvidenceValidationResult:
 
     decision: AgentDecision
     reason: str
+
+
+@dataclass(frozen=True)
+class SearchPlanInput:
+    """Contexto entregue ao Search Planner Agent.
+
+    Este DTO nasce quando uma evidencia nao e suficiente e o sistema precisa
+    planejar novas buscas. Ele nao cria jobs e nao chama scraper: ele apenas
+    descreve o problema para o agente gerar queries.
+    """
+
+    startup_name: str | None
+    source_url: str
+    source_title: str | None
+    raw_text: str
+    reason: str
+    known_terms: list[str] = field(default_factory=list)
+    excluded_urls: list[str] = field(default_factory=list)
+    max_queries: int = 5
+
+
+@dataclass(frozen=True)
+class SearchQuerySuggestion:
+    """Uma query sugerida pelo Search Planner Agent."""
+
+    query: str
+    purpose: str
+    priority: int
+
+
+@dataclass(frozen=True)
+class SearchPlanResult:
+    """Plano de busca gerado pelo Search Planner Agent."""
+
+    queries: list[SearchQuerySuggestion]
+    reason: str

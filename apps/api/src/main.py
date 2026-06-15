@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from apps.api.src.database.relational.session import check_database_connection
-from apps.api.src.modules.scraping.infrastructure.queue.dramatiq_broker import (
+from apps.api.src.shared.queue.dramatiq_broker import (
     check_redis_connection,
 )
 from apps.api.src.modules.scraping.presentation.routes import (

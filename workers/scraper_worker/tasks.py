@@ -7,7 +7,7 @@ import dramatiq
 # Este import configura o RedisBroker e o middleware AsyncIO antes de o actor
 # abaixo ser registrado. O nome importado tambem e passado explicitamente ao
 # decorator para deixar clara a dependencia da task.
-from apps.api.src.modules.scraping.infrastructure.queue.dramatiq_broker import (
+from apps.api.src.shared.queue.dramatiq_broker import (
     broker,
 )
 from apps.api.src.modules.scraping.factories.scraping_factory import ScrapingFactory

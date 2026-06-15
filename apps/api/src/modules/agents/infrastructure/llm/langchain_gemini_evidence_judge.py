@@ -55,6 +55,7 @@ class LangChainGeminiEvidenceJudge(EvidenceValidationService):
         if not model:
             raise ValueError("GEMINI_MODEL e obrigatorio.")
 
+        self.model = model
         self.max_text_characters = max_text_characters
 
         # ChatGoogleGenerativeAI e o adaptador oficial do LangChain para Gemini.

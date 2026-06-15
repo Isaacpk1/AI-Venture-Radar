@@ -36,7 +36,7 @@ from apps.api.src.modules.scraping.domain.repositories import ScrapingAttemptRep
 from apps.api.src.modules.scraping.infrastructure.database.postgres_unit_of_work import (
     PostgresScrapingUnitOfWork,
 )
-from apps.api.src.modules.scraping.infrastructure.queue.dramatiq_broker import broker
+from apps.api.src.shared.queue.dramatiq_broker import broker
 from apps.api.src.modules.scraping.infrastructure.queue.dramatiq_task_dispatcher import (
     DramatiqJobPublisher,
     DramatiqTaskDispatcher,
