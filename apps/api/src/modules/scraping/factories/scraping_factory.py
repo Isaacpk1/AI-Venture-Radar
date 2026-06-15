@@ -1,6 +1,7 @@
 """Composicao das dependencias concretas do modulo de scraping."""
 
 from apps.api.src.config.settings import get_settings
+from apps.api.src.modules.agents.factories.agents_factory import AgentsFactory
 from apps.api.src.modules.scraping.application.quality_scoring_service import (
     QualityScoringService,
 )
@@ -48,6 +49,9 @@ from apps.api.src.modules.scraping.infrastructure.scrapers.playwright_scraper im
 )
 from apps.api.src.modules.scraping.infrastructure.scrapers.trafilatura_scraper import (
     TrafilaturaScraper,
+)
+from apps.api.src.modules.scraping.infrastructure.agent_adapters.agents_semantic_investigator import (
+    AgentsSemanticInvestigator,
 )
 from apps.api.src.modules.scraping.infrastructure.security.url_guard import UrlGuard
 from apps.api.src.modules.scraping.infrastructure.semantic_validators.gemini_semantic_validator import (
@@ -110,6 +114,18 @@ class ScrapingFactory:
             else None
         )
 
+        # v8: o investigador so existe se o modulo agents conseguir montar o
+        # seu servico publico (hoje, depende da mesma chave do Gemini). Se
+        # nao existir, a pipeline se comporta como na v7.
+        evidence_validation_service = (
+            AgentsFactory.create_evidence_validation_service()
+        )
+        semantic_investigator = (
+            AgentsSemanticInvestigator(evidence_validation_service)
+            if evidence_validation_service is not None
+            else None
+        )
+
         return ScrapingPipeline(
             strategy_selector=ScrapingStrategySelector(
                 [
@@ -131,6 +147,7 @@ class ScrapingFactory:
             attempt_repository=attempt_repository,
             limits=PipelineLimits(),
             semantic_validator=semantic_validator,
+            semantic_investigator=semantic_investigator,
         )
 
     @classmethod

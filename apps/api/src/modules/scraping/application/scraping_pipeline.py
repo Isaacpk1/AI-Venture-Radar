@@ -6,12 +6,15 @@ from uuid import UUID
 
 from apps.api.src.modules.scraping.domain.entities import ScrapingAttempt, ScrapingResult
 from apps.api.src.modules.scraping.domain.enums import (
+    AgentInvestigationDecision,
     AttemptStatus,
     SemanticReviewDecision,
     ValidationDecision,
 )
 from apps.api.src.modules.scraping.domain.exceptions import (
+    ContentRejectedError,
     GlobalScrapingLimitExceededError,
+    MoreSourcesRequiredError,
     RecoverableScrapingError,
     ScrapingFailedError,
 )
@@ -21,8 +24,8 @@ from apps.api.src.modules.scraping.domain.policies import (
 )
 from apps.api.src.modules.scraping.domain.repositories import ScrapingAttemptRepository
 
-from .dto import ScrapingInput, SemanticValidationInput
-from .ports import DeterministicValidator, SemanticValidator
+from .dto import InvestigationInput, ScrapingInput, SemanticValidationInput
+from .ports import DeterministicValidator, SemanticInvestigator, SemanticValidator
 from .quality_scoring_service import QualityScoringService
 from .scraping_limits import PipelineLimits
 from .semantic_confidence_service import SemanticConfidenceService
@@ -48,6 +51,7 @@ class ScrapingPipeline:
         llm_review_policy: LLMReviewPolicy | None = None,
         semantic_validator: SemanticValidator | None = None,
         semantic_confidence_service: SemanticConfidenceService | None = None,
+        semantic_investigator: SemanticInvestigator | None = None,
     ) -> None:
         """Recebe todas as dependências necessárias para executar o fluxo."""
 
@@ -62,6 +66,10 @@ class ScrapingPipeline:
         self.semantic_confidence_service = (
             semantic_confidence_service or SemanticConfidenceService()
         )
+        # Porta opcional da v8. Quando ``None``, o comportamento da v7 é
+        # preservado: confiança baixa ou ``needs_agent_review`` simplesmente
+        # mantêm a decisão REJECT, sem investigação adicional.
+        self.semantic_investigator = semantic_investigator
 
     async def execute(
         self,
@@ -124,6 +132,13 @@ class ScrapingPipeline:
                 attempt_warnings = set(validation.warnings)
                 semantic_metadata: dict[str, str | float | bool] = {}
 
+                # Campos de auditoria preenchidos somente quando a v8 (agente)
+                # participa desta tentativa. Permanecem em seus valores
+                # padrão (``None``/``False``) no caminho da v7.
+                semantic_confidence_value: float | None = None
+                agent_reviewed_value = False
+                agent_reason_value: str | None = None
+
                 # A revisao semantica interpreta somente conteudo ambiguo que
                 # ja passou pelos requisitos tecnicos e textuais minimos.
                 if (
@@ -161,6 +176,56 @@ class ScrapingPipeline:
                         and semantic.semantic_confidence >= 0.80
                     ):
                         decision = ValidationDecision.ACCEPT
+                        semantic_confidence_value = semantic.semantic_confidence
+
+                    # A revisao simples nao teve confianca suficiente, ou
+                    # pediu explicitamente revisao de um agente. Investigamos
+                    # mais a fundo antes de desistir do conteudo (v8).
+                    elif self.semantic_investigator is not None and (
+                        assessment.decision
+                        is SemanticReviewDecision.NEEDS_AGENT_REVIEW
+                        or semantic.semantic_confidence < 0.80
+                    ):
+                        investigation = await self.semantic_investigator.investigate(
+                            InvestigationInput(
+                                url=output.final_url,
+                                title=output.title,
+                                raw_text=output.raw_text,
+                                deterministic=validation,
+                                semantic=semantic,
+                            )
+                        )
+                        attempt_warnings.add("agent_reviewed")
+                        attempt_warnings.add(
+                            f"agent_decision_{investigation.decision.value}"
+                        )
+                        semantic_metadata["agent_reviewed"] = True
+                        semantic_metadata["agent_decision"] = (
+                            investigation.decision.value
+                        )
+                        semantic_metadata["agent_reason"] = investigation.reason
+
+                        semantic_confidence_value = semantic.semantic_confidence
+                        agent_reviewed_value = True
+                        agent_reason_value = investigation.reason
+
+                        if (
+                            investigation.decision
+                            is AgentInvestigationDecision.ACCEPTED
+                        ):
+                            decision = ValidationDecision.ACCEPT
+                        elif (
+                            investigation.decision
+                            is AgentInvestigationDecision.NEEDS_MORE_SOURCES
+                        ):
+                            # Este caso nao se encaixa em ACCEPT/FALLBACK/REJECT,
+                            # entao a tentativa e finalizada aqui mesmo, sem
+                            # passar por ``finish_validation``.
+                            attempt.finish_needs_more_sources(investigation.reason)
+                            await self.attempt_repository.save(attempt)
+                            raise MoreSourcesRequiredError(investigation.reason)
+                        # else: decision permanece REJECT; o motivo do agente
+                        # ja foi guardado em agent_reason_value.
 
                 attempt.finish_validation(
                     decision=decision,
@@ -170,6 +235,9 @@ class ScrapingPipeline:
                     quality_score=validation.quality_score,
                     problems=list(validation.problems),
                     warnings=list(attempt_warnings),
+                    semantic_confidence=semantic_confidence_value,
+                    agent_reviewed=agent_reviewed_value,
+                    agent_reason=agent_reason_value,
                 )
                 await self.attempt_repository.save(attempt)
 
@@ -179,6 +247,17 @@ class ScrapingPipeline:
                     continue
 
                 if decision is ValidationDecision.REJECT:
+                    if agent_reviewed_value:
+                        # O agente investigou e confirmou a rejeição: o
+                        # motivo fica registrado em ``agent_reason`` na
+                        # tentativa, e a exceção específica permite que
+                        # camadas acima diferenciem este caso de uma simples
+                        # falha de validação determinística.
+                        raise ContentRejectedError(
+                            agent_reason_value
+                            or "O agente confirmou a rejeição do conteúdo."
+                        )
+
                     raise ScrapingFailedError(
                         "O conteúdo coletado foi rejeitado pela validação."
                     )

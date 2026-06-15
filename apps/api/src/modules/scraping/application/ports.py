@@ -12,6 +12,8 @@ from apps.api.src.modules.scraping.domain.enums import ScrapingMethod
 
 from .dto import (
     DeterministicValidationResult,
+    InvestigationInput,
+    InvestigationResult,
     ScrapingInput,
     ScrapingOutput,
     SemanticAssessment,
@@ -51,6 +53,27 @@ class SemanticValidator(ABC):
         semantic_input: SemanticValidationInput,
     ) -> SemanticAssessment:
         """Retorna fatores estruturados; a confianca e calculada pelo sistema."""
+
+
+class SemanticInvestigator(ABC):
+    """Contrato para a investigacao com agentes (v8).
+
+    Esta porta e chamada somente quando a revisao semantica simples
+    (``SemanticValidator``) nao foi suficiente: confianca baixa, decisao
+    ``needs_agent_review`` ou contradicao detectada.
+
+    O modulo ``scraping`` conhece apenas esta porta. A implementacao
+    concreta (``infrastructure/agent_adapters/agents_semantic_investigator``)
+    e quem fala com o contrato publico do modulo ``agents`` — o ``scraping``
+    nunca importa nada de dentro de ``agents`` diretamente.
+    """
+
+    @abstractmethod
+    async def investigate(
+        self,
+        investigation_input: InvestigationInput,
+    ) -> InvestigationResult:
+        """Investiga o caso e devolve uma decisao final fundamentada."""
 
 
 class TaskDispatcher(ABC):

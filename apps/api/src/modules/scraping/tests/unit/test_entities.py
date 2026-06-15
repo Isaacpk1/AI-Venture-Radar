@@ -111,3 +111,129 @@ def test_finished_attempt_cannot_fail_again() -> None:
 
     with pytest.raises(InvalidJobTransitionError):
         attempt.fail("Erro tardio.")
+
+
+# --- Testes dos campos e estados de investigação com agentes (v8) ---
+
+
+def test_finish_validation_records_agent_audit_fields() -> None:
+    """``finish_validation`` aceita e guarda os novos campos de auditoria."""
+
+    attempt = ScrapingAttempt(
+        job_id=uuid4(),
+        method=ScrapingMethod.BEAUTIFULSOUP,
+    )
+
+    attempt.finish_validation(
+        decision=ValidationDecision.ACCEPT,
+        technical_score=1.0,
+        text_score=0.90,
+        evidence_score=0.80,
+        quality_score=0.88,
+        problems=[],
+        warnings=["agent_reviewed", "agent_decision_accepted"],
+        semantic_confidence=0.60,
+        agent_reviewed=True,
+        agent_reason="O agente confirmou evidências suficientes.",
+    )
+
+    assert attempt.status is AttemptStatus.ACCEPTED
+    assert attempt.semantic_confidence == 0.60
+    assert attempt.agent_reviewed is True
+    assert attempt.agent_reason == "O agente confirmou evidências suficientes."
+
+
+def test_finish_validation_defaults_agent_fields_when_not_provided() -> None:
+    """No caminho v7 (sem agente), os novos campos ficam em seus padrões."""
+
+    attempt = ScrapingAttempt(
+        job_id=uuid4(),
+        method=ScrapingMethod.BEAUTIFULSOUP,
+    )
+
+    attempt.finish_validation(
+        decision=ValidationDecision.ACCEPT,
+        technical_score=1.0,
+        text_score=1.0,
+        evidence_score=1.0,
+        quality_score=1.0,
+        problems=[],
+        warnings=[],
+    )
+
+    assert attempt.semantic_confidence is None
+    assert attempt.agent_reviewed is False
+    assert attempt.agent_reason is None
+
+
+def test_finish_needs_more_sources_sets_dedicated_status() -> None:
+    """O agente pode pedir mais fontes sem produzir um ``ScrapingResult``."""
+
+    attempt = ScrapingAttempt(
+        job_id=uuid4(),
+        method=ScrapingMethod.BEAUTIFULSOUP,
+    )
+
+    attempt.finish_needs_more_sources("É preciso encontrar mais fontes.")
+
+    assert attempt.status is AttemptStatus.NEEDS_MORE_SOURCES
+    assert attempt.agent_reviewed is True
+    assert attempt.agent_reason == "É preciso encontrar mais fontes."
+    assert attempt.decision is None
+    assert attempt.finished_at is not None
+
+
+def test_finish_needs_more_sources_requires_running_attempt() -> None:
+    """Uma tentativa já finalizada não pode pedir mais fontes novamente."""
+
+    attempt = ScrapingAttempt(
+        job_id=uuid4(),
+        method=ScrapingMethod.BEAUTIFULSOUP,
+    )
+    attempt.fail("Erro técnico qualquer.")
+
+    with pytest.raises(InvalidJobTransitionError):
+        attempt.finish_needs_more_sources("Mais fontes necessárias.")
+
+
+def test_accept_sets_accepted_status_with_agent_metadata() -> None:
+    """``accept`` é o caminho alternativo de aceitação confirmada por agente."""
+
+    attempt = ScrapingAttempt(
+        job_id=uuid4(),
+        method=ScrapingMethod.BEAUTIFULSOUP,
+    )
+
+    attempt.accept(
+        technical_score=1.0,
+        text_score=0.90,
+        evidence_score=0.80,
+        quality_score=0.88,
+        semantic_confidence=0.60,
+        agent_reviewed=True,
+    )
+
+    assert attempt.status is AttemptStatus.ACCEPTED
+    assert attempt.decision is ValidationDecision.ACCEPT
+    assert attempt.problems == []
+    assert attempt.warnings == []
+    assert attempt.semantic_confidence == 0.60
+    assert attempt.agent_reviewed is True
+    assert attempt.finished_at is not None
+
+
+def test_reject_sets_rejected_status_with_reason() -> None:
+    """``reject`` registra a decisão de negócio e o motivo do agente."""
+
+    attempt = ScrapingAttempt(
+        job_id=uuid4(),
+        method=ScrapingMethod.BEAUTIFULSOUP,
+    )
+
+    attempt.reject("O agente não encontrou evidências.", agent_reviewed=True)
+
+    assert attempt.status is AttemptStatus.REJECTED
+    assert attempt.decision is ValidationDecision.REJECT
+    assert attempt.agent_reason == "O agente não encontrou evidências."
+    assert attempt.agent_reviewed is True
+    assert attempt.finished_at is not None

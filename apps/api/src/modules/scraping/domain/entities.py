@@ -138,6 +138,23 @@ class ScrapingAttempt:
     # Este campo é usado quando a própria execução técnica gera uma exceção.
     error_message: str | None = None
 
+    # --- Campos da investigação com agentes (v8) ---
+    #
+    # ``semantic_confidence`` guarda o valor calculado pelo
+    # SemanticConfidenceService quando a revisão semântica simples rodou,
+    # mesmo que a decisão final tenha vindo do agente.
+    semantic_confidence: float | None = None
+
+    # ``agent_reviewed`` marca que esta tentativa passou pela investigação
+    # de um agente (módulo ``agents``), e não apenas pela validação
+    # determinística + LLM simples.
+    agent_reviewed: bool = False
+
+    # ``agent_reason`` guarda a justificativa textual de uma decisão tomada
+    # pelo agente (rejeição ou pedido de mais fontes). É um campo de negócio,
+    # diferente de ``error_message``, que é reservado para falhas técnicas.
+    agent_reason: str | None = None
+
     started_at: datetime = field(default_factory=utc_now)
     finished_at: datetime | None = None
 
@@ -151,8 +168,19 @@ class ScrapingAttempt:
         quality_score: float,
         problems: list[str],
         warnings: list[str],
+        semantic_confidence: float | None = None,
+        agent_reviewed: bool = False,
+        agent_reason: str | None = None,
     ) -> None:
-        """Finaliza a tentativa usando a decisão produzida pela validação."""
+        """Finaliza a tentativa usando a decisão produzida pela validação.
+
+        Os três últimos parâmetros (``semantic_confidence``, ``agent_reviewed``
+        e ``agent_reason``) existem para o caminho da v8: quando um agente
+        investiga o caso e confirma (``accepted``) ou descarta
+        (``rejected``) o conteúdo, esses campos registram que a decisão
+        ``ACCEPT``/``REJECT`` recebida aqui já passou pela investigação,
+        junto com a confiança semântica e o motivo do agente.
+        """
 
         if self.status is not AttemptStatus.RUNNING:
             raise InvalidJobTransitionError(
@@ -174,6 +202,9 @@ class ScrapingAttempt:
         self.quality_score = quality_score
         self.problems = problems
         self.warnings = warnings
+        self.semantic_confidence = semantic_confidence
+        self.agent_reviewed = agent_reviewed
+        self.agent_reason = agent_reason
         self.finished_at = utc_now()
 
     def fail(self, reason: str) -> None:
@@ -186,6 +217,86 @@ class ScrapingAttempt:
 
         self.status = AttemptStatus.FAILED
         self.error_message = reason
+        self.finished_at = utc_now()
+
+    def accept(
+        self,
+        *,
+        technical_score: float,
+        text_score: float,
+        evidence_score: float,
+        quality_score: float,
+        problems: list[str] | None = None,
+        warnings: list[str] | None = None,
+        semantic_confidence: float | None = None,
+        agent_reviewed: bool = False,
+    ) -> None:
+        """Aceita a tentativa depois que um agente confirma o conteúdo.
+
+        ``finish_validation`` continua sendo o caminho usado quando a decisão
+        final vem direto da validação determinística ou da revisão semântica
+        simples (v7). Este método é o caminho alternativo usado quando a
+        tentativa só foi aceita depois da investigação de um agente (v8): o
+        agente analisou o caso, decidiu ``accepted`` e a pipeline registra
+        esse resultado aqui, junto com a confiança semântica que motivou a
+        investigação e a marca ``agent_reviewed=True`` para auditoria.
+        """
+
+        if self.status is not AttemptStatus.RUNNING:
+            raise InvalidJobTransitionError(
+                "Somente tentativas em execução podem ser aceitas."
+            )
+
+        self.status = AttemptStatus.ACCEPTED
+        self.decision = ValidationDecision.ACCEPT
+        self.technical_score = technical_score
+        self.text_score = text_score
+        self.evidence_score = evidence_score
+        self.quality_score = quality_score
+        self.problems = problems or []
+        self.warnings = warnings or []
+        self.semantic_confidence = semantic_confidence
+        self.agent_reviewed = agent_reviewed
+        self.finished_at = utc_now()
+
+    def reject(self, reason: str, *, agent_reviewed: bool = False) -> None:
+        """Rejeita a tentativa com base em uma decisão de negócio.
+
+        Usado quando o agente investiga o caso e conclui que o conteúdo deve
+        ser rejeitado (``decision = rejected``). Diferente de ``fail``, que
+        registra um problema técnico, ``reject`` registra uma decisão: o
+        conteúdo foi entendido, mas não deve ser aproveitado. O motivo fica
+        em ``agent_reason`` para auditoria.
+        """
+
+        if self.status is not AttemptStatus.RUNNING:
+            raise InvalidJobTransitionError(
+                "Somente tentativas em execução podem ser rejeitadas."
+            )
+
+        self.status = AttemptStatus.REJECTED
+        self.decision = ValidationDecision.REJECT
+        self.agent_reason = reason
+        self.agent_reviewed = agent_reviewed
+        self.finished_at = utc_now()
+
+    def finish_needs_more_sources(self, reason: str) -> None:
+        """Registra que o agente pediu mais fontes para decidir.
+
+        Esta tentativa específica não produz um ``ScrapingResult``, mas
+        também não é uma rejeição definitiva: o fluxo global pode usar
+        ``agent_reason`` para criar novos jobs de scraping para a mesma
+        startup e tentar novamente mais tarde.
+        """
+
+        if self.status is not AttemptStatus.RUNNING:
+            raise InvalidJobTransitionError(
+                "Somente tentativas em execução podem pedir mais fontes."
+            )
+
+        self.status = AttemptStatus.NEEDS_MORE_SOURCES
+        self.agent_reason = reason
+        self.agent_reviewed = True
         self.finished_at = utc_now()
 
 

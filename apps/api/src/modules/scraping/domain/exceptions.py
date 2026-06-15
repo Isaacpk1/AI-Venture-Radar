@@ -74,3 +74,25 @@ class GlobalScrapingLimitExceededError(ScrapingError):
 
 class UnsafeUrlError(ScrapingError):
     """A URL foi recusada por ser inválida ou apresentar risco de SSRF."""
+
+
+class ContentRejectedError(ScrapingFailedError):
+    """O conteudo foi rejeitado apos revisao semantica ou investigacao do agente.
+
+    Herda de ``ScrapingFailedError`` porque, do ponto de vista da pipeline,
+    rejeitar o conteudo apos a investigacao do agente tambem significa que
+    esta tentativa nao produziu um resultado aproveitavel. A pipeline ja
+    sabe tratar ``ScrapingFailedError`` (nao tenta outra estrategia, pois
+    rejeicao e uma decisao de negocio, nao uma falha tecnica recuperavel).
+    """
+
+
+class MoreSourcesRequiredError(ScrapingFailedError):
+    """O agente concluiu que o conteudo atual nao basta; faltam mais fontes.
+
+    Tambem herda de ``ScrapingFailedError`` pelo mesmo motivo: esta tentativa
+    nao produz um ``ScrapingResult``. A diferenca fica registrada no
+    ``AttemptStatus`` (``NEEDS_MORE_SOURCES``) e no motivo guardado na
+    tentativa, permitindo que o fluxo global decida criar novos jobs de
+    scraping para a mesma startup.
+    """

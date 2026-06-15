@@ -12,6 +12,7 @@ from apps.api.src.modules.scraping.application.dto import (
 from apps.api.src.modules.scraping.application.ports import (
     DeterministicValidator,
     Scraper,
+    SemanticInvestigator,
     SemanticValidator,
 )
 from apps.api.src.modules.scraping.application.quality_scoring_service import (
@@ -24,11 +25,15 @@ from apps.api.src.modules.scraping.application.strategy_selector import (
     ScrapingStrategySelector,
 )
 from apps.api.src.modules.scraping.domain.enums import (
+    AgentInvestigationDecision,
     AttemptStatus,
     ScrapingMethod,
     SemanticReviewDecision,
 )
+from apps.api.src.modules.scraping.application.dto import InvestigationResult
 from apps.api.src.modules.scraping.domain.exceptions import (
+    ContentRejectedError,
+    MoreSourcesRequiredError,
     ScrapingFailedError,
     ScrapingLimitExceededError,
 )
@@ -122,10 +127,31 @@ class FakeSemanticValidator(SemanticValidator):
         )
 
 
+class FakeSemanticInvestigator(SemanticInvestigator):
+    """Simula a porta SemanticInvestigator (v8) com decisão configurável."""
+
+    def __init__(
+        self,
+        *,
+        decision: AgentInvestigationDecision,
+        reason: str = "Decisão do agente.",
+    ) -> None:
+        self.call_count = 0
+        self.decision = decision
+        self.reason = reason
+        self.last_input = None
+
+    async def investigate(self, investigation_input) -> InvestigationResult:
+        self.call_count += 1
+        self.last_input = investigation_input
+        return InvestigationResult(decision=self.decision, reason=self.reason)
+
+
 def make_pipeline(
     strategies: list[Scraper],
     attempt_repository: InMemoryScrapingAttemptRepository,
     semantic_validator: SemanticValidator | None = None,
+    semantic_investigator: SemanticInvestigator | None = None,
 ) -> ScrapingPipeline:
     """Monta a pipeline com dependências controladas pelo teste."""
 
@@ -139,6 +165,7 @@ def make_pipeline(
         ),
         attempt_repository=attempt_repository,
         semantic_validator=semantic_validator,
+        semantic_investigator=semantic_investigator,
     )
 
 
@@ -277,3 +304,139 @@ async def test_pipeline_rejects_semantic_acceptance_with_low_confidence() -> Non
         ).execute(uuid4(), "https://example.com")
 
     assert semantic_validator.call_count == 1
+
+
+# --- Testes da investigação com agentes (v8) ---
+
+
+@pytest.mark.anyio
+async def test_pipeline_without_investigator_keeps_v7_behavior() -> None:
+    """Sem ``semantic_investigator``, confiança baixa só rejeita (v7)."""
+
+    attempts = InMemoryScrapingAttemptRepository()
+    semantic_validator = FakeSemanticValidator(factor_score=0.60)
+    investigator = FakeSemanticInvestigator(
+        decision=AgentInvestigationDecision.ACCEPTED
+    )
+
+    with pytest.raises(ScrapingFailedError, match="rejeitado"):
+        await make_pipeline(
+            [FakeScraper(ScrapingMethod.BEAUTIFULSOUP, text="conteudo ambiguo")],
+            attempts,
+            semantic_validator=semantic_validator,
+            semantic_investigator=None,
+        ).execute(uuid4(), "https://example.com")
+
+    # O investigador nem foi montado na pipeline acima (passamos None), então
+    # garantimos aqui que, se existisse, não teria sido chamado.
+    assert investigator.call_count == 0
+
+
+@pytest.mark.anyio
+async def test_pipeline_accepts_after_agent_confirms_content() -> None:
+    """Confiança baixa + agente decide ``accepted`` => conteúdo é aceito."""
+
+    attempts = InMemoryScrapingAttemptRepository()
+    job_id = uuid4()
+    semantic_validator = FakeSemanticValidator(factor_score=0.60)
+    investigator = FakeSemanticInvestigator(
+        decision=AgentInvestigationDecision.ACCEPTED,
+        reason="O agente confirmou evidências suficientes.",
+    )
+
+    result = await make_pipeline(
+        [FakeScraper(ScrapingMethod.BEAUTIFULSOUP, text="conteudo ambiguo")],
+        attempts,
+        semantic_validator=semantic_validator,
+        semantic_investigator=investigator,
+    ).execute(job_id, "https://example.com")
+
+    saved_attempts = await attempts.list_by_job_id(job_id)
+
+    assert investigator.call_count == 1
+    assert result.metadata["agent_reviewed"] is True
+    assert result.metadata["agent_decision"] == "accepted"
+    assert saved_attempts[-1].status is AttemptStatus.ACCEPTED
+    assert saved_attempts[-1].agent_reviewed is True
+    assert saved_attempts[-1].agent_reason == "O agente confirmou evidências suficientes."
+    assert saved_attempts[-1].semantic_confidence == 0.60
+
+
+@pytest.mark.anyio
+async def test_pipeline_raises_content_rejected_when_agent_confirms_rejection() -> None:
+    """Agente decide ``rejected`` => ``ContentRejectedError`` com o motivo."""
+
+    attempts = InMemoryScrapingAttemptRepository()
+    job_id = uuid4()
+    semantic_validator = FakeSemanticValidator(factor_score=0.60)
+    investigator = FakeSemanticInvestigator(
+        decision=AgentInvestigationDecision.REJECTED,
+        reason="O agente não encontrou evidências suficientes.",
+    )
+
+    with pytest.raises(ContentRejectedError, match="não encontrou evidências"):
+        await make_pipeline(
+            [FakeScraper(ScrapingMethod.BEAUTIFULSOUP, text="conteudo ambiguo")],
+            attempts,
+            semantic_validator=semantic_validator,
+            semantic_investigator=investigator,
+        ).execute(job_id, "https://example.com")
+
+    saved_attempts = await attempts.list_by_job_id(job_id)
+
+    assert investigator.call_count == 1
+    assert saved_attempts[-1].status is AttemptStatus.REJECTED
+    assert saved_attempts[-1].agent_reviewed is True
+    assert saved_attempts[-1].agent_reason == "O agente não encontrou evidências suficientes."
+
+
+@pytest.mark.anyio
+async def test_pipeline_raises_more_sources_required_and_finishes_attempt() -> None:
+    """Agente decide ``needs_more_sources`` => exceção dedicada + status próprio."""
+
+    attempts = InMemoryScrapingAttemptRepository()
+    job_id = uuid4()
+    semantic_validator = FakeSemanticValidator(factor_score=0.60)
+    investigator = FakeSemanticInvestigator(
+        decision=AgentInvestigationDecision.NEEDS_MORE_SOURCES,
+        reason="É preciso encontrar mais fontes sobre esta startup.",
+    )
+
+    with pytest.raises(MoreSourcesRequiredError, match="mais fontes"):
+        await make_pipeline(
+            [FakeScraper(ScrapingMethod.BEAUTIFULSOUP, text="conteudo ambiguo")],
+            attempts,
+            semantic_validator=semantic_validator,
+            semantic_investigator=investigator,
+        ).execute(job_id, "https://example.com")
+
+    saved_attempts = await attempts.list_by_job_id(job_id)
+
+    assert investigator.call_count == 1
+    assert saved_attempts[-1].status is AttemptStatus.NEEDS_MORE_SOURCES
+    assert saved_attempts[-1].agent_reviewed is True
+    assert (
+        saved_attempts[-1].agent_reason
+        == "É preciso encontrar mais fontes sobre esta startup."
+    )
+
+
+@pytest.mark.anyio
+async def test_pipeline_does_not_invoke_agent_when_semantic_confidence_is_high() -> None:
+    """Confiança alta e decisão ACCEPTED não acionam o agente (v7 continua valendo)."""
+
+    attempts = InMemoryScrapingAttemptRepository()
+    semantic_validator = FakeSemanticValidator(factor_score=0.90)
+    investigator = FakeSemanticInvestigator(
+        decision=AgentInvestigationDecision.ACCEPTED
+    )
+
+    result = await make_pipeline(
+        [FakeScraper(ScrapingMethod.BEAUTIFULSOUP, text="conteudo ambiguo")],
+        attempts,
+        semantic_validator=semantic_validator,
+        semantic_investigator=investigator,
+    ).execute(uuid4(), "https://example.com")
+
+    assert investigator.call_count == 0
+    assert result.metadata.get("agent_reviewed") is None

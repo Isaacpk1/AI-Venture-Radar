@@ -18,3 +18,8 @@ alembic>=1.14,<2
 
 # Fila de tarefas distribuida
 dramatiq[redis]>=2.1,<3
+
+# Agentes e orquestracao de fluxos com LLM
+langchain>=0.3,<1
+langchain-google-genai>=2.1,<3
+langgraph>=0.2,<1

@@ -1,0 +1,22 @@
+"""Exceções conhecidas pelo domínio do módulo agents.
+
+Seguem o mesmo espírito das exceções de ``scraping``: descrevem situações
+esperadas pelo negócio, sem saber como serão apresentadas ao usuário final.
+"""
+
+
+class AgentError(Exception):
+    """Classe base para todos os erros conhecidos do módulo agents."""
+
+
+class AgentInvestigationError(AgentError):
+    """A investigação não pôde ser concluída por um motivo conhecido.
+
+    Exemplos: o provedor de LLM falhou, devolveu uma resposta inválida, ou um
+    limite operacional (tokens, iterações, tempo) foi atingido antes de uma
+    decisão final.
+
+    A camada que chama o módulo agents (hoje, o adaptador dentro de
+    ``scraping``) decide como reagir a este erro — por exemplo, tratando a
+    investigação como inconclusiva.
+    """

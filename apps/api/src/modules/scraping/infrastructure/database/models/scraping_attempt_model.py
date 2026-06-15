@@ -75,6 +75,17 @@ class ScrapingAttemptModel(Base):
 
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    semantic_confidence: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    agent_reviewed: Mapped[bool] = mapped_column(
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+    agent_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

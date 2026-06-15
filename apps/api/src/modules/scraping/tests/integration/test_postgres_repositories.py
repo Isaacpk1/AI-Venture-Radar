@@ -68,6 +68,9 @@ async def test_postgres_repositories_persist_and_restore_complete_flow() -> None
                 quality_score=0.89,
                 problems=[],
                 warnings=["integration_test"],
+                semantic_confidence=0.86,
+                agent_reviewed=True,
+                agent_reason="Agente confirmou a evidencia.",
             )
             await attempts.save(attempt)
 
@@ -107,6 +110,9 @@ async def test_postgres_repositories_persist_and_restore_complete_flow() -> None
             assert len(restored_attempts) == 1
             assert restored_attempts[0].status is AttemptStatus.ACCEPTED
             assert restored_attempts[0].warnings == ["integration_test"]
+            assert restored_attempts[0].semantic_confidence == 0.86
+            assert restored_attempts[0].agent_reviewed is True
+            assert restored_attempts[0].agent_reason == "Agente confirmou a evidencia."
 
             assert restored_result is not None
             assert restored_result.metadata == {"test": True}
