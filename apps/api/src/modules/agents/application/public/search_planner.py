@@ -20,5 +20,22 @@ class SearchPlanningService(ABC):
     async def plan_searches(
         self,
         plan_input: SearchPlanInput,
+        *,
+        thread_id: str | None = None,
     ) -> SearchPlanResult:
-        """Recebe um caso incompleto e devolve queries priorizadas."""
+        """Recebe um caso incompleto e devolve queries priorizadas.
+
+        ``thread_id`` e o identificador do AgentRun usado pelo checkpointer para
+        salvar o estado do grafo entre nodes. Quando ausente, executa sem checkpoint.
+        """
+
+    async def resume(
+        self,
+        thread_id: str,
+        resume_value: object,
+    ) -> SearchPlanResult:
+        """Retoma um planejamento pausado por interrupt() no grafo."""
+
+        raise NotImplementedError(
+            f"{type(self).__name__} nao suporta retomada de execucao."
+        )

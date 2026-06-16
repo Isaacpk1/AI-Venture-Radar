@@ -23,6 +23,9 @@ from apps.api.src.modules.agents.application.use_cases.execute_agent_job import 
 from apps.api.src.modules.agents.application.use_cases.get_agent_run import (
     GetAgentRun,
 )
+from apps.api.src.modules.agents.application.use_cases.resume_agent_job import (
+    ResumeAgentJob,
+)
 from apps.api.src.modules.agents.graphs.evidence_validation.graph import (
     EvidenceValidationGraph,
 )
@@ -35,12 +38,15 @@ from apps.api.src.modules.agents.infrastructure.llm.langchain_gemini_evidence_ju
 from apps.api.src.modules.agents.infrastructure.llm.langchain_gemini_search_planner import (
     LangChainGeminiSearchPlanner,
 )
-from apps.api.src.modules.agents.infrastructure.queue.dramatiq_agent_dispatcher import (
-    DramatiqAgentJobPublisher,
-    DramatiqAgentTaskDispatcher,
+from apps.api.src.modules.agents.infrastructure.checkpoints.postgres_checkpointer import (
+    PostgresCheckpointer,
 )
 from apps.api.src.modules.agents.infrastructure.database.postgres_unit_of_work import (
     PostgresAgentsUnitOfWork,
+)
+from apps.api.src.modules.agents.infrastructure.queue.dramatiq_agent_dispatcher import (
+    DramatiqAgentJobPublisher,
+    DramatiqAgentTaskDispatcher,
 )
 from apps.api.src.shared.queue.dramatiq_broker import broker
 
@@ -49,7 +55,22 @@ class AgentsFactory:
     """Ponto de composicao do modulo agents."""
 
     @staticmethod
-    def create_evidence_validation_service() -> EvidenceValidationService | None:
+    def create_checkpointer() -> PostgresCheckpointer | None:
+        """Cria o checkpointer PostgreSQL para LangGraph.
+
+        Devolve ``None`` quando DATABASE_URL nao esta configurado para que o
+        sistema suba em ambientes sem banco (ex: testes unitarios sem infra).
+        """
+
+        settings = get_settings()
+        if not settings.database_url:
+            return None
+        return PostgresCheckpointer(settings.database_url)
+
+    @staticmethod
+    def create_evidence_validation_service(
+        checkpointer: PostgresCheckpointer | None = None,
+    ) -> EvidenceValidationService | None:
         """Cria o servico publico de validacao de evidencias.
 
         Devolve ``None`` quando o Gemini nao esta configurado, da mesma forma
@@ -72,10 +93,15 @@ class AgentsFactory:
             model=settings.gemini_model,
         )
 
-        return EvidenceValidationGraph(evidence_judge=evidence_judge)
+        return EvidenceValidationGraph(
+            evidence_judge=evidence_judge,
+            checkpointer=checkpointer,
+        )
 
     @staticmethod
-    def create_search_planning_service() -> SearchPlanningService | None:
+    def create_search_planning_service(
+        checkpointer: PostgresCheckpointer | None = None,
+    ) -> SearchPlanningService | None:
         """Cria o servico publico do Search Planner Agent.
 
         Assim como a validacao de evidencias, este agente depende de Gemini.
@@ -93,7 +119,7 @@ class AgentsFactory:
             model=settings.gemini_model,
         )
 
-        return SearchPlanningGraph(planner=planner)
+        return SearchPlanningGraph(planner=planner, checkpointer=checkpointer)
 
     @staticmethod
     def create_agent_task_dispatcher() -> AgentTaskDispatcher:
@@ -107,15 +133,35 @@ class AgentsFactory:
     def create_execute_agent_job() -> ExecuteAgentJob:
         """Cria o caso de uso chamado pelo agent_worker.
 
-        Injeta os dois servicos de grafo. Quando a chave Gemini nao esta
-        configurada, ``create_*_service`` devolve ``None`` e o worker marca o
-        run como ``failed`` com mensagem clara.
+        Injeta checkpointer PostgreSQL e os dois servicos de grafo. Quando a
+        chave Gemini nao esta configurada, ``create_*_service`` devolve ``None``
+        e o worker marca o run como ``failed`` com mensagem clara.
         """
 
+        checkpointer = AgentsFactory.create_checkpointer()
         return ExecuteAgentJob(
             uow_factory=PostgresAgentsUnitOfWork,
-            evidence_validation_service=AgentsFactory.create_evidence_validation_service(),
-            search_planning_service=AgentsFactory.create_search_planning_service(),
+            evidence_validation_service=AgentsFactory.create_evidence_validation_service(
+                checkpointer
+            ),
+            search_planning_service=AgentsFactory.create_search_planning_service(
+                checkpointer
+            ),
+        )
+
+    @staticmethod
+    def create_resume_agent_job() -> ResumeAgentJob:
+        """Cria o caso de uso para retomar runs pausados por interrupcao humana."""
+
+        checkpointer = AgentsFactory.create_checkpointer()
+        return ResumeAgentJob(
+            uow_factory=PostgresAgentsUnitOfWork,
+            evidence_validation_service=AgentsFactory.create_evidence_validation_service(
+                checkpointer
+            ),
+            search_planning_service=AgentsFactory.create_search_planning_service(
+                checkpointer
+            ),
         )
 
     @staticmethod

@@ -42,6 +42,10 @@ class AgentServiceUnavailableError(AgentError):
     """O servico de agente requerido nao esta configurado (ex: chave de API ausente)."""
 
 
+class AgentRunInterruptedError(AgentError):
+    """O grafo pausou a execucao aguardando revisao humana."""
+
+
 class InvalidAgentRunTransitionError(AgentError):
     """A execucao de agente tentou mudar para um estado invalido."""
 

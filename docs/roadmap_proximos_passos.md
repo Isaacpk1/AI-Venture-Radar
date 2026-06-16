@@ -1,467 +1,201 @@
-# Roadmap de Evolucao do Projeto
+# Roadmap Modular do Projeto
 
-Este documento mostra o passo a passo recomendado para melhorar o AI Venture Radar a partir do estado atual do projeto.
+Este documento mostra a evolucao do NVIDIA Startup AI Radar a partir do estado
+atual do sistema.
 
-A ideia e separar bem as etapas para evitar misturar responsabilidades. Primeiro terminamos a base de scraping e validacao, depois evoluimos os agentes, depois criamos a camada de ingestao, depois o banco vetorial/RAG, e por fim a recomendacao de tecnologias NVIDIA.
+A regra principal agora e:
+
+```txt
+cada modulo tem suas proprias versoes
+o projeto nao deve virar uma sequencia unica de V1, V2, V3 gigante
+```
+
+Scraping pode estar na V8 enquanto agents esta na V5, ingestion na V1 e RAG
+ainda nem comecou. Isso e normal e deixa a arquitetura mais facil de entender.
+
+---
 
 ## 1. Estado Atual
 
-Hoje o projeto ja tem uma base importante pronta.
+| Modulo | Estado | Versao atual |
+|---|---|---|
+| scraping | maduro para a primeira fase | Scraping V8 |
+| agents | base multiagente funcional | Agents V5 |
+| ingestion | ainda nao implementado | futuro Ingestion V1 |
+| startups | ainda nao implementado | futuro Startups V1 |
+| embeddings | ainda nao implementado | futuro Embeddings V1 |
+| rag | ainda nao implementado | futuro RAG V1 |
+| nvidia_knowledge | ainda nao implementado | futuro NVIDIA Knowledge V1 |
+| recommendations | ainda nao implementado | futuro Recommendations V1 |
+| briefing | ainda nao implementado | futuro Briefing V1 |
 
-### Scraping
+---
 
-O modulo de scraping ja chegou em uma versao madura para a primeira fase do sistema.
+## 2. Ordem Macro Recomendada
 
-O que ja existe:
-
-- Arquitetura separada em `domain`, `application` e `infrastructure`.
-- Entidades de dominio para jobs, attempts e results.
-- Repositorios em PostgreSQL com SQLAlchemy assincrono.
-- Migrations com Alembic.
-- Worker assincrono para executar scraping fora da API.
-- Estrategias de extracao com BeautifulSoup, Playwright e Trafilatura.
-- Validacao deterministica de qualidade do conteudo.
-- Validacao semantica com Gemini.
-- Integracao inicial com o modulo de agents.
-- Testes cobrindo boa parte da persistencia, pipeline e validacoes.
-
-Conclusao: o scraping nao precisa ser refeito agora. Ele pode evoluir depois, mas ja serve como base para alimentar as proximas partes do sistema.
-
-### Agents
-
-O modulo de agents ja existe em uma primeira versao.
-
-O que ja existe:
-
-- Um contrato publico para validacao semantica.
-- Um agente simples usando Gemini.
-- Um adapter conectando o scraping com esse agente.
-- Documentacao inicial em `docs/agents`.
-
-Conclusao: o modulo de agents esta no comeco. Ele ainda nao e o sistema multiagente final. A proxima grande evolucao deve acontecer aqui.
-
-## 2. Ordem Recomendada
-
-A ordem recomendada de evolucao e:
-
-1. Evoluir o modulo de agents com LangGraph e LangChain.
-2. Criar a camada de ingestao dos dados extraidos.
-3. Criar o modelo estruturado de startups.
-4. Criar embeddings e banco vetorial com Qdrant.
-5. Criar o modulo de RAG.
-6. Ingerir conhecimento NVIDIA.
-7. Criar o motor de recomendacao.
-8. Criar relatorios e briefing executivo.
-9. Criar dashboard/API de consulta.
-10. Melhorar observabilidade, avaliacoes e producao.
-
-Essa ordem e importante porque cada etapa depende da anterior.
-
-O scraping coleta evidencias.  
-A ingestao transforma evidencias em dados limpos.  
-O banco vetorial permite busca semantica.  
-O RAG consulta evidencias e conhecimento NVIDIA.  
-Os agentes raciocinam sobre essas informacoes.  
-O motor de recomendacao gera a resposta final.
-
-## 3. Fase 1 - Agents V2 com LangGraph e LangChain
-
-Objetivo:
+A ordem macro de construcao e:
 
 ```txt
-transformar o agente simples de validacao em um fluxo agentico estruturado
+1. consolidar agents quando necessario
+2. criar ingestion
+3. criar startups
+4. criar embeddings + Qdrant
+5. criar RAG
+6. criar NVIDIA Knowledge
+7. criar recommendations
+8. criar briefing
+9. evoluir dashboard/API de consulta
+10. fortalecer observabilidade e producao
 ```
 
-Hoje o agente usa Gemini diretamente via cliente HTTP. Isso funciona para a primeira versao, mas nao e a melhor base para fluxos mais complexos.
-
-A proxima versao deve introduzir:
-
-- LangChain para padronizar o uso de modelos, prompts e outputs estruturados.
-- LangGraph para organizar o fluxo do agente como um grafo.
-- Estado compartilhado do agente.
-- Nos especializados.
-- Decisao condicional entre aceitar, rejeitar ou buscar mais fontes.
-
-### Entregaveis
-
-- Dependencias de LangChain/LangGraph adicionadas ao projeto.
-- Estrutura interna do modulo `agents` preparada para grafos.
-- Um `EvidenceValidationGraph`.
-- Estado do grafo, por exemplo `EvidenceValidationState`.
-- Nos do grafo:
-  - preparar entrada;
-  - avaliar evidencia;
-  - checar confianca;
-  - decidir se precisa de mais fontes;
-  - gerar resposta final.
-- Testes unitarios do grafo.
-- Testes de integracao simulando respostas do modelo.
-
-### Criterio de pronto
-
-Esta fase esta pronta quando o scraping continuar chamando a mesma interface publica de agente, mas por baixo a execucao ja passar por LangGraph.
-
-Isso preserva a arquitetura:
+Essa ordem existe porque cada camada alimenta a proxima:
 
 ```txt
-scraping -> contrato publico do agents -> implementacao LangGraph
+scraping -> scraping_results
+ingestion -> documents/chunks
+embeddings -> vetores no Qdrant
+rag -> respostas com evidencias
+recommendations -> match startup/tecnologia NVIDIA
+briefing -> relatorio executivo
 ```
 
-O scraping nao deve conhecer LangGraph diretamente.
+---
 
-## 4. Fase 2 - Ingestao dos Resultados de Scraping
+## 3. Proximos Passos Imediatos
 
-Objetivo:
+Existem dois caminhos bons agora.
+
+### Caminho tecnico
 
 ```txt
-transformar scraping_results em dados preparados para analise
+Agents V6 - Checkpoint LangGraph no PostgreSQL
 ```
 
-O scraping gera conteudo bruto ou semiestruturado. A ingestao deve pegar esse material e preparar para uso pelo restante do sistema.
+Esse caminho melhora a robustez dos agentes:
 
-Essa fase nao deve colocar tudo direto no banco vetorial ainda. Antes disso, precisamos limpar, normalizar e estruturar.
+- retomar grafo apos falha;
+- auditar estado entre nodes;
+- preparar human-in-the-loop;
+- reduzir perda de trabalho em execucoes longas.
 
-### Entregaveis
-
-- Novo modulo `ingestion`.
-- Caso de uso para processar um `scraping_result`.
-- Normalizacao de texto.
-- Extracao de metadados.
-- Separacao entre conteudo principal, links, titulo, descricao e fonte.
-- Criacao de registros de evidencia.
-- Status de processamento da ingestao.
-- Testes de unidade e integracao.
-
-### Criterio de pronto
-
-Esta fase esta pronta quando um resultado do scraper puder ser transformado em uma evidencia limpa, rastreavel e pronta para virar embedding.
-
-## 5. Fase 3 - Modelo Estruturado de Startups
-
-Objetivo:
+### Caminho de produto
 
 ```txt
-criar uma base relacional para representar startups e suas evidencias
+Ingestion V1 - transformar scraping_results em documents/chunks
 ```
 
-Nem tudo deve ir para banco vetorial. Dados estruturados continuam pertencendo ao PostgreSQL.
+Esse caminho desbloqueia embeddings, Qdrant e RAG:
 
-Exemplos de dados estruturados:
+- limpar conteudo aprovado pelo scraping;
+- criar documents rastreaveis;
+- criar chunks prontos para embedding;
+- preparar o pipeline para busca semantica.
 
-- Nome da startup.
-- Site oficial.
-- Pais ou regiao.
-- Setor.
-- Descricao curta.
-- Fundadores.
-- Rodada de investimento.
-- Tecnologias usadas.
-- Fontes associadas.
-- Nivel de confianca.
-
-### Entregaveis
-
-- Tabelas relacionais para startups e evidencias.
-- Migrations Alembic.
-- Entidades de dominio.
-- Repositorios PostgreSQL.
-- Mappers entre entidades e models SQLAlchemy.
-- Casos de uso de criacao/atualizacao de startup.
-
-### Criterio de pronto
-
-Esta fase esta pronta quando o sistema conseguir consolidar varias evidencias em uma mesma startup.
-
-## 6. Fase 4 - Embeddings e Banco Vetorial
-
-Objetivo:
+Recomendacao atual:
 
 ```txt
-permitir busca semantica sobre evidencias, startups e conhecimento tecnico
+fazer Ingestion V1 agora
+manter Agents V6 como proxima melhoria de infraestrutura agentica
 ```
 
-Aqui entra o Qdrant.
+Motivo: o scraping e os agents ja conseguem produzir evidencias. Agora o projeto
+precisa transformar essas evidencias em base consultavel.
 
-O banco vetorial nao substitui o PostgreSQL. Ele complementa.
+---
 
-PostgreSQL guarda:
+## 4. Roadmaps por Modulo
 
-- registros estruturados;
-- status;
-- relacionamentos;
-- auditoria;
-- resultados do scraping.
+| Modulo | Documento |
+|---|---|
+| scraping | `docs/scraping/modulo_scraping_atualizado.md` |
+| agents | `docs/agents/roadmap_agentes.md` |
+| ingestion | `docs/ingestion/roadmap_ingestion.md` |
+| startups | `docs/startups/roadmap_startups.md` |
+| embeddings | `docs/embeddings/roadmap_embeddings.md` |
+| rag | `docs/rag/roadmap_rag.md` |
+| nvidia_knowledge | `docs/nvidia_knowledge/roadmap_nvidia_knowledge.md` |
+| recommendations | `docs/recommendations/roadmap_recommendations.md` |
+| briefing | `docs/briefing/roadmap_briefing.md` |
 
-Qdrant guarda:
+---
 
-- chunks de texto;
-- embeddings;
-- metadados para busca semantica;
-- referencias para os registros no PostgreSQL.
+## 5. Regra Arquitetural para Novos Modulos
 
-### Entregaveis
-
-- Modulo de embeddings.
-- Estrategia de chunking.
-- Colecoes no Qdrant.
-- Repositorio vetorial.
-- Sincronizacao entre PostgreSQL e Qdrant.
-- Testes de busca semantica.
-
-### Criterio de pronto
-
-Esta fase esta pronta quando for possivel fazer uma busca do tipo:
+Todo modulo novo deve seguir a mesma estrutura base:
 
 ```txt
-"startups que usam IA generativa para saude"
+domain/         entidades, enums, regras puras
+application/    casos de uso, DTOs, ports, contratos publicos
+infrastructure/ banco, APIs externas, LLM, filas, frameworks
+factories/      composicao das dependencias concretas
+presentation/   rotas HTTP quando fizer sentido
+tests/          unitarios e integracao
 ```
 
-e receber evidencias relevantes com referencia para a fonte original.
-
-## 7. Fase 5 - RAG
-
-Objetivo:
+Workers ficam fora dos modulos:
 
 ```txt
-responder perguntas usando evidencias recuperadas do banco vetorial
+workers/<nome_do_worker>/
 ```
 
-RAG significa Retrieval-Augmented Generation. Na pratica, o sistema primeiro busca informacoes relevantes e depois usa o LLM para gerar uma resposta com base nessas fontes.
-
-### Entregaveis
-
-- Modulo `rag`.
-- Retriever para Qdrant.
-- Montagem de contexto.
-- Prompt com citacoes.
-- Resposta estruturada.
-- Testes com perguntas conhecidas.
-
-### Criterio de pronto
-
-Esta fase esta pronta quando o sistema conseguir responder perguntas sobre startups citando as evidencias usadas.
-
-## 8. Fase 6 - Ingestao de Conhecimento NVIDIA
-
-Objetivo:
+E devem receber apenas identificadores:
 
 ```txt
-criar uma base de conhecimento sobre tecnologias NVIDIA
+job_id
+run_id
+document_id
+chunk_id
+recommendation_id
 ```
 
-Para recomendar tecnologias NVIDIA, o sistema precisa conhecer essas tecnologias.
+O estado real fica em PostgreSQL, Qdrant ou outro armazenamento apropriado. A
+fila nao deve virar banco de dados.
 
-Exemplos:
+---
 
-- NVIDIA Inception.
-- NVIDIA NIM.
-- NVIDIA NeMo.
-- NVIDIA Triton Inference Server.
-- TensorRT-LLM.
-- RAPIDS.
-- Riva.
-- CUDA.
-- DGX Cloud.
+## 6. Como Ler as Versoes
 
-### Entregaveis
-
-- Pipeline de ingestao de documentos NVIDIA.
-- Fontes oficiais versionadas.
-- Chunking especifico para documentacao tecnica.
-- Embeddings no Qdrant.
-- Metadados por produto, caso de uso e maturidade.
-
-### Criterio de pronto
-
-Esta fase esta pronta quando o sistema conseguir recuperar tecnologias NVIDIA relevantes para um problema descrito em linguagem natural.
-
-## 9. Fase 7 - Motor de Recomendacao
-
-Objetivo:
+Exemplo correto:
 
 ```txt
-recomendar tecnologias NVIDIA para startups com base em evidencias
+Scraping V8
+Agents V5
+Ingestion V1
+Embeddings V1
+RAG V1
 ```
 
-Essa e uma das partes centrais do produto.
+Isso quer dizer que cada modulo evolui no seu proprio ritmo.
 
-O motor deve cruzar:
-
-- dados estruturados da startup;
-- evidencias coletadas;
-- busca semantica;
-- conhecimento NVIDIA;
-- regras de negocio;
-- raciocinio do agente.
-
-### Entregaveis
-
-- Caso de uso de recomendacao.
-- Modelo de saida padronizado.
-- Score de aderencia.
-- Justificativa com evidencias.
-- Riscos e incertezas.
-- Proximas acoes recomendadas.
-
-Exemplo de saida:
+Nao usamos:
 
 ```txt
-Startup X
-Problema detectado: alto custo de inferencia em modelos generativos
-Tecnologia recomendada: TensorRT-LLM
-Motivo: pode otimizar inferencia e reduzir latencia
-Evidencias: site oficial, post tecnico, documentacao NVIDIA
-Confianca: alta
-Proxima acao: avaliar benchmark com workload real
+Projeto V9
+Projeto V10
+Projeto V11
 ```
 
-### Criterio de pronto
+Esse modelo ficaria confuso porque misturaria responsabilidades diferentes.
 
-Esta fase esta pronta quando uma startup puder receber recomendacoes explicaveis, com fontes e nivel de confianca.
+---
 
-## 10. Fase 8 - Briefing Executivo
+## 7. Criterio de Pronto do Projeto
 
-Objetivo:
+O projeto chega em uma primeira versao completa quando conseguir executar este
+fluxo:
 
 ```txt
-gerar uma resposta final clara para tomada de decisao
+1. coletar evidencia publica de uma startup
+2. validar se a evidencia e util
+3. persistir conteudo aprovado
+4. transformar conteudo em documents/chunks
+5. gerar embeddings
+6. buscar evidencias semanticamente
+7. consolidar perfil da startup
+8. consultar conhecimento NVIDIA
+9. recomendar tecnologias NVIDIA
+10. gerar briefing executivo com fontes
 ```
 
-O projeto nao deve entregar apenas dados brutos. Ele deve gerar uma analise util.
-
-### Entregaveis
-
-- Relatorio por startup.
-- Ranking de oportunidades.
-- Resumo executivo.
-- Justificativas com fontes.
-- Exportacao futura em PDF ou dashboard.
-
-### Criterio de pronto
-
-Esta fase esta pronta quando o sistema conseguir gerar um briefing que uma pessoa de negocio consiga ler sem precisar entender o pipeline tecnico.
-
-## 11. Fase 9 - Dashboard e API de Consulta
-
-Objetivo:
-
-```txt
-permitir visualizar, consultar e auditar o sistema
-```
-
-Depois que o backend estiver mais forte, faz sentido criar uma interface.
-
-### Entregaveis
-
-- Endpoints para startups.
-- Endpoints para evidencias.
-- Endpoints para recomendacoes.
-- Tela de jobs de scraping.
-- Tela de detalhes da startup.
-- Tela de recomendacoes NVIDIA.
-- Filtros por setor, confianca e tecnologia.
-
-### Criterio de pronto
-
-Esta fase esta pronta quando for possivel acompanhar o fluxo completo pela interface ou API.
-
-## 12. Fase 10 - Observabilidade e Avaliacoes
-
-Objetivo:
-
-```txt
-medir qualidade, custo, velocidade e confiabilidade
-```
-
-Sistemas com LLM precisam de avaliacao continua.
-
-### Entregaveis
-
-- Logs estruturados.
-- Metricas de tempo por etapa.
-- Metricas de custo de LLM.
-- Taxa de rejeicao do scraper.
-- Taxa de `needs_more_sources`.
-- Conjunto fixo de testes de avaliacao.
-- Testes de regressao para prompts.
-
-### Criterio de pronto
-
-Esta fase esta pronta quando uma mudanca no prompt, no agente ou no scraper puder ser avaliada antes de ir para producao.
-
-## 13. Fase 11 - Producao
-
-Objetivo:
-
-```txt
-preparar o sistema para rodar com estabilidade
-```
-
-### Entregaveis
-
-- Docker Compose completo com API, worker, PostgreSQL, Redis e Qdrant.
-- Separacao de configuracoes por ambiente.
-- Politica de secrets.
-- Rate limit.
-- Retentativas com backoff.
-- Dead letter queue para jobs problematicos.
-- Health checks.
-- Deploy inicial.
-
-### Criterio de pronto
-
-Esta fase esta pronta quando o sistema puder rodar continuamente sem depender de execucao manual no terminal.
-
-## 14. Prioridade Imediata
-
-O proximo passo mais coerente agora e:
-
-```txt
-Agents V2 com LangGraph e LangChain
-```
-
-Motivo:
-
-- O scraping ja esta suficiente para alimentar o sistema.
-- A validacao semantica ja mostrou onde o agente entra.
-- O projeto vai precisar de mais agentes depois.
-- LangGraph ajuda a organizar fluxos com decisao, memoria, ferramentas e etapas condicionais.
-
-Depois disso, a ordem mais forte e:
-
-1. Ingestao.
-2. Modelo estruturado de startups.
-3. Embeddings e Qdrant.
-4. RAG.
-5. Conhecimento NVIDIA.
-6. Recomendacao.
-
-## 15. Visao Resumida
-
-| Fase | Nome | Resultado |
-| --- | --- | --- |
-| 1 | Agents V2 | Validacao agentica com LangGraph |
-| 2 | Ingestao | Conteudo limpo e rastreavel |
-| 3 | Startups estruturadas | Base relacional de startups |
-| 4 | Vetorial | Busca semantica com Qdrant |
-| 5 | RAG | Respostas com evidencias |
-| 6 | NVIDIA Knowledge | Base tecnica NVIDIA |
-| 7 | Recomendacao | Match startup -> tecnologia NVIDIA |
-| 8 | Briefing | Analise executiva |
-| 9 | Dashboard/API | Consulta e auditoria |
-| 10 | Observabilidade | Qualidade e custo medidos |
-| 11 | Producao | Sistema estavel em ambiente real |
-
-## 16. Regra Principal
-
-Sempre que uma nova parte for criada, ela deve respeitar a mesma ideia arquitetural:
-
-```txt
-domain -> regras puras
-application -> casos de uso e contratos
-infrastructure -> banco, APIs externas, LLMs, filas e frameworks
-```
-
-Isso evita que o projeto vire um bloco dificil de mudar.
-
-O objetivo nao e apenas fazer funcionar. O objetivo e construir uma base que permita trocar tecnologia, evoluir agentes e manter o sistema entendivel.
+Hoje ja temos os passos 1, 2 e 3 em boa forma. O proximo bloco e construir os
+passos 4, 5 e 6.

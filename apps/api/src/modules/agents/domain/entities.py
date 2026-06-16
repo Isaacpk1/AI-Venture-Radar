@@ -78,6 +78,33 @@ class AgentRun:
         self.error_message = reason
         self.finished_at = utc_now()
 
+    def interrupt(self, interrupt_value: str) -> None:
+        """Pausa a execucao aguardando decisao humana.
+
+        O valor de interrupcao (pergunta ou contexto para o revisor) e
+        armazenado em ``output_payload`` para que a API possa exibi-lo.
+        """
+
+        if self.status is not AgentRunStatus.RUNNING:
+            raise InvalidAgentRunTransitionError(
+                f"Somente agent runs em execucao podem ser interrompidos. Estado atual: {self.status}."
+            )
+
+        self.status = AgentRunStatus.WAITING_HUMAN_REVIEW
+        self.output_payload = {"interrupt_value": interrupt_value}
+
+    def resume(self) -> None:
+        """Retoma a execucao apos decisao humana."""
+
+        if self.status is not AgentRunStatus.WAITING_HUMAN_REVIEW:
+            raise InvalidAgentRunTransitionError(
+                f"Somente agent runs aguardando revisao podem ser retomados. Estado atual: {self.status}."
+            )
+
+        self.status = AgentRunStatus.RUNNING
+        self.output_payload = None
+        self.started_at = utc_now()
+
 
 @dataclass
 class AgentStep:

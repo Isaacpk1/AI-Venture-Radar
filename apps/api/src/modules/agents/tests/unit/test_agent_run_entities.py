@@ -57,3 +57,68 @@ def test_agent_step_rejects_invalid_completion_transition() -> None:
 
     with pytest.raises(InvalidAgentStepTransitionError):
         step.complete({})
+
+
+# ---------------------------------------------------------------------------
+# V6: interrupt / resume transitions
+# ---------------------------------------------------------------------------
+
+
+def test_agent_run_interrupt_transitions_to_waiting_human_review() -> None:
+    run = AgentRun(
+        agent_type=AgentType.EVIDENCE_VALIDATION,
+        input_payload={"url": "https://example.com"},
+    )
+    run.start()
+    run.interrupt("Decisao ambigua: approve or reject?")
+
+    assert run.status is AgentRunStatus.WAITING_HUMAN_REVIEW
+    assert run.output_payload is not None
+    assert "interrupt_value" in run.output_payload
+    assert run.finished_at is None
+
+
+def test_agent_run_resume_transitions_back_to_running() -> None:
+    run = AgentRun(
+        agent_type=AgentType.EVIDENCE_VALIDATION,
+        input_payload={"url": "https://example.com"},
+    )
+    run.start()
+    run.interrupt("approve?")
+    run.resume()
+
+    assert run.status is AgentRunStatus.RUNNING
+    assert run.output_payload is None
+
+
+def test_agent_run_interrupt_rejects_non_running_run() -> None:
+    run = AgentRun(
+        agent_type=AgentType.EVIDENCE_VALIDATION,
+        input_payload={},
+    )
+    with pytest.raises(InvalidAgentRunTransitionError):
+        run.interrupt("should fail — run is still pending")
+
+
+def test_agent_run_resume_rejects_non_waiting_run() -> None:
+    run = AgentRun(
+        agent_type=AgentType.EVIDENCE_VALIDATION,
+        input_payload={},
+    )
+    run.start()
+    with pytest.raises(InvalidAgentRunTransitionError):
+        run.resume()
+
+
+def test_agent_run_full_interrupt_resume_complete_lifecycle() -> None:
+    run = AgentRun(
+        agent_type=AgentType.EVIDENCE_VALIDATION,
+        input_payload={"url": "https://example.com"},
+    )
+    run.start()
+    run.interrupt("needs human approval")
+    run.resume()
+    run.complete({"decision": "accepted"})
+
+    assert run.status is AgentRunStatus.COMPLETED
+    assert run.output_payload == {"decision": "accepted"}

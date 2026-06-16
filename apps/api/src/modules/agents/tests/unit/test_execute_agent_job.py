@@ -29,6 +29,7 @@ from apps.api.src.modules.agents.domain.enums import (
     AgentType,
 )
 from apps.api.src.modules.agents.domain.exceptions import (
+    AgentRunInterruptedError,
     AgentRunNotFoundError,
     AgentServiceUnavailableError,
 )
@@ -114,7 +115,10 @@ class FakeAgentsUnitOfWork:
 
 class FakeEvidenceValidationService(EvidenceValidationService):
     async def investigate(
-        self, investigation_input: EvidenceValidationInput
+        self,
+        investigation_input: EvidenceValidationInput,
+        *,
+        thread_id: str | None = None,
     ) -> EvidenceValidationResult:
         return EvidenceValidationResult(
             decision=AgentDecision.ACCEPTED,
@@ -123,7 +127,12 @@ class FakeEvidenceValidationService(EvidenceValidationService):
 
 
 class FakeSearchPlanningService(SearchPlanningService):
-    async def plan_searches(self, plan_input: SearchPlanInput) -> SearchPlanResult:
+    async def plan_searches(
+        self,
+        plan_input: SearchPlanInput,
+        *,
+        thread_id: str | None = None,
+    ) -> SearchPlanResult:
         return SearchPlanResult(
             queries=[
                 SearchQuerySuggestion(
@@ -138,7 +147,10 @@ class FakeSearchPlanningService(SearchPlanningService):
 
 class FailingEvidenceValidationService(EvidenceValidationService):
     async def investigate(
-        self, investigation_input: EvidenceValidationInput
+        self,
+        investigation_input: EvidenceValidationInput,
+        *,
+        thread_id: str | None = None,
     ) -> EvidenceValidationResult:
         raise RuntimeError("LLM timeout simulado")
 
@@ -325,3 +337,84 @@ async def test_step_records_agent_type_in_input_payload() -> None:
     assert step.input_payload is not None
     assert step.input_payload["agent_type"] == AgentType.SEARCH_PLANNING.value
     assert "run_id" in step.input_payload
+
+
+# ---------------------------------------------------------------------------
+# V6: interrupt handling
+# ---------------------------------------------------------------------------
+
+
+class InterruptingEvidenceValidationService(EvidenceValidationService):
+    """Simula um grafo que pausa aguardando aprovacao humana."""
+
+    async def investigate(
+        self,
+        investigation_input: EvidenceValidationInput,
+        *,
+        thread_id: str | None = None,
+    ) -> EvidenceValidationResult:
+        raise AgentRunInterruptedError("approve or reject?")
+
+
+@pytest.mark.anyio
+async def test_graph_interrupt_transitions_run_to_waiting_human_review() -> None:
+    run = AgentRun(
+        id=uuid4(),
+        agent_type=AgentType.EVIDENCE_VALIDATION,
+        input_payload=EVIDENCE_VALIDATION_PAYLOAD,
+    )
+    runs = {run.id: run}
+    steps = FakeStepRepository()
+
+    use_case = ExecuteAgentJob(
+        uow_factory=make_uow_factory(runs, steps),
+        evidence_validation_service=InterruptingEvidenceValidationService(),
+    )
+    await use_case.execute(run_id=run.id)
+
+    saved = runs[run.id]
+    assert saved.status is AgentRunStatus.WAITING_HUMAN_REVIEW
+    assert saved.output_payload is not None
+    assert saved.output_payload.get("interrupt_value") == "approve or reject?"
+
+    step = steps.steps[0]
+    assert step.status is AgentStepStatus.COMPLETED
+    assert step.output_payload is not None
+    assert step.output_payload.get("status") == "interrupted"
+
+
+@pytest.mark.anyio
+async def test_thread_id_equals_run_id_string() -> None:
+    """thread_id passado ao servico deve ser o UUID do run como string."""
+
+    received_thread_ids: list[str | None] = []
+
+    class CapturingService(EvidenceValidationService):
+        async def investigate(
+            self,
+            investigation_input: EvidenceValidationInput,
+            *,
+            thread_id: str | None = None,
+        ) -> EvidenceValidationResult:
+            received_thread_ids.append(thread_id)
+            return EvidenceValidationResult(
+                decision=AgentDecision.ACCEPTED,
+                reason="captured",
+            )
+
+    run = AgentRun(
+        id=uuid4(),
+        agent_type=AgentType.EVIDENCE_VALIDATION,
+        input_payload=EVIDENCE_VALIDATION_PAYLOAD,
+    )
+    runs = {run.id: run}
+    steps = FakeStepRepository()
+
+    use_case = ExecuteAgentJob(
+        uow_factory=make_uow_factory(runs, steps),
+        evidence_validation_service=CapturingService(),
+    )
+    await use_case.execute(run_id=run.id)
+
+    assert len(received_thread_ids) == 1
+    assert received_thread_ids[0] == str(run.id)

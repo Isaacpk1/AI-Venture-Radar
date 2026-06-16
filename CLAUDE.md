@@ -196,21 +196,175 @@ graphs/         ← (agents module only) LangGraph graph definitions, state, nod
 
 ---
 
-## Current implementation state (as of 2026-06-15)
+## Module version history
 
-### What is fully implemented
-- **Scraping module** — complete: domain, application, infrastructure, factories, presentation, tests. Pipeline: BS4 → Playwright → Trafilatura → Firecrawl fallback. Full deterministic + semantic validation. PostgreSQL persistence. Worker (`scraper_worker`) operational.
-- **Agents module — V5** — worker executes the correct graph by `agent_type`. `ExecuteAgentJob` receives `EvidenceValidationService` and `SearchPlanningService` via factory. Real output saved to `agent_runs.output_payload`. Real `AgentStep` saved with name `execute_{agent_type}`. LLM failures → `run.fail(reason)`. `AgentServiceUnavailableError` when API key is absent. 167 tests passing.
+This section is the authoritative record of every version of every module. Update it immediately after each delivery. Never leave it stale.
 
-### What is pending (next steps in order)
-1. **Agents V6** — LangGraph checkpoint in PostgreSQL (resume after failure, human-in-the-loop, graph state audit).
-2. **Ingestion module** — clean, normalize, extract, chunk `scraping_results` into `documents` and `chunks`.
-3. **Startups module** — structured relational model for startups and their evidences.
-4. **Embeddings + Qdrant** — embed chunks, store in Qdrant with references to PostgreSQL chunk IDs.
-5. **RAG module** — hybrid search (BM25/PG full-text + Qdrant semantic), reranking, context assembly, LLM answer with citations.
-6. **NVIDIA knowledge ingestion** — ingest NVIDIA tech docs into Qdrant.
-7. **Recommendations module** — cross startup profile × NVIDIA tech catalog → recommendations with justification.
-8. **Briefing** — structured executive output per startup.
+---
+
+### Scraping module
+
+| Versao | Status | O que foi entregue |
+|---|---|---|
+| V1 | Entregue | Scraping basico com BeautifulSoup, job + resultado no banco |
+| V2 | Entregue | PostgreSQL real, ScrapingJob/Attempt/Result, repositorios async |
+| V3 | Entregue | Redis + Dramatiq, scraper_worker, fila assincrona |
+| V4 | Entregue | Playwright para paginas dinamicas com JavaScript |
+| V5 | Entregue | Validacao deterministica: tecnica + textual + evidencial |
+| V6 | Entregue | Trafilatura como estrategia de extracao de texto |
+| V7 | Entregue | Validacao semantica com Gemini (LLM_REVIEW), fatores por score |
+| V8 | Entregue | Integracao com agents via SemanticInvestigator (AGENT_REVIEW) |
+
+**Versao atual: V8 — modulo completo**
+
+Tabelas: `scraping_jobs`, `scraping_attempts`, `scraping_results`
+Worker: `workers/scraper_worker/` — consome fila `scraping`
+Testes: 130 (unit + integration)
+
+---
+
+### Agents module
+
+| Versao | Status | O que foi entregue |
+|---|---|---|
+| V1 | Entregue | Contrato publico `SemanticInvestigator` + Gemini via HTTP direto |
+| V2 | Entregue | `EvidenceValidationGraph` com LangGraph e LangChain |
+| V3 | Entregue | `SearchPlanningGraph` (Search Planner Agent) |
+| V3.5 | Entregue | `agent_worker` base + `DramatiqAgentDispatcher` |
+| V4 | Entregue | `agent_runs` e `agent_steps` persistidos no PostgreSQL |
+| V5 | Entregue | Worker executa grafo correto por `agent_type` com output real |
+| V6 | Entregue | Checkpoint LangGraph no PostgreSQL + `waiting_human_review` + `ResumeAgentJob` |
+| V7 | Proximo | Presentation layer para human-in-the-loop (rota resume + interrupt em node real) |
+| V8 | Futuro | Extraction Agent |
+| V9 | Futuro | Startup Classifier Agent |
+| V10 | Futuro | NVIDIA Knowledge Agent |
+| V11 | Futuro | Recommendation Agent |
+| V12 | Futuro | Briefing Agent |
+
+**Versao atual: V6**
+
+O que a V6 entregou:
+- `PostgresCheckpointer` em `infrastructure/checkpoints/` wraps `AsyncPostgresSaver` (lazy init)
+- Grafos aceitam `checkpointer` no `__init__`, compilam com ele na primeira chamada com `thread_id`
+- `thread_id = str(run.id)` passado pelo `ExecuteAgentJob` a cada chamada de servico
+- `AgentRunStatus.WAITING_HUMAN_REVIEW` — novo status de dominio
+- `AgentRun.interrupt(value)` e `AgentRun.resume()` — novas transicoes de estado
+- `AgentRunInterruptedError` — excecao de dominio, sem imports LangGraph
+- `ExecuteAgentJob` captura `AgentRunInterruptedError` e pausa o run (nao falha)
+- `ResumeAgentJob` — novo caso de uso para retomar runs pausados
+- Migration `9e1f3b5c8a2d`: tabelas `checkpoints`, `checkpoint_blobs`, `checkpoint_writes`, `checkpoint_migrations`
+- Testes: 50 unit (agentes)
+
+O que a V5 entregou (historico):
+- `ExecuteAgentJob` recebe `EvidenceValidationService` e `SearchPlanningService` via factory
+- Despacha para o grafo correto pelo `agent_type` persistido em `agent_runs`
+- Salva output real em `agent_runs.output_payload`
+- Salva `AgentStep` real com nome `execute_{agent_type}`
+- Falhas do LLM ou do grafo → `run.fail(reason)` → status `FAILED`
+- `AgentServiceUnavailableError` quando chave de API esta ausente
+
+Tabelas: `agent_runs`, `agent_steps`, `checkpoints`, `checkpoint_blobs`, `checkpoint_writes`, `checkpoint_migrations`
+Worker: `workers/agent_worker/` — consome fila `agents`
+Testes: 50 unit
+
+---
+
+### Ingestion module
+
+| Versao | Status | O que foi entregue |
+|---|---|---|
+| V1 | Pendente | Limpeza, normalizacao, chunking de scraping_results |
+
+**Versao atual: nao iniciado**
+
+---
+
+### Startups module
+
+| Versao | Status | O que foi entregue |
+|---|---|---|
+| V1 | Futuro | Modelo relacional de startups e evidencias |
+
+---
+
+### RAG module
+
+| Versao | Status | O que foi entregue |
+|---|---|---|
+| V1 | Futuro | Busca hibrida + reranking + resposta com citacoes |
+
+---
+
+### Recommendations module
+
+| Versao | Status | O que foi entregue |
+|---|---|---|
+| V1 | Futuro | Cruzamento perfil da startup x catalogo NVIDIA |
+
+---
+
+## Database state
+
+### Migrations aplicadas
+
+| Revisao | Data | Descricao |
+|---|---|---|
+| `f3f7f3959ccc` | 2026-06-13 | Cria tabelas scraping (jobs, attempts, results) |
+| `a41c96d32e57` | 2026-06-15 | Torna content_hash unico em scraping_results |
+| `d8e4a9c1b672` | 2026-06-15 | Adiciona campos de auditoria de agente em attempts |
+| `7c9f2a1b4d6e` | 2026-06-15 | Cria tabelas de agents (agent_runs, agent_steps) |
+| `9e1f3b5c8a2d` | 2026-06-16 | Cria tabelas de checkpoint LangGraph (V6) |
+
+**Head atual: `9e1f3b5c8a2d`**
+
+### Tabelas existentes
+
+```
+scraping_jobs           status do job de scraping
+scraping_attempts       cada tentativa de coleta com scores e decisao
+scraping_results        conteudo bruto aprovado, pronto para ingestion
+agent_runs              execucoes de agentes com input/output/status/agent_type
+agent_steps             etapas auditaveis dentro de cada agent_run
+checkpoints             estado LangGraph por thread_id (= agent_run.id)
+checkpoint_blobs        conteudo de cada canal por versao
+checkpoint_writes       escritas pendentes ate proximo checkpoint
+checkpoint_migrations   versao das migrations internas do LangGraph
+```
+
+---
+
+## Test coverage
+
+| Modulo | Testes | Ultima verificacao |
+|---|---|---|
+| scraping | 130 | 2026-06-16 |
+| agents | 50 unit | 2026-06-16 |
+| **Total** | **180** | **2026-06-16** |
+
+Comando para verificar:
+```bash
+venv/Scripts/python.exe -m pytest apps/api/src/modules/ -q
+```
+
+---
+
+## Current state summary (2026-06-16)
+
+### Implemented and working
+- **Scraping V8** — pipeline completa, worker operacional, 130 testes
+- **Agents V6** — checkpoint PostgreSQL, waiting_human_review, ResumeAgentJob, 50 unit testes
+
+### Next step
+- **Agents V7** — Presentation layer: POST /agents/runs/{id}/resume + interrupt() em node real
+
+### Backlog (in order)
+1. Ingestion V1 — limpar/chunkar scraping_results
+2. Startups V1 — modelo relacional de startups
+3. Embeddings + Qdrant — vetorizacao de chunks
+4. RAG V1 — busca hibrida + reranking + resposta com citacoes
+5. NVIDIA knowledge ingestion — base de conhecimento NVIDIA no Qdrant
+6. Recommendations V1 — motor de recomendacao
+7. Briefing V1 — relatorio executivo final
 
 ---
 
@@ -423,4 +577,6 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Scraping latest version | `docs/scraping/scraper_v8_agente_investigacao.md` |
 | Agents module architecture | `docs/agents/modulo_agents_arquitetura.md` |
 | Agents roadmap | `docs/agents/roadmap_agentes.md` |
-| Agents V4 (current) | `docs/agents/agents_v4_agent_runs_persistence.md` |
+| Agents V5 | `docs/agents/agents_v5_executar_grafos_pelo_agent_run.md` |
+| Agents V6 (current) | `docs/agents/agents_v6_checkpoint_postgres.md` |
+| Estado atual do projeto | `docs/estado_atual_do_projeto.md` |

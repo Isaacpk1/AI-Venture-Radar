@@ -1,8 +1,12 @@
-"""Grafo LangGraph do Search Planner Agent.
+"""Grafo LangGraph do Search Planner Agent (V6: checkpointer + interrupt).
 
-A V3 cria um agente novo: ele transforma um caso de `needs_more_sources` em um
-plano de queries. Ele ainda nao executa scraping; isso fica para a V4.
+A V6 adiciona suporte a checkpoint PostgreSQL e a retomada apos interrupcao.
+O contrato publico ``SearchPlanningService`` continua o mesmo.
 """
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from langgraph.graph import END, StateGraph
 
@@ -13,36 +17,83 @@ from apps.api.src.modules.agents.application.dto import (
 from apps.api.src.modules.agents.application.public.search_planner import (
     SearchPlanningService,
 )
+from apps.api.src.modules.agents.domain.exceptions import AgentRunInterruptedError
 from apps.api.src.modules.agents.graphs.search_planning.state import (
     SearchPlanningState,
 )
+
+if TYPE_CHECKING:
+    from apps.api.src.modules.agents.infrastructure.checkpoints.postgres_checkpointer import (
+        PostgresCheckpointer,
+    )
 
 
 class SearchPlanningGraph(SearchPlanningService):
     """Orquestra a geracao de plano de busca usando LangGraph."""
 
-    def __init__(self, *, planner: SearchPlanningService) -> None:
+    def __init__(
+        self,
+        *,
+        planner: SearchPlanningService,
+        checkpointer: "PostgresCheckpointer | None" = None,
+    ) -> None:
         self.planner = planner
         self.model = getattr(planner, "model", None)
-        self.graph = self._compile_graph()
+        self._checkpointer = checkpointer
+        self._workflow = self._build_workflow()
+        self._graph_no_cp = self._workflow.compile()
+        self._graph_with_cp: Any = None
 
-    async def plan_searches(self, plan_input: SearchPlanInput) -> SearchPlanResult:
+    async def plan_searches(
+        self,
+        plan_input: SearchPlanInput,
+        *,
+        thread_id: str | None = None,
+    ) -> SearchPlanResult:
         """Executa o grafo e devolve o plano publico."""
 
-        final_state = await self.graph.ainvoke({"plan_input": plan_input})
+        graph, config = await self._resolve_graph_and_config(thread_id)
+        try:
+            final_state = await graph.ainvoke({"plan_input": plan_input}, config=config)
+        except Exception as exc:
+            if type(exc).__name__ == "GraphInterrupt":
+                interrupt_value = repr(exc.args[0]) if exc.args else "interrupt"
+                raise AgentRunInterruptedError(interrupt_value) from exc
+            raise
+
         return final_state["result"]
 
-    def _compile_graph(self):
-        """Define o fluxo da V3.
+    async def resume(
+        self,
+        thread_id: str,
+        resume_value: object,
+    ) -> SearchPlanResult:
+        """Retoma um planejamento pausado a partir do checkpoint salvo."""
 
-        A sequencia atual e simples:
+        from langgraph.types import Command
 
-        prepare_context -> generate_plan -> finalize
+        graph, config = await self._resolve_graph_and_config(thread_id)
+        try:
+            final_state = await graph.ainvoke(Command(resume=resume_value), config=config)
+        except Exception as exc:
+            if type(exc).__name__ == "GraphInterrupt":
+                interrupt_value = repr(exc.args[0]) if exc.args else "interrupt"
+                raise AgentRunInterruptedError(interrupt_value) from exc
+            raise
 
-        Nas proximas versoes, este grafo pode ganhar nodes para deduplicar
-        fontes, consultar historico e escolher provedores de busca.
-        """
+        return final_state["result"]
 
+    async def _resolve_graph_and_config(
+        self, thread_id: str | None
+    ) -> tuple[Any, dict]:
+        if thread_id and self._checkpointer is not None:
+            if self._graph_with_cp is None:
+                saver = await self._checkpointer.get_saver()
+                self._graph_with_cp = self._workflow.compile(checkpointer=saver)
+            return self._graph_with_cp, {"configurable": {"thread_id": thread_id}}
+        return self._graph_no_cp, {}
+
+    def _build_workflow(self) -> StateGraph:
         workflow = StateGraph(SearchPlanningState)
 
         workflow.add_node("prepare_context", self._prepare_context)
@@ -54,14 +105,12 @@ class SearchPlanningGraph(SearchPlanningService):
         workflow.add_edge("generate_plan", "finalize")
         workflow.add_edge("finalize", END)
 
-        return workflow.compile()
+        return workflow
 
     async def _prepare_context(
         self,
         state: SearchPlanningState,
     ) -> SearchPlanningState:
-        """Prepara um resumo interno do caso."""
-
         plan_input = state["plan_input"]
         prepared_context = (
             f"startup={plan_input.startup_name or 'unknown'}; "
@@ -69,15 +118,12 @@ class SearchPlanningGraph(SearchPlanningService):
             f"max_queries={plan_input.max_queries}; "
             f"known_terms={len(plan_input.known_terms)}"
         )
-
         return {"prepared_context": prepared_context}
 
     async def _generate_plan(
         self,
         state: SearchPlanningState,
     ) -> SearchPlanningState:
-        """Chama o planejador configurado para gerar queries."""
-
         plan = await self.planner.plan_searches(state["plan_input"])
         return {"llm_plan": plan}
 
@@ -85,6 +131,4 @@ class SearchPlanningGraph(SearchPlanningService):
         self,
         state: SearchPlanningState,
     ) -> SearchPlanningState:
-        """Define a saida final do grafo."""
-
         return {"result": state["llm_plan"]}

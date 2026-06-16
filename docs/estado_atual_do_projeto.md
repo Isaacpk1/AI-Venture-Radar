@@ -281,6 +281,19 @@ broker Redis/Dramatiq = infraestrutura compartilhada em shared/
 
 ## 8. O que esta pendente (proximos passos em ordem)
 
+As proximas partes do sistema agora sao documentadas como modulos versionados
+independentes. Ou seja, nao existe uma "V9 do projeto inteiro". Existe:
+
+```txt
+Scraping V8
+Agents V5
+Ingestion V1
+Embeddings V1
+RAG V1
+Recommendations V1
+Briefing V1
+```
+
 ### Agents V6 — Checkpoint LangGraph
 Permitir retomada de grafos apos falha, human-in-the-loop e auditoria de estado.
 
@@ -336,3 +349,10 @@ Relatorio executivo final para o gerente de startups.
 | Modulo agents | `docs/agents/modulo_agents_arquitetura.md` |
 | Roadmap agents | `docs/agents/roadmap_agentes.md` |
 | Agents V5 (atual) | `docs/agents/agents_v5_executar_grafos_pelo_agent_run.md` |
+| Roadmap ingestion | `docs/ingestion/roadmap_ingestion.md` |
+| Roadmap startups | `docs/startups/roadmap_startups.md` |
+| Roadmap embeddings | `docs/embeddings/roadmap_embeddings.md` |
+| Roadmap RAG | `docs/rag/roadmap_rag.md` |
+| Roadmap NVIDIA Knowledge | `docs/nvidia_knowledge/roadmap_nvidia_knowledge.md` |
+| Roadmap recommendations | `docs/recommendations/roadmap_recommendations.md` |
+| Roadmap briefing | `docs/briefing/roadmap_briefing.md` |

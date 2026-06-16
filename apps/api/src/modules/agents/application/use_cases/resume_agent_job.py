@@ -1,11 +1,9 @@
-"""Caso de uso executado pelo agent_worker."""
+"""Caso de uso para retomar um AgentRun pausado por interrupcao humana."""
 
 from uuid import UUID
 
 from apps.api.src.modules.agents.application.agent_run_payloads import (
-    evidence_validation_input_from_payload,
     evidence_validation_result_to_payload,
-    search_plan_input_from_payload,
     search_plan_result_to_payload,
 )
 from apps.api.src.modules.agents.application.public.search_planner import (
@@ -18,7 +16,7 @@ from apps.api.src.modules.agents.application.unit_of_work import (
     AgentsUnitOfWorkFactory,
 )
 from apps.api.src.modules.agents.domain.entities import AgentStep
-from apps.api.src.modules.agents.domain.enums import AgentType
+from apps.api.src.modules.agents.domain.enums import AgentRunStatus, AgentType
 from apps.api.src.modules.agents.domain.exceptions import (
     AgentRunInterruptedError,
     AgentRunNotFoundError,
@@ -27,13 +25,12 @@ from apps.api.src.modules.agents.domain.exceptions import (
 )
 
 
-class ExecuteAgentJob:
-    """Executa uma tarefa de agente recebida pela fila.
+class ResumeAgentJob:
+    """Retoma uma execucao pausada em ``waiting_human_review``.
 
-    V6: passa ``thread_id=str(run.id)`` para o servico, ativando o checkpoint
-    PostgreSQL quando o grafo estiver configurado com um. Interrupcoes do grafo
-    (``AgentRunInterruptedError``) transitam o run para ``waiting_human_review``
-    em vez de ``failed``.
+    Recebe a decisao humana (``resume_value``), reativa o AgentRun, chama o
+    metodo ``resume()`` do servico correspondente — que retoma o grafo LangGraph
+    a partir do checkpoint PostgreSQL — e persiste o resultado ou nova interrupcao.
     """
 
     def __init__(
@@ -46,26 +43,37 @@ class ExecuteAgentJob:
         self.evidence_validation_service = evidence_validation_service
         self.search_planning_service = search_planning_service
 
-    async def execute(self, *, run_id: UUID) -> None:
+    async def execute(self, *, run_id: UUID, resume_value: object) -> None:
         async with self.uow_factory() as uow:
             run = await uow.run_repository.get_by_id(run_id)
             if run is None:
                 raise AgentRunNotFoundError(f"AgentRun {run_id} nao encontrado.")
 
-            run.start()
+            if run.status is not AgentRunStatus.WAITING_HUMAN_REVIEW:
+                raise AgentRunNotFoundError(
+                    f"AgentRun {run_id} nao esta aguardando revisao humana "
+                    f"(status atual: {run.status})."
+                )
+
+            run.resume()
             step = AgentStep(
                 run_id=run.id,
-                name=f"execute_{run.agent_type.value}",
-                input_payload={"agent_type": run.agent_type.value, "run_id": str(run_id)},
+                name=f"resume_{run.agent_type.value}",
+                input_payload={
+                    "agent_type": run.agent_type.value,
+                    "run_id": str(run_id),
+                    "resume_value": str(resume_value),
+                },
             )
 
             try:
-                output_payload = await self._run_graph(
-                    run.agent_type, run.input_payload, thread_id=str(run.id)
+                output_payload = await self._resume_graph(
+                    run.agent_type, thread_id=str(run.id), resume_value=resume_value
                 )
                 step.complete(output_payload)
                 run.complete(output_payload)
             except AgentRunInterruptedError as exc:
+                # Grafo pausou novamente (multiplos pontos de revisao).
                 interrupt_value = str(exc)
                 run.interrupt(interrupt_value)
                 step.complete({"status": "interrupted", "interrupt_value": interrupt_value})
@@ -78,33 +86,27 @@ class ExecuteAgentJob:
             await uow.step_repository.save(step)
             await uow.commit()
 
-    async def _run_graph(
+    async def _resume_graph(
         self,
         agent_type: AgentType,
-        input_payload: dict[str, object],
         *,
         thread_id: str,
+        resume_value: object,
     ) -> dict[str, object]:
         if agent_type is AgentType.EVIDENCE_VALIDATION:
             if self.evidence_validation_service is None:
                 raise AgentServiceUnavailableError(
-                    "Evidence validation service nao configurado (verifique GEMINI_API_KEY)."
+                    "Evidence validation service nao configurado."
                 )
-            ev_input = evidence_validation_input_from_payload(input_payload)
-            result = await self.evidence_validation_service.investigate(
-                ev_input, thread_id=thread_id
-            )
+            result = await self.evidence_validation_service.resume(thread_id, resume_value)
             return evidence_validation_result_to_payload(result)
 
         if agent_type is AgentType.SEARCH_PLANNING:
             if self.search_planning_service is None:
                 raise AgentServiceUnavailableError(
-                    "Search planning service nao configurado (verifique GEMINI_API_KEY)."
+                    "Search planning service nao configurado."
                 )
-            sp_input = search_plan_input_from_payload(input_payload)
-            result = await self.search_planning_service.plan_searches(
-                sp_input, thread_id=thread_id
-            )
+            result = await self.search_planning_service.resume(thread_id, resume_value)
             return search_plan_result_to_payload(result)
 
         raise UnsupportedAgentJobError(

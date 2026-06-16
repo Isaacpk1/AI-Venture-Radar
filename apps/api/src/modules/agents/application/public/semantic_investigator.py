@@ -27,5 +27,27 @@ class EvidenceValidationService(ABC):
     async def investigate(
         self,
         investigation_input: EvidenceValidationInput,
+        *,
+        thread_id: str | None = None,
     ) -> EvidenceValidationResult:
-        """Recebe o contexto apurado e devolve uma decisao final fundamentada."""
+        """Recebe o contexto apurado e devolve uma decisao final fundamentada.
+
+        ``thread_id`` e o identificador do AgentRun usado pelo checkpointer para
+        salvar o estado do grafo entre nodes. Quando ausente, o grafo executa
+        sem checkpoint (comportamento V5).
+        """
+
+    async def resume(
+        self,
+        thread_id: str,
+        resume_value: object,
+    ) -> EvidenceValidationResult:
+        """Retoma uma investigacao pausada por interrupt() no grafo.
+
+        Implementacao padrao lanca NotImplementedError. Servicos sem
+        checkpointer (ex: fakes de teste) nao precisam sobrescrever.
+        """
+
+        raise NotImplementedError(
+            f"{type(self).__name__} nao suporta retomada de execucao."
+        )

@@ -18,7 +18,7 @@ docs/validacao_arquitetural_modulos_workers.md
 | Agents V3.5 | Implementado | `docs/agents/agents_v3_5_agent_worker_base.md` |
 | Agents V4 | Implementado | `docs/agents/agents_v4_agent_runs_persistence.md` |
 | Agents V5 | Implementado | `docs/agents/agents_v5_executar_grafos_pelo_agent_run.md` |
-| Agents V6 | Proximo passo | Checkpoint LangGraph no PostgreSQL |
+| Agents V6 | Implementado | `docs/agents/agents_v6_checkpoint_postgres.md` |
 | Agents V7 | Futuro | Extraction Agent |
 | Agents V8 | Futuro | Startup Classifier Agent |
 | Agents V9 | Futuro | NVIDIA Knowledge Agent |

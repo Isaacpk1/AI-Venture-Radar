@@ -43,6 +43,7 @@ class AgentRunStatus(StrEnum):
 
     PENDING = "pending"
     RUNNING = "running"
+    WAITING_HUMAN_REVIEW = "waiting_human_review"
     COMPLETED = "completed"
     FAILED = "failed"
 
