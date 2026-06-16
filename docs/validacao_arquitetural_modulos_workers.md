@@ -7,7 +7,7 @@ modulos sabem como fazer
 workers executam o trabalho pesado
 ```
 
-Validacao feita em 15/06/2026.
+Validacao atualizada em 16/06/2026.
 
 ## 1. Regra Arquitetural
 
@@ -83,7 +83,7 @@ Isso esta correto porque o worker nao implementa scraping diretamente.
 Status:
 
 ```txt
-parcialmente de acordo
+de acordo
 ```
 
 O modulo `agents` possui:
@@ -94,7 +94,8 @@ O modulo `agents` possui:
 - grafo de planejamento de busca;
 - integracao Gemini via LangChain;
 - dispatcher de jobs de agentes;
-- caso de uso base para execucao pelo worker.
+- caso de uso para execucao real pelo worker;
+- persistencia de `agent_runs` e `agent_steps`.
 
 O worker de agentes existe:
 
@@ -114,17 +115,9 @@ E chama:
 AgentsFactory.create_execute_agent_job()
 ```
 
-Isso esta correto como base.
-
-Porem, ainda falta persistencia real de execucoes:
-
-```txt
-agent_runs
-agent_steps
-agent_artifacts
-```
-
-Por isso, o `agent_worker` ainda nao executa fluxos completos com estado persistido. Ele ja tem o trilho operacional, mas ainda nao tem o banco de execucao dos agentes.
+Isso esta correto: o worker nao implementa grafo, prompt ou regra de negocio.
+Ele apenas chama o caso de uso do modulo `agents`, que busca o `AgentRun`
+persistido e executa o grafo correto com base em `agent_type`.
 
 ## 3. Estado Atual dos Workers
 
@@ -167,7 +160,7 @@ execute_scraping_job
 Status:
 
 ```txt
-base correta, execucao completa pendente
+de acordo
 ```
 
 Responsabilidade atual:
@@ -190,6 +183,16 @@ execute_agent_job
 ```
 
 O worker nao contem prompt, grafo ou regra de negocio. Isso esta correto.
+Na V5, ele ja executa trabalho pesado de agentes de forma indireta:
+
+```txt
+recebe run_id
+chama AgentsFactory.create_execute_agent_job()
+caso de uso busca AgentRun no PostgreSQL
+caso de uso reconstroi DTO de entrada
+caso de uso executa EvidenceValidationGraph ou SearchPlanningGraph
+caso de uso salva output e AgentStep
+```
 
 ## 4. Ajuste Feito Durante a Validacao
 
@@ -235,7 +238,7 @@ Comando executado:
 Resultado:
 
 ```txt
-154 passed
+167 passed
 ```
 
 Existe apenas um warning interno do LangGraph sobre configuracao futura de serializer/cache. Ele nao quebra o sistema.
@@ -255,68 +258,55 @@ Esta de acordo:
 - agents publica somente `run_id` na fila;
 - agents possui contratos publicos e grafos internos;
 - agents possui dispatcher para jobs;
+- agents possui persistencia de `agent_runs` e `agent_steps`;
 - broker Dramatiq agora esta em `shared`;
 - testes passam.
 
-## 7. O que Esta Parcial
+## 7. Estado dos Agents na V5
 
-Ainda esta parcial:
-
-```txt
-agent_worker existe, mas ainda nao executa agent_runs persistidos
-```
-
-Hoje ele valida o job recebido, mas ainda nao busca uma execucao no banco nem salva resultado.
-
-A fila de agentes ja foi ajustada para transportar somente:
+A fila de agentes transporta somente:
 
 ```txt
 run_id
 ```
 
-Isso esta mais alinhado com o monolito modular, porque `agent_name`, entrada e saida devem ficar persistidos em `agent_runs`.
+Isso esta mais alinhado com o monolito modular, porque `agent_type`, entrada e saida devem ficar persistidos em `agent_runs`.
 
-Isso e aceitavel para a V3.5, mas nao e a versao final.
+Isso esta correto para a V5, porque o estado completo da execucao fica em
+`agent_runs` e `agent_steps`, nao dentro da mensagem da fila.
+
+O `agent_worker` ja executa grafos reais por `agent_type`:
+
+```txt
+EVIDENCE_VALIDATION -> EvidenceValidationGraph
+SEARCH_PLANNING     -> SearchPlanningGraph
+```
 
 ## 8. Proximo Ajuste Necessario
 
 Proximo passo recomendado:
 
 ```txt
-Agents V4 - Persistencia de Agent Runs
+Agents V6 - Checkpoint LangGraph no PostgreSQL
 ```
 
 Entregaveis:
 
-- models SQLAlchemy para `agent_runs`;
-- models SQLAlchemy para `agent_steps`;
-- migration Alembic;
-- entidades de dominio;
-- mappers;
-- repositorios PostgreSQL;
-- caso de uso `CreateAgentRun`;
-- caso de uso `ExecuteAgentRun`;
-- `agent_worker` buscando o `agent_run` pelo `run_id`;
-- persistencia de status, erro, entrada e saida.
-
-Depois disso, o worker de agentes passa a executar trabalho pesado de verdade:
-
-```txt
-recebe run_id
-busca agent_run no PostgreSQL
-reconstroi DTO
-executa grafo
-salva resultado
-atualiza status
-```
+- salvar checkpoints do LangGraph no PostgreSQL;
+- permitir retomada de grafos apos falha;
+- preparar human-in-the-loop;
+- evoluir auditoria de estado entre nodes.
 
 ## 9. Conclusao
 
-O sistema esta coerente com a arquitetura, com uma observacao importante:
+O sistema esta coerente com a arquitetura:
 
 ```txt
 scraping ja esta maduro com worker e persistencia
-agents ja tem worker base, mas precisa de agent_runs para execucao completa
+agents ja tem agent_runs persistidos e worker executando grafos reais por agent_type
 ```
 
-Portanto, a arquitetura esta no caminho certo. O proximo passo nao deve ser criar mais agentes ainda. O mais correto e consolidar a persistencia e execucao assincorna dos agentes.
+Portanto, a arquitetura esta no caminho certo. O proximo passo nao deve ser
+criar mais agentes ainda sem necessidade. O mais correto e consolidar
+checkpoint/retomada dos grafos ou iniciar o modulo de ingestion, dependendo da
+prioridade do produto.

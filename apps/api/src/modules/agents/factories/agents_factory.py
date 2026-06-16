@@ -14,8 +14,14 @@ from apps.api.src.modules.agents.application.public.semantic_investigator import
 from apps.api.src.modules.agents.application.public.search_planner import (
     SearchPlanningService,
 )
+from apps.api.src.modules.agents.application.use_cases.create_agent_run import (
+    CreateAgentRun,
+)
 from apps.api.src.modules.agents.application.use_cases.execute_agent_job import (
     ExecuteAgentJob,
+)
+from apps.api.src.modules.agents.application.use_cases.get_agent_run import (
+    GetAgentRun,
 )
 from apps.api.src.modules.agents.graphs.evidence_validation.graph import (
     EvidenceValidationGraph,
@@ -32,6 +38,9 @@ from apps.api.src.modules.agents.infrastructure.llm.langchain_gemini_search_plan
 from apps.api.src.modules.agents.infrastructure.queue.dramatiq_agent_dispatcher import (
     DramatiqAgentJobPublisher,
     DramatiqAgentTaskDispatcher,
+)
+from apps.api.src.modules.agents.infrastructure.database.postgres_unit_of_work import (
+    PostgresAgentsUnitOfWork,
 )
 from apps.api.src.shared.queue.dramatiq_broker import broker
 
@@ -96,6 +105,30 @@ class AgentsFactory:
 
     @staticmethod
     def create_execute_agent_job() -> ExecuteAgentJob:
-        """Cria o caso de uso chamado pelo agent_worker."""
+        """Cria o caso de uso chamado pelo agent_worker.
 
-        return ExecuteAgentJob()
+        Injeta os dois servicos de grafo. Quando a chave Gemini nao esta
+        configurada, ``create_*_service`` devolve ``None`` e o worker marca o
+        run como ``failed`` com mensagem clara.
+        """
+
+        return ExecuteAgentJob(
+            uow_factory=PostgresAgentsUnitOfWork,
+            evidence_validation_service=AgentsFactory.create_evidence_validation_service(),
+            search_planning_service=AgentsFactory.create_search_planning_service(),
+        )
+
+    @staticmethod
+    def create_agent_run_use_case() -> CreateAgentRun:
+        """Cria o caso de uso que persiste e publica um AgentRun."""
+
+        return CreateAgentRun(
+            uow_factory=PostgresAgentsUnitOfWork,
+            task_dispatcher=AgentsFactory.create_agent_task_dispatcher(),
+        )
+
+    @staticmethod
+    def create_get_agent_run_use_case() -> GetAgentRun:
+        """Cria o caso de uso de consulta de AgentRun."""
+
+        return GetAgentRun(PostgresAgentsUnitOfWork)

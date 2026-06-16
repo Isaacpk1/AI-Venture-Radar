@@ -13,15 +13,17 @@ docs/validacao_arquitetural_modulos_workers.md
 | Versao | Status | Documento |
 | --- | --- | --- |
 | Agents V1 | Implementado | `docs/agents/agents_v1_integracao_inicial.md` |
-| Agents V2 | Implementado | `docs/agentes/agents_v2_langgraph.md` |
-| Agents V3 | Implementado | `docs/agentes/agents_v3_search_planner.md` |
-| Agents V3.5 | Implementado | `docs/agentes/agents_v3_5_agent_worker_base.md` |
-| Agents V4 | Proximo passo | Agent Runs Persistence |
-| Agents V5 | Futuro | Extraction Agent |
-| Agents V6 | Futuro | Startup Classifier Agent |
-| Agents V7 | Futuro | NVIDIA Knowledge Agent |
-| Agents V8 | Futuro | Recommendation Agent |
-| Agents V9 | Futuro | Briefing Agent |
+| Agents V2 | Implementado | `docs/agents/agents_v2_langgraph.md` |
+| Agents V3 | Implementado | `docs/agents/agents_v3_search_planner.md` |
+| Agents V3.5 | Implementado | `docs/agents/agents_v3_5_agent_worker_base.md` |
+| Agents V4 | Implementado | `docs/agents/agents_v4_agent_runs_persistence.md` |
+| Agents V5 | Implementado | `docs/agents/agents_v5_executar_grafos_pelo_agent_run.md` |
+| Agents V6 | Proximo passo | Checkpoint LangGraph no PostgreSQL |
+| Agents V7 | Futuro | Extraction Agent |
+| Agents V8 | Futuro | Startup Classifier Agent |
+| Agents V9 | Futuro | NVIDIA Knowledge Agent |
+| Agents V10 | Futuro | Recommendation Agent |
+| Agents V11 | Futuro | Briefing Agent |
 
 ## Agentes Planejados
 
@@ -58,7 +60,8 @@ Status:
 
 ```txt
 base criada na V3.5
-persistencia de agent_runs ainda pendente
+persistencia de agent_runs criada na V4
+execucao real dos grafos pelo worker implementada na V5
 ```
 
 ### Extraction Agent
@@ -91,4 +94,6 @@ O padrao correto e:
 agent -> contratos publicos -> services/use cases/tools -> resultado estruturado
 ```
 
-O proximo passo natural depois da V3.5 e persistir `agent_runs`, porque o worker ja existe, mas ainda precisa buscar e salvar execucoes reais no PostgreSQL.
+O proximo passo natural depois da V5 e adicionar checkpoint do LangGraph no
+PostgreSQL. Isso permite retomar grafos apos falha, auditar estado entre nodes e
+preparar fluxos com human-in-the-loop.

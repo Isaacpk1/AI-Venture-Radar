@@ -2,7 +2,7 @@
 
 Este documento valida como as mensagens e interacoes entre modulos estao funcionando no monolito modular.
 
-Validacao feita em 15/06/2026.
+Validacao atualizada em 16/06/2026.
 
 ## 1. Regra Principal
 
@@ -157,11 +157,11 @@ AgentsFactory.create_execute_agent_job()
 Status:
 
 ```txt
-correto como contrato de mensagem
-parcial como execucao completa
+correto
 ```
 
-Parcial porque ainda falta `agent_runs` no PostgreSQL. Sem `agent_runs`, o worker recebe o `run_id`, mas ainda nao tem de onde carregar `agent_name`, entrada, status e resultado.
+Na V5, o worker ja executa o grafo real por `agent_type`. A mensagem continua
+pequena (`run_id`) e o modulo `agents` busca o restante no PostgreSQL.
 
 ## 5. O que foi ajustado
 
@@ -181,10 +181,10 @@ Agora a mensagem carrega somente:
 run_id
 ```
 
-Os detalhes devem ficar no banco:
+Os detalhes agora ficam no banco:
 
 ```txt
-agent_runs.agent_name
+agent_runs.agent_type
 agent_runs.input_payload
 agent_runs.status
 agent_runs.output_payload
@@ -203,8 +203,8 @@ Comandos executados:
 Resultados:
 
 ```txt
-24 passed
-154 passed
+37 passed
+167 passed
 ```
 
 ## 7. Conclusao
@@ -225,4 +225,6 @@ workers chamam factories/casos de uso
 broker compartilhado fica em shared
 ```
 
-O proximo passo necessario e criar persistencia de `agent_runs`, porque ai o `agent_worker` podera transformar `run_id` em execucao real do grafo.
+O `agent_worker` ja executa o grafo real a partir do `agent_type` persistido em
+`agent_runs`. O proximo passo natural em agents e adicionar checkpoint do
+LangGraph no PostgreSQL para permitir retomada de grafos e human-in-the-loop.

@@ -32,3 +32,19 @@ class AgentTaskDispatchError(AgentError):
 
 class UnsupportedAgentJobError(AgentError):
     """O worker recebeu um tipo de job de agente ainda nao suportado."""
+
+
+class AgentRunNotFoundError(AgentError):
+    """A execucao de agente solicitada nao existe."""
+
+
+class AgentServiceUnavailableError(AgentError):
+    """O servico de agente requerido nao esta configurado (ex: chave de API ausente)."""
+
+
+class InvalidAgentRunTransitionError(AgentError):
+    """A execucao de agente tentou mudar para um estado invalido."""
+
+
+class InvalidAgentStepTransitionError(AgentError):
+    """A etapa de agente tentou mudar para um estado invalido."""

@@ -36,6 +36,10 @@ from apps.api.src.modules.scraping.infrastructure.database.models import (  # no
     scraping_job_model,
     scraping_result_model,
 )
+from apps.api.src.modules.agents.infrastructure.database.models import (  # noqa: F401
+    agent_run_model,
+    agent_step_model,
+)
 
 # Objeto de configuração do Alembic, vindo do alembic.ini.
 config = context.config

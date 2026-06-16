@@ -1,14 +1,327 @@
-"""Testes do caso de uso executado pelo agent_worker."""
+"""Testes do caso de uso ExecuteAgentJob (Agents V5)."""
 
-from uuid import uuid4
+from types import TracebackType
+from uuid import UUID, uuid4
 
 import pytest
 
+from apps.api.src.modules.agents.application.dto import (
+    EvidenceValidationInput,
+    EvidenceValidationResult,
+    SearchPlanInput,
+    SearchPlanResult,
+    SearchQuerySuggestion,
+)
+from apps.api.src.modules.agents.application.public.search_planner import (
+    SearchPlanningService,
+)
+from apps.api.src.modules.agents.application.public.semantic_investigator import (
+    EvidenceValidationService,
+)
 from apps.api.src.modules.agents.application.use_cases.execute_agent_job import (
     ExecuteAgentJob,
 )
-@pytest.mark.anyio
-async def test_execute_accepts_run_id() -> None:
-    use_case = ExecuteAgentJob()
+from apps.api.src.modules.agents.domain.entities import AgentRun, AgentStep
+from apps.api.src.modules.agents.domain.enums import (
+    AgentDecision,
+    AgentRunStatus,
+    AgentStepStatus,
+    AgentType,
+)
+from apps.api.src.modules.agents.domain.exceptions import (
+    AgentRunNotFoundError,
+    AgentServiceUnavailableError,
+)
 
-    await use_case.execute(run_id=uuid4())
+# ---------------------------------------------------------------------------
+# Payloads de entrada minimos para cada tipo de agente
+# ---------------------------------------------------------------------------
+
+EVIDENCE_VALIDATION_PAYLOAD: dict[str, object] = {
+    "url": "https://startup.com/about",
+    "title": "About us",
+    "raw_text": "We build AI-powered solutions for enterprise customers.",
+    "technical_score": 0.9,
+    "text_score": 0.8,
+    "evidence_score": 0.6,
+    "quality_score": 0.73,
+}
+
+SEARCH_PLANNING_PAYLOAD: dict[str, object] = {
+    "startup_name": "Acme AI",
+    "source_url": "https://acme.com",
+    "source_title": "Home",
+    "raw_text": "We use AI to improve operations.",
+    "reason": "Evidence is generic, need more sources.",
+}
+
+
+# ---------------------------------------------------------------------------
+# Fakes de infraestrutura
+# ---------------------------------------------------------------------------
+
+
+class FakeRunRepository:
+    def __init__(self, runs: dict[UUID, AgentRun]) -> None:
+        self.runs = runs
+
+    async def save(self, run: AgentRun) -> None:
+        self.runs[run.id] = run
+
+    async def get_by_id(self, run_id: UUID) -> AgentRun | None:
+        return self.runs.get(run_id)
+
+
+class FakeStepRepository:
+    def __init__(self) -> None:
+        self.steps: list[AgentStep] = []
+
+    async def save(self, step: AgentStep) -> None:
+        self.steps.append(step)
+
+    async def list_by_run_id(self, run_id: UUID) -> list[AgentStep]:
+        return [s for s in self.steps if s.run_id == run_id]
+
+
+class FakeAgentsUnitOfWork:
+    def __init__(self, runs: dict[UUID, AgentRun], steps: FakeStepRepository) -> None:
+        self.run_repository = FakeRunRepository(runs)
+        self.step_repository = steps
+        self.committed = False
+
+    async def __aenter__(self) -> "FakeAgentsUnitOfWork":
+        return self
+
+    async def __aexit__(
+        self,
+        exception_type: type[BaseException] | None,
+        exception: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        return None
+
+    async def commit(self) -> None:
+        self.committed = True
+
+    async def rollback(self) -> None:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Fakes dos servicos de grafo
+# ---------------------------------------------------------------------------
+
+
+class FakeEvidenceValidationService(EvidenceValidationService):
+    async def investigate(
+        self, investigation_input: EvidenceValidationInput
+    ) -> EvidenceValidationResult:
+        return EvidenceValidationResult(
+            decision=AgentDecision.ACCEPTED,
+            reason="Conteudo validado pelo fake.",
+        )
+
+
+class FakeSearchPlanningService(SearchPlanningService):
+    async def plan_searches(self, plan_input: SearchPlanInput) -> SearchPlanResult:
+        return SearchPlanResult(
+            queries=[
+                SearchQuerySuggestion(
+                    query="Acme AI startup use case",
+                    purpose="Encontrar evidencias adicionais",
+                    priority=1,
+                )
+            ],
+            reason="Plano gerado pelo fake.",
+        )
+
+
+class FailingEvidenceValidationService(EvidenceValidationService):
+    async def investigate(
+        self, investigation_input: EvidenceValidationInput
+    ) -> EvidenceValidationResult:
+        raise RuntimeError("LLM timeout simulado")
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def make_uow_factory(
+    runs: dict[UUID, AgentRun], steps: FakeStepRepository
+):
+    return lambda: FakeAgentsUnitOfWork(runs, steps)
+
+
+# ---------------------------------------------------------------------------
+# Testes — Evidence Validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_evidence_validation_run_completes_with_real_output() -> None:
+    run = AgentRun(
+        id=uuid4(),
+        agent_type=AgentType.EVIDENCE_VALIDATION,
+        input_payload=EVIDENCE_VALIDATION_PAYLOAD,
+    )
+    runs = {run.id: run}
+    steps = FakeStepRepository()
+
+    use_case = ExecuteAgentJob(
+        uow_factory=make_uow_factory(runs, steps),
+        evidence_validation_service=FakeEvidenceValidationService(),
+    )
+    await use_case.execute(run_id=run.id)
+
+    saved = runs[run.id]
+    assert saved.status is AgentRunStatus.COMPLETED
+    assert saved.output_payload is not None
+    assert saved.output_payload["decision"] == AgentDecision.ACCEPTED.value
+    assert saved.output_payload["reason"] == "Conteudo validado pelo fake."
+
+    assert len(steps.steps) == 1
+    step = steps.steps[0]
+    assert step.name == "execute_evidence_validation"
+    assert step.status is AgentStepStatus.COMPLETED
+    assert step.output_payload == saved.output_payload
+
+
+@pytest.mark.anyio
+async def test_evidence_validation_service_none_marks_run_failed() -> None:
+    run = AgentRun(
+        id=uuid4(),
+        agent_type=AgentType.EVIDENCE_VALIDATION,
+        input_payload=EVIDENCE_VALIDATION_PAYLOAD,
+    )
+    runs = {run.id: run}
+    steps = FakeStepRepository()
+
+    use_case = ExecuteAgentJob(
+        uow_factory=make_uow_factory(runs, steps),
+        evidence_validation_service=None,
+    )
+    await use_case.execute(run_id=run.id)
+
+    saved = runs[run.id]
+    assert saved.status is AgentRunStatus.FAILED
+    assert saved.error_message is not None
+    assert "AgentServiceUnavailableError" in saved.error_message
+
+    step = steps.steps[0]
+    assert step.status is AgentStepStatus.FAILED
+
+
+@pytest.mark.anyio
+async def test_evidence_validation_llm_failure_marks_run_failed() -> None:
+    run = AgentRun(
+        id=uuid4(),
+        agent_type=AgentType.EVIDENCE_VALIDATION,
+        input_payload=EVIDENCE_VALIDATION_PAYLOAD,
+    )
+    runs = {run.id: run}
+    steps = FakeStepRepository()
+
+    use_case = ExecuteAgentJob(
+        uow_factory=make_uow_factory(runs, steps),
+        evidence_validation_service=FailingEvidenceValidationService(),
+    )
+    await use_case.execute(run_id=run.id)
+
+    saved = runs[run.id]
+    assert saved.status is AgentRunStatus.FAILED
+    assert "LLM timeout simulado" in (saved.error_message or "")
+
+    step = steps.steps[0]
+    assert step.status is AgentStepStatus.FAILED
+
+
+# ---------------------------------------------------------------------------
+# Testes — Search Planning
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_search_planning_run_completes_with_real_output() -> None:
+    run = AgentRun(
+        id=uuid4(),
+        agent_type=AgentType.SEARCH_PLANNING,
+        input_payload=SEARCH_PLANNING_PAYLOAD,
+    )
+    runs = {run.id: run}
+    steps = FakeStepRepository()
+
+    use_case = ExecuteAgentJob(
+        uow_factory=make_uow_factory(runs, steps),
+        search_planning_service=FakeSearchPlanningService(),
+    )
+    await use_case.execute(run_id=run.id)
+
+    saved = runs[run.id]
+    assert saved.status is AgentRunStatus.COMPLETED
+    assert saved.output_payload is not None
+    assert isinstance(saved.output_payload["queries"], list)
+    assert len(saved.output_payload["queries"]) == 1
+    assert saved.output_payload["reason"] == "Plano gerado pelo fake."
+
+    step = steps.steps[0]
+    assert step.name == "execute_search_planning"
+    assert step.status is AgentStepStatus.COMPLETED
+
+
+@pytest.mark.anyio
+async def test_search_planning_service_none_marks_run_failed() -> None:
+    run = AgentRun(
+        id=uuid4(),
+        agent_type=AgentType.SEARCH_PLANNING,
+        input_payload=SEARCH_PLANNING_PAYLOAD,
+    )
+    runs = {run.id: run}
+    steps = FakeStepRepository()
+
+    use_case = ExecuteAgentJob(
+        uow_factory=make_uow_factory(runs, steps),
+        search_planning_service=None,
+    )
+    await use_case.execute(run_id=run.id)
+
+    saved = runs[run.id]
+    assert saved.status is AgentRunStatus.FAILED
+    assert "AgentServiceUnavailableError" in (saved.error_message or "")
+
+
+# ---------------------------------------------------------------------------
+# Testes — Casos gerais
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_execute_raises_when_run_does_not_exist() -> None:
+    use_case = ExecuteAgentJob(
+        uow_factory=make_uow_factory({}, FakeStepRepository()),
+    )
+    with pytest.raises(AgentRunNotFoundError):
+        await use_case.execute(run_id=uuid4())
+
+
+@pytest.mark.anyio
+async def test_step_records_agent_type_in_input_payload() -> None:
+    run = AgentRun(
+        id=uuid4(),
+        agent_type=AgentType.SEARCH_PLANNING,
+        input_payload=SEARCH_PLANNING_PAYLOAD,
+    )
+    runs = {run.id: run}
+    steps = FakeStepRepository()
+
+    use_case = ExecuteAgentJob(
+        uow_factory=make_uow_factory(runs, steps),
+        search_planning_service=FakeSearchPlanningService(),
+    )
+    await use_case.execute(run_id=run.id)
+
+    step = steps.steps[0]
+    assert step.input_payload is not None
+    assert step.input_payload["agent_type"] == AgentType.SEARCH_PLANNING.value
+    assert "run_id" in step.input_payload

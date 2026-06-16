@@ -233,8 +233,11 @@ Foram adicionados testes para:
 Resultado dos testes de agents:
 
 ```txt
-24 passed
+37 passed
 ```
+
+Observacao: esta documentacao descreve a entrega historica da V3.5. A contagem
+acima foi atualizada para refletir o estado atual do projeto depois da V5.
 
 ## 7. Limites da V3.5
 
@@ -247,6 +250,10 @@ A V3.5 ainda nao possui:
 - execucao real dos grafos a partir de `agent_runs`;
 - endpoint para criar agent run;
 - endpoint para consultar agent run.
+
+Observacao: `agent_runs`, `agent_steps`, endpoints/casos de uso de run e a
+execucao real dos grafos pelo worker foram resolvidos nas V4 e V5. O limite que
+continua atual para os agents e o checkpoint LangGraph.
 
 ## 8. Proximo Passo Recomendado
 

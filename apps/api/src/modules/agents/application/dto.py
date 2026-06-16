@@ -15,7 +15,11 @@ Quem traduz entre os DTOs internos de ``scraping``
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from apps.api.src.modules.agents.domain.enums import AgentDecision
+from apps.api.src.modules.agents.domain.enums import (
+    AgentDecision,
+    AgentRunStatus,
+    AgentType,
+)
 
 
 @dataclass(frozen=True)
@@ -97,3 +101,23 @@ class SearchPlanResult:
 
     queries: list[SearchQuerySuggestion]
     reason: str
+
+
+@dataclass(frozen=True)
+class CreateAgentRunInput:
+    """Entrada para criar uma execucao assincrona de agente."""
+
+    agent_type: AgentType
+    input_payload: dict[str, object]
+
+
+@dataclass(frozen=True)
+class AgentRunView:
+    """DTO de leitura de uma execucao de agente."""
+
+    id: UUID
+    agent_type: AgentType
+    status: AgentRunStatus
+    input_payload: dict[str, object]
+    output_payload: dict[str, object] | None
+    error_message: str | None

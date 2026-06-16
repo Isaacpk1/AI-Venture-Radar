@@ -70,8 +70,8 @@ For scraping work, read:
 
 For agents work, read:
 
-- docs/agentes/roadmap_agentes.md
-- latest docs/agentes/agents_v*.md relevant to the task
+- docs/agents/roadmap_agentes.md
+- latest docs/agents/agents_v*.md relevant to the task
 - docs/agents/modulo_agents_arquitetura.md when architecture is involved
 
 ## Rules

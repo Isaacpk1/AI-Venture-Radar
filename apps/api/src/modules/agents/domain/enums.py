@@ -29,3 +29,27 @@ class AgentDecision(StrEnum):
     # O agente concluiu que nao ha evidencias suficientes para decidir e que
     # novas fontes precisam ser coletadas antes de uma nova tentativa.
     NEEDS_MORE_SOURCES = "needs_more_sources"
+
+
+class AgentType(StrEnum):
+    """Tipos de agentes que podem ser executados pelo modulo agents."""
+
+    EVIDENCE_VALIDATION = "evidence_validation"
+    SEARCH_PLANNING = "search_planning"
+
+
+class AgentRunStatus(StrEnum):
+    """Status de uma execucao de agente."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class AgentStepStatus(StrEnum):
+    """Status de uma etapa registrada durante a execucao de um agente."""
+
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
