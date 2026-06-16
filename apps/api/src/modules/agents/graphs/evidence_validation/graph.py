@@ -1,8 +1,9 @@
-"""Grafo LangGraph do Evidence Validation Agent (V6: checkpointer + interrupt).
+"""Grafo LangGraph do Evidence Validation Agent (V7: interrupt real em node).
 
-A V6 adiciona suporte a checkpoint PostgreSQL e a retomada apos interrupcao.
-O contrato publico ``EvidenceValidationService`` continua o mesmo; quem chama
-ainda usa ``await service.investigate(input, thread_id=...)``.
+A V7 ativa ``interrupt()`` real no node ``_finalize`` quando a decisao e
+``NEEDS_MORE_SOURCES`` e o grafo tem checkpointer. LangGraph retorna
+``__interrupt__`` no estado final (nao lanca excecao); o grafo converte isso
+em ``AgentRunInterruptedError`` para a camada de aplicacao.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from langgraph.graph import END, StateGraph
+from langgraph.types import interrupt
 
 from apps.api.src.modules.agents.application.dto import (
     EvidenceValidationInput,
@@ -18,6 +20,7 @@ from apps.api.src.modules.agents.application.dto import (
 from apps.api.src.modules.agents.application.public.semantic_investigator import (
     EvidenceValidationService,
 )
+from apps.api.src.modules.agents.domain.enums import AgentDecision
 from apps.api.src.modules.agents.domain.exceptions import AgentRunInterruptedError
 from apps.api.src.modules.agents.graphs.evidence_validation.state import (
     EvidenceValidationState,
@@ -30,21 +33,27 @@ if TYPE_CHECKING:
 
 
 class EvidenceValidationGraph(EvidenceValidationService):
-    """Orquestra a validacao de evidencia usando LangGraph."""
+    """Orquestra a validacao de evidencia usando LangGraph.
+
+    Quando ``interrupt_on_uncertain=True`` e um checkpointer esta presente,
+    o node ``_finalize`` chama ``interrupt()`` ao receber ``NEEDS_MORE_SOURCES``.
+    ``ainvoke()`` retorna o estado com ``__interrupt__`` em vez de levantar
+    excecao. O metodo ``investigate()`` converte isso em ``AgentRunInterruptedError``.
+    """
 
     def __init__(
         self,
         *,
         evidence_judge: EvidenceValidationService,
         checkpointer: "PostgresCheckpointer | None" = None,
+        interrupt_on_uncertain: bool = False,
     ) -> None:
         self.evidence_judge = evidence_judge
         self.model = getattr(evidence_judge, "model", None)
         self._checkpointer = checkpointer
+        self._interrupt_on_uncertain = interrupt_on_uncertain
         self._workflow = self._build_workflow()
-        # Grafo pre-compilado sem checkpoint para chamadas sem thread_id.
         self._graph_no_cp = self._workflow.compile()
-        # Grafo com checkpoint (criado na primeira invocacao com thread_id).
         self._graph_with_cp: Any = None
 
     async def investigate(
@@ -53,21 +62,17 @@ class EvidenceValidationGraph(EvidenceValidationService):
         *,
         thread_id: str | None = None,
     ) -> EvidenceValidationResult:
-        """Executa o grafo e devolve apenas o resultado publico."""
+        """Executa o grafo e devolve apenas o resultado publico.
+
+        Se o grafo retornar ``__interrupt__``, converte em ``AgentRunInterruptedError``.
+        """
 
         graph, config = await self._resolve_graph_and_config(thread_id)
-        try:
-            final_state = await graph.ainvoke(
-                {"investigation_input": investigation_input},
-                config=config,
-            )
-        except Exception as exc:
-            if type(exc).__name__ == "GraphInterrupt":
-                interrupt_value = repr(exc.args[0]) if exc.args else "interrupt"
-                raise AgentRunInterruptedError(interrupt_value) from exc
-            raise
-
-        return final_state["result"]
+        final_state = await graph.ainvoke(
+            {"investigation_input": investigation_input},
+            config=config,
+        )
+        return self._extract_result(final_state)
 
     async def resume(
         self,
@@ -79,13 +84,16 @@ class EvidenceValidationGraph(EvidenceValidationService):
         from langgraph.types import Command
 
         graph, config = await self._resolve_graph_and_config(thread_id)
-        try:
-            final_state = await graph.ainvoke(Command(resume=resume_value), config=config)
-        except Exception as exc:
-            if type(exc).__name__ == "GraphInterrupt":
-                interrupt_value = repr(exc.args[0]) if exc.args else "interrupt"
-                raise AgentRunInterruptedError(interrupt_value) from exc
-            raise
+        final_state = await graph.ainvoke(Command(resume=resume_value), config=config)
+        return self._extract_result(final_state)
+
+    def _extract_result(self, final_state: dict) -> EvidenceValidationResult:
+        """Extrai resultado ou lanca AgentRunInterruptedError se o grafo pausou."""
+
+        if "__interrupt__" in final_state:
+            interrupts = final_state["__interrupt__"]
+            interrupt_value = repr(interrupts[0].value) if interrupts else "interrupt"
+            raise AgentRunInterruptedError(interrupt_value)
 
         return final_state["result"]
 
@@ -137,4 +145,30 @@ class EvidenceValidationGraph(EvidenceValidationService):
         self,
         state: EvidenceValidationState,
     ) -> EvidenceValidationState:
-        return {"result": state["llm_result"]}
+        """Normaliza a saida final.
+
+        Chama ``interrupt()`` quando a decisao e inconclusiva e o grafo tem
+        checkpointer. Apos retomada, ``interrupt()`` retorna a decisao humana.
+        """
+
+        result = state["llm_result"]
+
+        if (
+            self._interrupt_on_uncertain
+            and self._checkpointer is not None
+            and result.decision is AgentDecision.NEEDS_MORE_SOURCES
+        ):
+            human_decision = interrupt(
+                {
+                    "original_decision": result.decision.value,
+                    "reason": result.reason,
+                    "question": "Evidencia inconclusiva. Responda 'approved' para aceitar ou 'rejected' para rejeitar.",
+                }
+            )
+            accepted = str(human_decision).lower() in ("approved", "approve", "yes", "sim")
+            result = EvidenceValidationResult(
+                decision=AgentDecision.ACCEPTED if accepted else AgentDecision.REJECTED,
+                reason=f"Decisao humana: '{human_decision}'. Razao original: {result.reason}",
+            )
+
+        return {"result": result}

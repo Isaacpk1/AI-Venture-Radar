@@ -234,14 +234,14 @@ Testes: 130 (unit + integration)
 | V4 | Entregue | `agent_runs` e `agent_steps` persistidos no PostgreSQL |
 | V5 | Entregue | Worker executa grafo correto por `agent_type` com output real |
 | V6 | Entregue | Checkpoint LangGraph no PostgreSQL + `waiting_human_review` + `ResumeAgentJob` |
-| V7 | Proximo | Presentation layer para human-in-the-loop (rota resume + interrupt em node real) |
+| V7 | Entregue | Presentation layer (GET + POST /resume) + interrupt() real em node |
 | V8 | Futuro | Extraction Agent |
 | V9 | Futuro | Startup Classifier Agent |
 | V10 | Futuro | NVIDIA Knowledge Agent |
 | V11 | Futuro | Recommendation Agent |
 | V12 | Futuro | Briefing Agent |
 
-**Versao atual: V6**
+**Versao atual: V7**
 
 O que a V6 entregou:
 - `PostgresCheckpointer` em `infrastructure/checkpoints/` wraps `AsyncPostgresSaver` (lazy init)
@@ -338,8 +338,8 @@ checkpoint_migrations   versao das migrations internas do LangGraph
 | Modulo | Testes | Ultima verificacao |
 |---|---|---|
 | scraping | 130 | 2026-06-16 |
-| agents | 50 unit | 2026-06-16 |
-| **Total** | **180** | **2026-06-16** |
+| agents | 57 unit | 2026-06-16 |
+| **Total** | **188** | **2026-06-16** |
 
 Comando para verificar:
 ```bash
@@ -352,10 +352,10 @@ venv/Scripts/python.exe -m pytest apps/api/src/modules/ -q
 
 ### Implemented and working
 - **Scraping V8** — pipeline completa, worker operacional, 130 testes
-- **Agents V6** — checkpoint PostgreSQL, waiting_human_review, ResumeAgentJob, 50 unit testes
+- **Agents V7** — checkpoint PostgreSQL, human-in-the-loop completo (GET + POST /resume + interrupt() real), 57 unit testes
 
 ### Next step
-- **Agents V7** — Presentation layer: POST /agents/runs/{id}/resume + interrupt() em node real
+- **Ingestion V1** — limpar/chunkar scraping_results em documents e chunks
 
 ### Backlog (in order)
 1. Ingestion V1 — limpar/chunkar scraping_results
@@ -578,5 +578,6 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Agents module architecture | `docs/agents/modulo_agents_arquitetura.md` |
 | Agents roadmap | `docs/agents/roadmap_agentes.md` |
 | Agents V5 | `docs/agents/agents_v5_executar_grafos_pelo_agent_run.md` |
-| Agents V6 (current) | `docs/agents/agents_v6_checkpoint_postgres.md` |
+| Agents V6 | `docs/agents/agents_v6_checkpoint_postgres.md` |
+| Agents V7 (current) | `docs/agents/agents_v7_human_in_the_loop.md` |
 | Estado atual do projeto | `docs/estado_atual_do_projeto.md` |

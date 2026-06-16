@@ -96,6 +96,7 @@ class AgentsFactory:
         return EvidenceValidationGraph(
             evidence_judge=evidence_judge,
             checkpointer=checkpointer,
+            interrupt_on_uncertain=checkpointer is not None,
         )
 
     @staticmethod

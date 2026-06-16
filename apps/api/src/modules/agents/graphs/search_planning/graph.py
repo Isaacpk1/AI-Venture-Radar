@@ -1,7 +1,7 @@
-"""Grafo LangGraph do Search Planner Agent (V6: checkpointer + interrupt).
+"""Grafo LangGraph do Search Planner Agent (V7: padrao __interrupt__ consistente).
 
-A V6 adiciona suporte a checkpoint PostgreSQL e a retomada apos interrupcao.
-O contrato publico ``SearchPlanningService`` continua o mesmo.
+Usa o mesmo padrao de _extract_result do EvidenceValidationGraph:
+``ainvoke()`` retorna ``__interrupt__`` no estado em vez de levantar excecao.
 """
 
 from __future__ import annotations
@@ -53,15 +53,8 @@ class SearchPlanningGraph(SearchPlanningService):
         """Executa o grafo e devolve o plano publico."""
 
         graph, config = await self._resolve_graph_and_config(thread_id)
-        try:
-            final_state = await graph.ainvoke({"plan_input": plan_input}, config=config)
-        except Exception as exc:
-            if type(exc).__name__ == "GraphInterrupt":
-                interrupt_value = repr(exc.args[0]) if exc.args else "interrupt"
-                raise AgentRunInterruptedError(interrupt_value) from exc
-            raise
-
-        return final_state["result"]
+        final_state = await graph.ainvoke({"plan_input": plan_input}, config=config)
+        return self._extract_result(final_state)
 
     async def resume(
         self,
@@ -73,14 +66,14 @@ class SearchPlanningGraph(SearchPlanningService):
         from langgraph.types import Command
 
         graph, config = await self._resolve_graph_and_config(thread_id)
-        try:
-            final_state = await graph.ainvoke(Command(resume=resume_value), config=config)
-        except Exception as exc:
-            if type(exc).__name__ == "GraphInterrupt":
-                interrupt_value = repr(exc.args[0]) if exc.args else "interrupt"
-                raise AgentRunInterruptedError(interrupt_value) from exc
-            raise
+        final_state = await graph.ainvoke(Command(resume=resume_value), config=config)
+        return self._extract_result(final_state)
 
+    def _extract_result(self, final_state: dict) -> SearchPlanResult:
+        if "__interrupt__" in final_state:
+            interrupts = final_state["__interrupt__"]
+            interrupt_value = repr(interrupts[0].value) if interrupts else "interrupt"
+            raise AgentRunInterruptedError(interrupt_value)
         return final_state["result"]
 
     async def _resolve_graph_and_config(
