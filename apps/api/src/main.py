@@ -12,6 +12,9 @@ from apps.api.src.shared.queue.dramatiq_broker import (
 from apps.api.src.modules.agents.presentation.routes import (
     router as agents_router,
 )
+from apps.api.src.modules.ingestion.presentation.routes import (
+    router as ingestion_router,
+)
 from apps.api.src.modules.scraping.presentation.routes import (
     router as scraping_router,
 )
@@ -59,3 +62,4 @@ async def health_check() -> JSONResponse:
 # aplicacao global, sem conhecer regras internas de scraping.
 app.include_router(scraping_router)
 app.include_router(agents_router)
+app.include_router(ingestion_router)

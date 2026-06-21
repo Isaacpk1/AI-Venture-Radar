@@ -273,9 +273,24 @@ Testes: 50 unit
 
 | Versao | Status | O que foi entregue |
 |---|---|---|
-| V1 | Pendente | Limpeza, normalizacao, chunking de scraping_results |
+| V1 | Entregue | TextCleaner, TextChunker, Document, Chunk, worker ingestion_worker |
 
-**Versao atual: nao iniciado**
+**Versao atual: V1**
+
+O que a V1 entregou:
+- `TextCleaner` — normaliza CRLF, remove chars de controle, colapsa linhas em branco
+- `TextChunker` — divide texto em chunks de 2000 chars com overlap de 200, respeitando paragrafos > sentencas > palavras
+- Entidades: `IngestionJob`, `Document`, `Chunk` com status transitions
+- Casos de uso: `CreateIngestionJob`, `ExecuteIngestionJob`, `GetIngestionJob`
+- `ScrapingResultReader` — le scraping_results via SQL textual (sem importar internals do modulo scraping)
+- Migration: `ingestion_jobs`, `documents`, `chunks`
+- Worker: `workers/ingestion_worker/` — consome fila `ingestion`
+- Presentation: `POST /ingestion/jobs` e `GET /ingestion/jobs/{id}`
+- Contrato publico: `IngestedDocumentReader` em `application/public/`
+
+Tabelas: `ingestion_jobs`, `documents`, `chunks`
+Worker: `workers/ingestion_worker/` — consome fila `ingestion`
+Testes: 33 unit
 
 ---
 
@@ -314,8 +329,9 @@ Testes: 50 unit
 | `d8e4a9c1b672` | 2026-06-15 | Adiciona campos de auditoria de agente em attempts |
 | `7c9f2a1b4d6e` | 2026-06-15 | Cria tabelas de agents (agent_runs, agent_steps) |
 | `9e1f3b5c8a2d` | 2026-06-16 | Cria tabelas de checkpoint LangGraph (V6) |
+| `3f8d1e2a9c7b` | 2026-06-16 | Cria tabelas de ingestion (ingestion_jobs, documents, chunks) |
 
-**Head atual: `9e1f3b5c8a2d`**
+**Head atual: `3f8d1e2a9c7b`**
 
 ### Tabelas existentes
 
@@ -329,6 +345,9 @@ checkpoints             estado LangGraph por thread_id (= agent_run.id)
 checkpoint_blobs        conteudo de cada canal por versao
 checkpoint_writes       escritas pendentes ate proximo checkpoint
 checkpoint_migrations   versao das migrations internas do LangGraph
+ingestion_jobs          status do job de ingestion (1-para-1 com scraping_result)
+documents               documento limpo e normalizado (clean_text + word_count + chunk_count)
+chunks                  fragmentos de texto prontos para embedding
 ```
 
 ---
@@ -339,7 +358,8 @@ checkpoint_migrations   versao das migrations internas do LangGraph
 |---|---|---|
 | scraping | 130 | 2026-06-16 |
 | agents | 57 unit | 2026-06-16 |
-| **Total** | **188** | **2026-06-16** |
+| ingestion | 33 unit | 2026-06-16 |
+| **Total** | **221** | **2026-06-16** |
 
 Comando para verificar:
 ```bash
@@ -353,13 +373,13 @@ venv/Scripts/python.exe -m pytest apps/api/src/modules/ -q
 ### Implemented and working
 - **Scraping V8** — pipeline completa, worker operacional, 130 testes
 - **Agents V7** — checkpoint PostgreSQL, human-in-the-loop completo (GET + POST /resume + interrupt() real), 57 unit testes
+- **Ingestion V1** — TextCleaner, TextChunker, Document, Chunk, worker ingestion_worker, 33 testes
 
 ### Next step
-- **Ingestion V1** — limpar/chunkar scraping_results em documents e chunks
+- **Embeddings V1** — vetorizar chunks no Qdrant (embedding via Gemini ou sentence-transformers)
 
 ### Backlog (in order)
-1. Ingestion V1 — limpar/chunkar scraping_results
-2. Startups V1 — modelo relacional de startups
+1. Startups V1 — modelo relacional de startups
 3. Embeddings + Qdrant — vetorizacao de chunks
 4. RAG V1 — busca hibrida + reranking + resposta com citacoes
 5. NVIDIA knowledge ingestion — base de conhecimento NVIDIA no Qdrant
