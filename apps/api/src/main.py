@@ -18,8 +18,14 @@ from apps.api.src.modules.embeddings.presentation.routes import (
 from apps.api.src.modules.ingestion.presentation.routes import (
     router as ingestion_router,
 )
+from apps.api.src.modules.rag.presentation.routes import (
+    router as rag_router,
+)
 from apps.api.src.modules.scraping.presentation.routes import (
     router as scraping_router,
+)
+from apps.api.src.modules.startups.presentation.routes import (
+    router as startups_router,
 )
 
 
@@ -67,3 +73,5 @@ app.include_router(scraping_router)
 app.include_router(agents_router)
 app.include_router(ingestion_router)
 app.include_router(embeddings_router)
+app.include_router(startups_router)
+app.include_router(rag_router)

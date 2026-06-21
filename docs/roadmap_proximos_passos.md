@@ -10,8 +10,8 @@ cada modulo tem suas proprias versoes
 o projeto nao deve virar uma sequencia unica de V1, V2, V3 gigante
 ```
 
-Scraping pode estar na V8 enquanto agents esta na V5, ingestion na V1 e RAG
-ainda nem comecou. Isso e normal e deixa a arquitetura mais facil de entender.
+Scraping pode estar na V8 enquanto agents esta na V7, ingestion na V1 e RAG
+na V2. Isso e normal e deixa a arquitetura mais facil de entender.
 
 ---
 
@@ -20,11 +20,11 @@ ainda nem comecou. Isso e normal e deixa a arquitetura mais facil de entender.
 | Modulo | Estado | Versao atual |
 |---|---|---|
 | scraping | maduro para a primeira fase | Scraping V8 |
-| agents | base multiagente funcional | Agents V5 |
-| ingestion | ainda nao implementado | futuro Ingestion V1 |
-| startups | ainda nao implementado | futuro Startups V1 |
-| embeddings | ainda nao implementado | futuro Embeddings V1 |
-| rag | ainda nao implementado | futuro RAG V1 |
+| agents | base multiagente funcional | Agents V7 |
+| ingestion | implementado | Ingestion V1 + worker |
+| embeddings | implementado | Embeddings V5 |
+| startups | implementado | Startups V1 |
+| rag | implementado | RAG V2 |
 | nvidia_knowledge | ainda nao implementado | futuro NVIDIA Knowledge V1 |
 | recommendations | ainda nao implementado | futuro Recommendations V1 |
 | briefing | ainda nao implementado | futuro Briefing V1 |
@@ -33,7 +33,7 @@ ainda nem comecou. Isso e normal e deixa a arquitetura mais facil de entender.
 
 ## 2. Ordem Macro Recomendada
 
-A ordem macro de construcao e:
+A ordem macro de construcao planejada era:
 
 ```txt
 1. consolidar agents quando necessario
@@ -59,47 +59,59 @@ recommendations -> match startup/tecnologia NVIDIA
 briefing -> relatorio executivo
 ```
 
+Estado atual dessa ordem:
+
+```txt
+1. scraping/agents       -> implementado
+2. ingestion             -> implementado
+3. startups              -> implementado em V1 basico
+4. embeddings + Qdrant   -> implementado ate V5 operacional
+5. RAG                   -> V2 implementado
+6. NVIDIA Knowledge      -> proximo bloco
+```
+
 ---
 
 ## 3. Proximos Passos Imediatos
 
-Existem dois caminhos bons agora.
+Com ingestion, embeddings e startups basicos ja implementados, existem dois
+caminhos bons agora.
 
 ### Caminho tecnico
 
 ```txt
-Agents V6 - Checkpoint LangGraph no PostgreSQL
+Hardening de producao
 ```
 
-Esse caminho melhora a robustez dos agentes:
+Esse caminho melhora a robustez operacional:
 
-- retomar grafo apos falha;
-- auditar estado entre nodes;
-- preparar human-in-the-loop;
-- reduzir perda de trabalho em execucoes longas.
+- rodar testes de integracao com Postgres/Redis/Qdrant;
+- aplicar migrations em ambiente local limpo;
+- validar workers reais com Redis;
+- adicionar observabilidade basica;
+- revisar autenticacao/autorizacao das rotas.
 
 ### Caminho de produto
 
 ```txt
-Ingestion V1 - transformar scraping_results em documents/chunks
+NVIDIA Knowledge V1 - catalogo inicial
 ```
 
-Esse caminho desbloqueia embeddings, Qdrant e RAG:
+Esse caminho usa o que ja foi construido:
 
-- limpar conteudo aprovado pelo scraping;
-- criar documents rastreaveis;
-- criar chunks prontos para embedding;
-- preparar o pipeline para busca semantica.
+- RAG V2 ja busca evidencias e gera resposta citada;
+- startups ja tem modelo relacional basico;
+- recommendations precisa de catalogo NVIDIA para gerar justificativa tecnica.
 
 Recomendacao atual:
 
 ```txt
-fazer Ingestion V1 agora
-manter Agents V6 como proxima melhoria de infraestrutura agentica
+fazer NVIDIA Knowledge V1 agora
+manter hardening de integracao como trilha tecnica paralela
 ```
 
-Motivo: o scraping e os agents ja conseguem produzir evidencias. Agora o projeto
-precisa transformar essas evidencias em base consultavel.
+Motivo: o projeto ja consegue responder com evidencias. Agora falta uma base
+NVIDIA citavel para alimentar recomendacoes e briefings.
 
 ---
 
@@ -159,10 +171,11 @@ Exemplo correto:
 
 ```txt
 Scraping V8
-Agents V5
+Agents V7
 Ingestion V1
-Embeddings V1
-RAG V1
+Embeddings V5
+Startups V1
+RAG V2
 ```
 
 Isso quer dizer que cada modulo evolui no seu proprio ritmo.
@@ -192,10 +205,11 @@ fluxo:
 5. gerar embeddings
 6. buscar evidencias semanticamente
 7. consolidar perfil da startup
-8. consultar conhecimento NVIDIA
-9. recomendar tecnologias NVIDIA
-10. gerar briefing executivo com fontes
+8. responder perguntas com citacoes
+9. consultar conhecimento NVIDIA
+10. recomendar tecnologias NVIDIA
+11. gerar briefing executivo com fontes
 ```
 
-Hoje ja temos os passos 1, 2 e 3 em boa forma. O proximo bloco e construir os
-passos 4, 5 e 6.
+Hoje ja temos os passos 1, 2, 3, 4, 5, 6, 8 e parte do 7 em boa forma. O
+proximo bloco e criar a base NVIDIA Knowledge.

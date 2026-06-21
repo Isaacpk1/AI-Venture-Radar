@@ -29,6 +29,12 @@ startup + evidencias + conhecimento NVIDIA -> recomendacoes explicaveis
 
 ## Recommendations V1 - Regras Deterministicas
 
+Status:
+
+```txt
+pendente; depende de Startups V1 e deve se beneficiar de NVIDIA Knowledge V1
+```
+
 Entregaveis:
 
 - entidade `Recommendation`;

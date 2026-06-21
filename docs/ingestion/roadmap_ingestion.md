@@ -23,10 +23,10 @@ e cria uma base textual confiavel para busca semantica.
 
 | Versao | Status | Objetivo |
 |---|---|---|
-| Ingestion V1 | Proximo passo | Documents e chunks no PostgreSQL |
+| Ingestion V1 | Implementado | Documents e chunks no PostgreSQL |
 | Ingestion V2 | Futuro | Limpeza textual mais forte |
 | Ingestion V3 | Futuro | Deduplicacao e versionamento |
-| Ingestion V4 | Futuro | Worker assincrono |
+| Ingestion V4 | Implementado | Worker assincrono |
 | Ingestion V5 | Futuro | Reprocessamento e auditoria |
 
 ---
@@ -56,6 +56,8 @@ Criterio de pronto:
 ```txt
 um scraping_result aprovado gera um Document e varios Chunks rastreaveis
 ```
+
+Documento da entrega: `docs/ingestion/ingestion_v1_documents_e_chunks.md`.
 
 ---
 
@@ -110,6 +112,9 @@ Entregaveis:
 - mensagem somente com `ingestion_job_id`;
 - dispatcher no modulo `ingestion`;
 - retry/backoff para falhas recuperaveis.
+
+Entregue junto da V1 para manter simetria com os demais modulos baseados em
+jobs.
 
 ---
 

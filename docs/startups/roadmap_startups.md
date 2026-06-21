@@ -20,7 +20,7 @@ consolidar varias evidencias em uma representacao estruturada de startup
 
 | Versao | Status | Objetivo |
 |---|---|---|
-| Startups V1 | Futuro | Modelo relacional basico |
+| Startups V1 | Implementado | Modelo relacional basico |
 | Startups V2 | Futuro | Consolidacao de evidencias |
 | Startups V3 | Futuro | Classificacao de maturidade em IA |
 | Startups V4 | Futuro | Auditoria e confianca |
@@ -43,6 +43,18 @@ Criterio de pronto:
 ```txt
 o sistema consegue cadastrar uma startup e associar evidencias aprovadas
 ```
+
+Entregue:
+
+- entidades `Startup` e `StartupEvidence`;
+- migration `startups` e `startup_evidences`;
+- repositorios PostgreSQL;
+- casos de uso para criar, buscar e atualizar startup;
+- caso de uso para associar e listar evidencias;
+- rotas HTTP basicas em `/startups`;
+- testes unitarios e teste de persistencia PostgreSQL.
+
+Documento da entrega: `docs/startups/startups_v1_modelo_relacional.md`.
 
 ---
 

@@ -29,6 +29,12 @@ startup + evidencias + recomendacoes -> briefing executivo
 
 ## Briefing V1 - Template Executivo
 
+Status:
+
+```txt
+pendente; deve vir depois de Recommendations V1
+```
+
 Entregaveis:
 
 - estrutura padrao do relatorio;

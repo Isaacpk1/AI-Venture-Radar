@@ -1,5 +1,50 @@
 # Arquitetura Global do Projeto — Monolito Modular Evolutivo + Workers Separados
 
+> Atualizacao em 21/06/2026: este documento descreve a arquitetura alvo e
+> alguns exemplos historicos. O estado real atual ja inclui `scraping`,
+> `agents`, `ingestion`, `embeddings`, `startups` e `rag`. O proximo bloco de
+> produto e `NVIDIA Knowledge V1`. Para a fotografia operacional atual, leia
+> `docs/estado_atual_do_projeto.md`.
+
+## Estado atual da arquitetura
+
+Implementado:
+
+```txt
+FastAPI
+PostgreSQL
+Redis/Dramatiq
+Qdrant
+scraping + scraper_worker
+agents V7 + agent_worker
+ingestion + ingestion_worker
+embeddings + embedding_worker
+startups V1
+rag V2
+```
+
+Ainda pendente:
+
+```txt
+nvidia_knowledge
+recommendations
+briefing
+orquestracao end-to-end
+frontend
+auth/usuarios
+observabilidade de producao
+```
+
+Fluxo RAG implementado:
+
+```txt
+POST /rag/answer
+  -> buscar evidencias com RAG V1
+  -> montar contexto
+  -> chamar LLM
+  -> retornar resposta com citacoes estruturadas
+```
+
 ## 1. Objetivo deste documento
 
 Este documento descreve apenas a arquitetura global do sistema.

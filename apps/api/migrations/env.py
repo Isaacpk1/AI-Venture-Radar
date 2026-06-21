@@ -49,6 +49,10 @@ from apps.api.src.modules.embeddings.infrastructure.database.models import (  # 
     embedding_job_chunk_model,
     embedding_job_model,
 )
+from apps.api.src.modules.startups.infrastructure.database.models import (  # noqa: F401
+    startup_evidence_model,
+    startup_model,
+)
 
 # Objeto de configuração do Alembic, vindo do alembic.ini.
 config = context.config

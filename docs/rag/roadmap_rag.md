@@ -23,8 +23,8 @@ responder perguntas sobre startups com base em evidencias citaveis
 
 | Versao | Status | Objetivo |
 |---|---|---|
-| RAG V1 | Futuro | Busca semantica simples |
-| RAG V2 | Futuro | Resposta com citacoes |
+| RAG V1 | Implementado | Busca semantica simples |
+| RAG V2 | Implementado | Resposta com citacoes |
 | RAG V3 | Futuro | Busca hibrida |
 | RAG V4 | Futuro | Reranking |
 | RAG V5 | Futuro | Avaliacao de qualidade |
@@ -33,12 +33,20 @@ responder perguntas sobre startups com base em evidencias citaveis
 
 ## RAG V1 - Busca Semantica Simples
 
+Status:
+
+```txt
+implementado
+```
+
 Entregaveis:
 
 - modulo `apps/api/src/modules/rag`;
 - contrato publico `Retriever`;
 - busca por similaridade no Qdrant;
 - retorno de chunks com score e fonte;
+- recuperacao do texto completo/metadados no PostgreSQL;
+- rota `POST /rag/search`;
 - testes com repositorio fake.
 
 Criterio de pronto:
@@ -47,9 +55,26 @@ Criterio de pronto:
 uma pergunta retorna chunks relevantes com referencia ao document/chunk original
 ```
 
+Fora do escopo da V1:
+
+```txt
+resposta gerada por LLM
+citacoes em texto final
+busca hibrida
+reranking
+```
+
+Documento da entrega: `docs/rag/rag_v1_busca_semantica.md`.
+
 ---
 
 ## RAG V2 - Resposta com Citacoes
+
+Status:
+
+```txt
+implementado
+```
 
 Entregaveis:
 
@@ -57,6 +82,11 @@ Entregaveis:
 - prompt de resposta fundamentada;
 - saida estruturada com resposta e citacoes;
 - validacao para impedir resposta sem fonte.
+- rota `POST /rag/answer`;
+- adapter Gemini via LangChain em `rag/infrastructure/llm`;
+- fallback claro com 503 quando `GEMINI_API_KEY` nao esta configurada.
+
+Documento da entrega: `docs/rag/rag_v2_resposta_com_citacoes.md`.
 
 ---
 

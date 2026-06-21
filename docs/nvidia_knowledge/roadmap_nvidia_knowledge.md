@@ -30,6 +30,13 @@ metadados especificos para conhecimento tecnico NVIDIA.
 
 ## NVIDIA Knowledge V1 - Catalogo Inicial
 
+Status:
+
+```txt
+pendente; deve vir depois de RAG V1/V2 ou em paralelo se o catalogo for
+necessario para Recommendations V1
+```
+
 Entregaveis:
 
 - entidade `NvidiaTechnology`;

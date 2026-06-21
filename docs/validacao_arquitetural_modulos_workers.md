@@ -1,312 +1,186 @@
 # Validacao Arquitetural - Modulos e Workers
 
-Este documento valida se o estado atual do sistema esta de acordo com a regra arquitetural principal:
+Este documento valida se o estado atual do sistema esta de acordo com a regra
+arquitetural principal:
 
 ```txt
 modulos sabem como fazer
-workers executam o trabalho pesado
+workers executam trabalho pesado
+filas carregam apenas identificadores
+estado fica em PostgreSQL/Qdrant
 ```
 
-Validacao atualizada em 16/06/2026.
+Validacao atualizada em 21/06/2026.
+
+---
 
 ## 1. Regra Arquitetural
 
-A arquitetura desejada nos documentos principais e:
+O padrao esperado e:
 
 ```txt
 API
 -> cria ou consulta jobs
--> publica mensagem pequena na fila
+-> publica mensagem pequena na fila quando a operacao e longa
 -> worker consome a mensagem
 -> worker chama o modulo responsavel
--> modulo executa a regra, persistencia e integracoes
+-> modulo executa regra, persistencia e integracoes
 ```
 
-O worker nao deve conter regra de negocio.
+O worker nao deve conter regra de negocio. Ele deve receber identificadores,
+converter tipos serializaveis e chamar factories/casos de uso.
 
-O worker deve:
+---
 
-- receber mensagem da fila;
-- converter dados serializaveis;
-- chamar factory/caso de uso do modulo correto.
+## 2. Modulos Implementados
 
-O modulo deve:
-
-- conhecer suas regras;
-- conhecer seus casos de uso;
-- conhecer seus contratos;
-- conhecer suas implementacoes de infraestrutura;
-- persistir estado quando necessario.
-
-## 2. Estado Atual dos Modulos
-
-Hoje existem dois modulos principais implementados:
+Hoje existem seis modulos implementados:
 
 ```txt
 apps/api/src/modules/scraping
 apps/api/src/modules/agents
+apps/api/src/modules/ingestion
+apps/api/src/modules/embeddings
+apps/api/src/modules/startups
+apps/api/src/modules/rag
 ```
 
 ### Scraping
 
-Status:
+Status: de acordo.
 
-```txt
-de acordo
-```
-
-O modulo `scraping` possui:
-
-- `domain`;
-- `application`;
-- `infrastructure`;
-- `presentation`;
-- `factories`;
-- testes unitarios e integrados.
-
-O trabalho pesado de scraping e executado pelo worker:
-
-```txt
-workers/scraper_worker
-```
-
-O worker chama:
+Possui domain, application, infrastructure, presentation, factories e testes. O
+trabalho pesado e executado por `workers/scraper_worker`, que chama:
 
 ```txt
 ScrapingFactory.create_execute_scraping_job()
 ```
 
-Isso esta correto porque o worker nao implementa scraping diretamente.
-
 ### Agents
 
-Status:
+Status: de acordo.
+
+Implementado ate Agents V7:
 
 ```txt
-de acordo
+agent_runs / agent_steps
+worker por run_id
+EvidenceValidationGraph
+SearchPlanningGraph
+checkpoint PostgreSQL para LangGraph
+human-in-the-loop via GET/POST /agents/runs
 ```
 
-O modulo `agents` possui:
-
-- contratos publicos;
-- DTOs;
-- grafo de validacao de evidencia;
-- grafo de planejamento de busca;
-- integracao Gemini via LangChain;
-- dispatcher de jobs de agentes;
-- caso de uso para execucao real pelo worker;
-- persistencia de `agent_runs` e `agent_steps`.
-
-O worker de agentes existe:
-
-```txt
-workers/agent_worker
-```
-
-Ele consome a fila:
-
-```txt
-agents
-```
-
-E chama:
+O worker `workers/agent_worker` chama:
 
 ```txt
 AgentsFactory.create_execute_agent_job()
 ```
 
-Isso esta correto: o worker nao implementa grafo, prompt ou regra de negocio.
-Ele apenas chama o caso de uso do modulo `agents`, que busca o `AgentRun`
-persistido e executa o grafo correto com base em `agent_type`.
+### Ingestion
 
-## 3. Estado Atual dos Workers
+Status: de acordo.
 
-Existem dois workers:
-
-```txt
-workers/scraper_worker
-workers/agent_worker
-```
-
-### scraper_worker
-
-Status:
+Transforma `scraping_results` aprovados em `documents` e `chunks`. O worker
+`workers/ingestion_worker` consome `job_id` da fila `ingestion` e chama:
 
 ```txt
-de acordo
+IngestionFactory.create_execute_ingestion_job()
 ```
 
-Responsabilidade atual:
+### Embeddings
+
+Status: de acordo.
+
+Gera embeddings para chunks da ingestion, persiste vetores no Qdrant e registra
+jobs/chunks no PostgreSQL. O worker `workers/embedding_worker` consome `job_id`
+da fila `embeddings` e chama:
 
 ```txt
-receber job_id
-chamar caso de uso do modulo scraping
+EmbeddingsFactory.create_execute_embedding_job()
 ```
 
-Fila:
+### Startups
+
+Status: de acordo.
+
+Operacao relacional sincrona. Nao precisa de worker em V1. Expõe CRUD basico de
+startup e associacao/listagem de evidencias aprovadas.
+
+### RAG
+
+Status: de acordo.
+
+Operacao sincrona em V2. Usa contratos publicos dos modulos `embeddings` e
+`ingestion` para buscar evidencias semanticamente, e adapter Gemini interno ao
+modulo `rag` para gerar resposta citada:
 
 ```txt
-scraping
+GenerateChunkEmbedding
+VectorRepository.search()
+IngestedDocumentReader.list_chunks_by_document_id()
+RagAnswerGenerator
+POST /rag/search
+POST /rag/answer
 ```
 
-Actor:
+---
+
+## 3. Workers Existentes
 
 ```txt
-execute_scraping_job
+workers/scraper_worker      -> fila scraping   -> job_id
+workers/agent_worker        -> fila agents     -> run_id
+workers/ingestion_worker    -> fila ingestion  -> job_id
+workers/embedding_worker    -> fila embeddings -> job_id
 ```
 
-### agent_worker
+Todos seguem a regra: mensagem pequena, worker sem regra de negocio, modulo
+responsavel executando o caso de uso.
 
-Status:
+---
 
-```txt
-de acordo
-```
+## 4. Infraestrutura Compartilhada
 
-Responsabilidade atual:
-
-```txt
-receber run_id
-chamar caso de uso do modulo agents
-```
-
-Fila:
-
-```txt
-agents
-```
-
-Actor:
-
-```txt
-execute_agent_job
-```
-
-O worker nao contem prompt, grafo ou regra de negocio. Isso esta correto.
-Na V5, ele ja executa trabalho pesado de agentes de forma indireta:
-
-```txt
-recebe run_id
-chama AgentsFactory.create_execute_agent_job()
-caso de uso busca AgentRun no PostgreSQL
-caso de uso reconstroi DTO de entrada
-caso de uso executa EvidenceValidationGraph ou SearchPlanningGraph
-caso de uso salva output e AgentStep
-```
-
-## 4. Ajuste Feito Durante a Validacao
-
-Foi encontrado um problema arquitetural:
-
-```txt
-agents importava o broker Dramatiq de scraping.infrastructure
-```
-
-Isso funcionava, mas violava a ideia de fronteira entre modulos. O broker Redis/Dramatiq nao pertence ao scraping; ele e infraestrutura compartilhada.
-
-Foi ajustado para:
+O broker Dramatiq mora em:
 
 ```txt
 apps/api/src/shared/queue/dramatiq_broker.py
 ```
 
-Agora:
+Isso evita que um modulo importe infraestrutura interna de outro modulo.
 
-```txt
-scraping usa shared.queue.dramatiq_broker
-agents usa shared.queue.dramatiq_broker
-scraper_worker usa shared.queue.dramatiq_broker
-agent_worker usa shared.queue.dramatiq_broker
-```
-
-O arquivo antigo:
-
-```txt
-apps/api/src/modules/scraping/infrastructure/queue/dramatiq_broker.py
-```
-
-foi mantido apenas como reexport de compatibilidade.
+---
 
 ## 5. Validacao por Testes
 
-Comando executado:
+Comando executado recentemente:
 
 ```txt
-.\venv\Scripts\python.exe -m pytest apps\api\src\modules -q
+.\venv\Scripts\python.exe -m pytest apps\api\src\modules\startups\tests\unit apps\api\src\modules\embeddings\tests\unit apps\api\src\modules\ingestion\tests\unit apps\api\src\modules\agents\tests\unit apps\api\src\modules\scraping\tests\unit
 ```
 
 Resultado:
 
 ```txt
-167 passed
+292 passed
 ```
 
-Existe apenas um warning interno do LangGraph sobre configuracao futura de serializer/cache. Ele nao quebra o sistema.
+Testes de integracao existem, mas dependem de Postgres/Redis/Qdrant locais com
+migrations aplicadas.
 
-## 6. O que Esta De Acordo
+---
 
-Esta de acordo:
+## 6. Pontos Ainda Pendentes
 
-- workers ficam fora de `apps/api/src/modules`;
-- workers consomem filas separadas;
-- `scraper_worker` consome `scraping`;
-- `agent_worker` consome `agents`;
-- workers chamam factories/casos de uso;
-- workers nao implementam regra de negocio;
-- scraping possui persistencia PostgreSQL real;
-- scraping publica jobs pequenos na fila;
-- agents publica somente `run_id` na fila;
-- agents possui contratos publicos e grafos internos;
-- agents possui dispatcher para jobs;
-- agents possui persistencia de `agent_runs` e `agent_steps`;
-- broker Dramatiq agora esta em `shared`;
-- testes passam.
-
-## 7. Estado dos Agents na V5
-
-A fila de agentes transporta somente:
+Arquiteturalmente, o sistema esta coerente. O que ainda falta e produto:
 
 ```txt
-run_id
+NVIDIA Knowledge V1
+Recommendations V1
+Briefing V1
+Orchestrator / analysis job end-to-end
 ```
 
-Isso esta mais alinhado com o monolito modular, porque `agent_type`, entrada e saida devem ficar persistidos em `agent_runs`.
-
-Isso esta correto para a V5, porque o estado completo da execucao fica em
-`agent_runs` e `agent_steps`, nao dentro da mensagem da fila.
-
-O `agent_worker` ja executa grafos reais por `agent_type`:
-
-```txt
-EVIDENCE_VALIDATION -> EvidenceValidationGraph
-SEARCH_PLANNING     -> SearchPlanningGraph
-```
-
-## 8. Proximo Ajuste Necessario
-
-Proximo passo recomendado:
-
-```txt
-Agents V6 - Checkpoint LangGraph no PostgreSQL
-```
-
-Entregaveis:
-
-- salvar checkpoints do LangGraph no PostgreSQL;
-- permitir retomada de grafos apos falha;
-- preparar human-in-the-loop;
-- evoluir auditoria de estado entre nodes.
-
-## 9. Conclusao
-
-O sistema esta coerente com a arquitetura:
-
-```txt
-scraping ja esta maduro com worker e persistencia
-agents ja tem agent_runs persistidos e worker executando grafos reais por agent_type
-```
-
-Portanto, a arquitetura esta no caminho certo. O proximo passo nao deve ser
-criar mais agentes ainda sem necessidade. O mais correto e consolidar
-checkpoint/retomada dos grafos ou iniciar o modulo de ingestion, dependendo da
-prioridade do produto.
+O proximo passo recomendado e `NVIDIA Knowledge V1`, porque RAG V2 ja responde
+com citacoes e recommendations precisa de uma base NVIDIA citavel.

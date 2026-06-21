@@ -117,10 +117,10 @@ provider.
 ## Proximo passo recomendado
 
 ```txt
-Startups V1 - modelo relacional de startups e evidencias
+RAG V1 - busca semantica sobre chunks vetorizados
 ```
 
-Motivo: scraping, ingestion e embeddings ja formam a primeira linha
-`URL -> evidencia validada -> documento/chunks -> vetores`. Agora o sistema
-precisa consolidar essas evidencias em entidades de startup antes de RAG,
-recommendations e briefing.
+Motivo: scraping, ingestion, embeddings e startups basico ja formam a primeira
+linha `URL -> evidencia validada -> documento/chunks -> vetores -> startup`.
+Agora o sistema precisa recuperar esses chunks semanticamente e retornar
+evidencias citaveis.

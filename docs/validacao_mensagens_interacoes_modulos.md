@@ -1,230 +1,164 @@
 # Validacao de Mensagens e Interacoes entre Modulos
 
-Este documento valida como as mensagens e interacoes entre modulos estao funcionando no monolito modular.
+Este documento valida como mensagens e interacoes entre modulos funcionam no
+monolito modular.
 
-Validacao atualizada em 16/06/2026.
+Validacao atualizada em 21/06/2026.
+
+---
 
 ## 1. Regra Principal
 
-No monolito modular, os modulos podem conversar, mas nao devem atravessar a fronteira interna uns dos outros.
-
-Regra:
-
 ```txt
 modulo A chama contrato publico do modulo B
-modulo A nao importa implementation interna do modulo B
-```
-
-Para workers e filas:
-
-```txt
+modulo A nao importa implementacao interna do modulo B
 fila transporta identificadores
 worker recebe identificador
-worker chama caso de uso do modulo
+worker chama caso de uso/factory do modulo
 modulo busca dados completos no banco
 ```
 
-## 2. Tipos de Interacao
+---
 
-Hoje existem tres tipos principais de interacao.
+## 2. Interacoes Diretas por Contrato Publico
 
-### 2.1 Chamada direta por contrato publico
+### scraping -> agents
 
-Exemplo:
-
-```txt
-scraping -> agents
-```
-
-Arquivo:
-
-```txt
-apps/api/src/modules/scraping/infrastructure/agent_adapters/agents_semantic_investigator.py
-```
-
-O scraping nao chama grafo, prompt ou Gemini diretamente. Ele chama:
+O scraping usa o contrato publico:
 
 ```txt
 agents/application/public/semantic_investigator.py
 ```
 
-Isso esta correto.
-
-### 2.2 Mensagem por fila
-
-Exemplo:
+Arquivo adaptador:
 
 ```txt
-API/modulo -> Redis/Dramatiq -> worker
+scraping/infrastructure/agent_adapters/agents_semantic_investigator.py
 ```
 
-O padrao correto e enviar mensagem pequena.
+O scraping nao conhece grafos, LangGraph, Gemini ou persistencia interna dos
+agents.
 
-Scraping envia:
+### embeddings -> ingestion
+
+Embeddings le chunks da ingestion por contrato publico:
 
 ```txt
-job_id
+ingestion/application/public/ingested_reader.py
 ```
 
-Agents envia:
+Adapter:
 
 ```txt
-run_id
+embeddings/infrastructure/ingestion_adapters/ingestion_chunk_reader.py
 ```
 
-Isso esta correto.
+Isso permite que o worker de embeddings leia chunks sem importar models ou
+repositorios internos de ingestion.
 
-### 2.3 Infraestrutura compartilhada
+### rag -> embeddings
 
-O broker Dramatiq agora mora em:
+RAG usa os contratos publicos do modulo embeddings:
+
+```txt
+GenerateChunkEmbedding
+VectorRepository.search()
+```
+
+### rag -> ingestion
+
+RAG usa o contrato publico da ingestion para recuperar texto/fonte dos chunks:
+
+```txt
+IngestedDocumentReader.list_chunks_by_document_id()
+```
+
+---
+
+## 3. Mensagens por Fila
+
+| Fila | Produtor | Worker | Mensagem |
+|---|---|---|---|
+| scraping | Scraping | `scraper_worker` | `job_id` |
+| agents | Agents | `agent_worker` | `run_id` |
+| ingestion | Ingestion | `ingestion_worker` | `job_id` |
+| embeddings | Embeddings | `embedding_worker` | `job_id` |
+
+O estado real fica nas tabelas de cada modulo, nao na fila.
+
+---
+
+## 4. Infraestrutura Compartilhada
+
+Broker:
 
 ```txt
 apps/api/src/shared/queue/dramatiq_broker.py
 ```
 
-Isso esta correto porque o broker nao pertence ao scraping nem aos agents. Ele e uma infraestrutura compartilhada.
-
-## 3. Validacao do Scraping
-
-Mensagem enviada para fila:
-
-```txt
-job_id
-```
-
-Fila:
+Usado por:
 
 ```txt
 scraping
-```
-
-Worker:
-
-```txt
-workers/scraper_worker
-```
-
-Actor:
-
-```txt
-execute_scraping_job(job_id)
-```
-
-O worker chama:
-
-```txt
-ScrapingFactory.create_execute_scraping_job()
-```
-
-Status:
-
-```txt
-correto
-```
-
-## 4. Validacao dos Agents
-
-Mensagem enviada para fila:
-
-```txt
-run_id
-```
-
-Fila:
-
-```txt
 agents
+ingestion
+embeddings
+workers/*
 ```
 
-Worker:
+---
+
+## 5. APIs Sincronas
+
+Startups V1 e sincronico porque opera em dados relacionais pequenos:
 
 ```txt
-workers/agent_worker
+POST   /startups
+GET    /startups/{startup_id}
+PATCH  /startups/{startup_id}
+POST   /startups/{startup_id}/evidences
+GET    /startups/{startup_id}/evidences
 ```
 
-Actor:
+Agents resume tambem e sincronico:
 
 ```txt
-execute_agent_job(run_id)
+POST /agents/runs/{run_id}/resume
 ```
 
-O worker chama:
+RAG V2 tambem e sincronico:
 
 ```txt
-AgentsFactory.create_execute_agent_job()
+POST /rag/search
+POST /rag/answer
 ```
 
-Status:
-
-```txt
-correto
-```
-
-Na V5, o worker ja executa o grafo real por `agent_type`. A mensagem continua
-pequena (`run_id`) e o modulo `agents` busca o restante no PostgreSQL.
-
-## 5. O que foi ajustado
-
-Antes, a mensagem de agents carregava:
-
-```txt
-run_id
-agent_name
-payload
-```
-
-Isso funcionava, mas nao era o melhor padrao para o monolito modular, porque `payload` pode crescer e virar dado de negocio trafegando pela fila.
-
-Agora a mensagem carrega somente:
-
-```txt
-run_id
-```
-
-Os detalhes agora ficam no banco:
-
-```txt
-agent_runs.agent_type
-agent_runs.input_payload
-agent_runs.status
-agent_runs.output_payload
-agent_runs.error_message
-```
+---
 
 ## 6. Validacao por Testes
 
-Comandos executados:
+Resultado unitario recente:
 
 ```txt
-.\venv\Scripts\python.exe -m pytest apps\api\src\modules\agents\tests -q
-.\venv\Scripts\python.exe -m pytest apps\api\src\modules -q
+292 passed
 ```
 
-Resultados:
-
-```txt
-37 passed
-167 passed
-```
+---
 
 ## 7. Conclusao
 
-O jeito atual das mensagens esta certo:
+As fronteiras atuais estao coerentes:
 
 ```txt
-scraping -> fila com job_id
-agents   -> fila com run_id
+workers carregam IDs
+modulos chamam contratos publicos
+broker e compartilhado
+estado operacional fica persistido
 ```
 
-O jeito atual das interacoes entre modulos tambem esta certo:
+Os proximos modulos devem consumir esses contratos, especialmente:
 
 ```txt
-scraping conhece contrato publico de agents
-scraping nao conhece grafo interno de agents
-workers chamam factories/casos de uso
-broker compartilhado fica em shared
+NVIDIA Knowledge V1 -> ingestion/embeddings/RAG quando houver fonte citavel
+Recommendations V1 -> startups + RAG + NVIDIA Knowledge
 ```
-
-O `agent_worker` ja executa o grafo real a partir do `agent_type` persistido em
-`agent_runs`. O proximo passo natural em agents e adicionar checkpoint do
-LangGraph no PostgreSQL para permitir retomada de grafos e human-in-the-loop.

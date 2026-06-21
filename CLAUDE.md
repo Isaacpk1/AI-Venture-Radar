@@ -4,6 +4,57 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## Authoritative Current State (2026-06-21)
+
+Use this section as the source of truth when older historical sections below
+disagree.
+
+Implemented:
+
+```txt
+Scraping V8
+Agents V7
+Ingestion V1 + ingestion_worker
+Embeddings V5 + embedding_worker
+Startups V1
+RAG V2
+```
+
+Pending:
+
+```txt
+NVIDIA Knowledge V1
+Recommendations V1
+Briefing V1
+Orchestration / analysis job end-to-end
+Frontend
+Auth
+Production observability
+```
+
+Recent unit validation:
+
+```txt
+292 passed
+```
+
+Next recommended implementation:
+
+```txt
+NVIDIA Knowledge V1 - initial NVIDIA technology catalog
+```
+
+Relevant docs:
+
+```txt
+docs/estado_atual_do_projeto.md
+docs/roadmap_proximos_passos.md
+docs/proximos_passos_mvp.md
+docs/rag/roadmap_rag.md
+```
+
+---
+
 ## Conversation style
 
 End every response to the user with: **bora bill**
@@ -441,14 +492,20 @@ venv/Scripts/python.exe -m pytest apps/api/src/modules/ -q
 - **Ingestion V1** — TextCleaner, TextChunker, Document, Chunk, worker ingestion_worker, 33 unit + 1 integracao (contrato publico `IngestedDocumentReader` agora implementado)
 - **Embeddings V4** — `EmbeddingService` (Gemini) + `VectorRepository` (Qdrant) + `EmbeddingJob`/`EmbeddingJobChunk` + worker em batch com retry/backoff, 56 unit + 2 integracao
 
-### Next step (decisao pendente, dois caminhos validos)
+### Historical next step note
+
+The block below was written before Startups V1 and Embeddings V5 were finished.
+For the current source of truth, use the "Authoritative Current State" section
+at the top of this file and `docs/proximos_passos_mvp.md`.
+
+### Previous next step (historical)
 - **Embeddings V5** — reembedding e metricas (custo, latencia, modelo usado)
 - **Startups V1** — modelo relacional de startups e evidencias, item 1 do backlog macro (`docs/roadmap_proximos_passos.md`)
 
 ### Backlog (in order)
 1. Startups V1 — modelo relacional de startups
 2. Embeddings V5 — reembedding e metricas
-3. RAG V1 — busca hibrida + reranking + resposta com citacoes
+3. RAG V2 — busca semantica + resposta com citacoes
 4. NVIDIA knowledge ingestion — base de conhecimento NVIDIA no Qdrant
 5. Recommendations V1 — motor de recomendacao
 6. Briefing V1 — relatorio executivo final
@@ -662,6 +719,7 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Architectural validation | `docs/validacao_arquitetural_modulos_workers.md` |
 | Module message contracts | `docs/validacao_mensagens_interacoes_modulos.md` |
 | Roadmap | `docs/roadmap_proximos_passos.md` |
+| MVP next steps | `docs/proximos_passos_mvp.md` |
 | Scraping module | `docs/scraping/modulo_scraping_atualizado.md` |
 | Scraping latest version | `docs/scraping/scraper_v8_agente_investigacao.md` |
 | Agents module architecture | `docs/agents/modulo_agents_arquitetura.md` |
@@ -671,5 +729,7 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Agents V7 (current) | `docs/agents/agents_v7_human_in_the_loop.md` |
 | Embeddings V1 | `docs/embeddings/embeddings_v1_contratos_e_fake.md` |
 | Embeddings V2+V3 | `docs/embeddings/embeddings_v2_v3_provider_real_e_qdrant.md` |
-| Embeddings V4 (current) | `docs/embeddings/embeddings_v4_worker_em_lote.md` |
+| Embeddings V4 | `docs/embeddings/embeddings_v4_worker_em_lote.md` |
+| Embeddings V5 (current) | `docs/embeddings/embeddings_v5_metricas_reembedding.md` |
+| RAG roadmap | `docs/rag/roadmap_rag.md` |
 | Estado atual do projeto | `docs/estado_atual_do_projeto.md` |

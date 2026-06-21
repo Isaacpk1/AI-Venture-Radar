@@ -21,10 +21,10 @@ docs/validacao_arquitetural_modulos_workers.md
 | Agents V6 | Implementado | `docs/agents/agents_v6_checkpoint_postgres.md` |
 | Agents V7 | Implementado | `docs/agents/agents_v7_human_in_the_loop.md` |
 | Agents V8 | Futuro | Extraction Agent |
-| Agents V8 | Futuro | Startup Classifier Agent |
-| Agents V9 | Futuro | NVIDIA Knowledge Agent |
-| Agents V10 | Futuro | Recommendation Agent |
-| Agents V11 | Futuro | Briefing Agent |
+| Agents V9 | Futuro | Startup Classifier Agent |
+| Agents V10 | Futuro | NVIDIA Knowledge Agent |
+| Agents V11 | Futuro | Recommendation Agent |
+| Agents V12 | Futuro | Briefing Agent |
 
 ## Agentes Planejados
 
@@ -63,6 +63,8 @@ Status:
 base criada na V3.5
 persistencia de agent_runs criada na V4
 execucao real dos grafos pelo worker implementada na V5
+checkpoint PostgreSQL implementado na V6
+human-in-the-loop via API implementado na V7
 ```
 
 ### Extraction Agent
@@ -95,6 +97,7 @@ O padrao correto e:
 agent -> contratos publicos -> services/use cases/tools -> resultado estruturado
 ```
 
-O proximo passo natural depois da V5 e adicionar checkpoint do LangGraph no
-PostgreSQL. Isso permite retomar grafos apos falha, auditar estado entre nodes e
-preparar fluxos com human-in-the-loop.
+O proximo passo de produto nao e criar outro agente imediatamente. Com `RAG V2`
+ja implementado, o mais importante agora e criar `NVIDIA Knowledge V1`, para que
+agentes e recomendacoes futuras tenham uma base tecnica citavel para chamar por
+contrato publico.

@@ -26,21 +26,22 @@ Comece por estes documentos:
 | Modulo | Estado | Documentacao |
 |---|---|---|
 | scraping | Scraping V8 | `docs/scraping/` |
-| agents | Agents V5 | `docs/agents/` |
+| agents | Agents V7 | `docs/agents/` |
+| ingestion | Ingestion V1 + worker | `docs/ingestion/` |
+| embeddings | Embeddings V5 | `docs/embeddings/` |
+| startups | Startups V1 | `docs/startups/` |
+| rag | RAG V2 | `docs/rag/` |
 
 ---
 
-## Modulos Planejados
+## Modulos Ainda Pendentes
 
 | Modulo | Proxima versao | Roadmap |
 |---|---|---|
-| ingestion | Ingestion V1 | `docs/ingestion/roadmap_ingestion.md` |
-| startups | Startups V1 | `docs/startups/roadmap_startups.md` |
-| embeddings | Embeddings V1 | `docs/embeddings/roadmap_embeddings.md` |
-| rag | RAG V1 | `docs/rag/roadmap_rag.md` |
 | nvidia_knowledge | NVIDIA Knowledge V1 | `docs/nvidia_knowledge/roadmap_nvidia_knowledge.md` |
 | recommendations | Recommendations V1 | `docs/recommendations/roadmap_recommendations.md` |
 | briefing | Briefing V1 | `docs/briefing/roadmap_briefing.md` |
+| orchestration | Pipeline end-to-end | `docs/proximos_passos_mvp.md` |
 
 ---
 
@@ -50,10 +51,11 @@ Cada modulo evolui separadamente:
 
 ```txt
 Scraping V8
-Agents V5
+Agents V7
 Ingestion V1
-Embeddings V1
-RAG V1
+Embeddings V5
+Startups V1
+RAG V2
 ```
 
 Evite pensar em uma unica versao global do projeto. Isso confundiria modulos que
@@ -82,3 +84,15 @@ mensagem = somente identificadores
 ```
 
 O estado real fica em banco, nao na fila.
+
+---
+
+## Proximo Bloco Recomendado
+
+```txt
+NVIDIA Knowledge V1
+```
+
+Motivo: RAG V2 ja recupera evidencias e gera resposta fundamentada com
+citacoes. Falta criar a base de conhecimento NVIDIA para alimentar
+recommendations e briefing.
