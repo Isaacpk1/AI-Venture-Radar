@@ -127,5 +127,5 @@ locais ativos.
 ## 9. Proximo Passo
 
 ```txt
-NVIDIA Knowledge V1 - catalogo inicial de tecnologias NVIDIA
+Recommendations V1 - regras deterministicas iniciais
 ```

@@ -18,12 +18,12 @@ Ingestion V1 + ingestion_worker
 Embeddings V5 + embedding_worker
 Startups V1
 RAG V2
+NVIDIA Knowledge V1
 ```
 
 Pending:
 
 ```txt
-NVIDIA Knowledge V1
 Recommendations V1
 Briefing V1
 Orchestration / analysis job end-to-end
@@ -35,13 +35,13 @@ Production observability
 Recent unit validation:
 
 ```txt
-292 passed
+297 passed
 ```
 
 Next recommended implementation:
 
 ```txt
-NVIDIA Knowledge V1 - initial NVIDIA technology catalog
+Recommendations V1 - deterministic recommendation rules
 ```
 
 Relevant docs:

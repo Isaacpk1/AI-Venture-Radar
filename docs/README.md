@@ -31,6 +31,7 @@ Comece por estes documentos:
 | embeddings | Embeddings V5 | `docs/embeddings/` |
 | startups | Startups V1 | `docs/startups/` |
 | rag | RAG V2 | `docs/rag/` |
+| nvidia_knowledge | NVIDIA Knowledge V1 | `docs/nvidia_knowledge/` |
 
 ---
 
@@ -38,7 +39,6 @@ Comece por estes documentos:
 
 | Modulo | Proxima versao | Roadmap |
 |---|---|---|
-| nvidia_knowledge | NVIDIA Knowledge V1 | `docs/nvidia_knowledge/roadmap_nvidia_knowledge.md` |
 | recommendations | Recommendations V1 | `docs/recommendations/roadmap_recommendations.md` |
 | briefing | Briefing V1 | `docs/briefing/roadmap_briefing.md` |
 | orchestration | Pipeline end-to-end | `docs/proximos_passos_mvp.md` |
@@ -56,6 +56,7 @@ Ingestion V1
 Embeddings V5
 Startups V1
 RAG V2
+NVIDIA Knowledge V1
 ```
 
 Evite pensar em uma unica versao global do projeto. Isso confundiria modulos que
@@ -90,9 +91,9 @@ O estado real fica em banco, nao na fila.
 ## Proximo Bloco Recomendado
 
 ```txt
-NVIDIA Knowledge V1
+Recommendations V1
 ```
 
-Motivo: RAG V2 ja recupera evidencias e gera resposta fundamentada com
-citacoes. Falta criar a base de conhecimento NVIDIA para alimentar
-recommendations e briefing.
+Motivo: RAG V2 ja recupera evidencias e NVIDIA Knowledge V1 ja tem catalogo
+tecnico inicial. Falta cruzar startup/evidencias/catalogo para gerar
+recomendacoes iniciais.

@@ -73,6 +73,17 @@ RAG usa o contrato publico da ingestion para recuperar texto/fonte dos chunks:
 IngestedDocumentReader.list_chunks_by_document_id()
 ```
 
+### recommendations -> nvidia_knowledge
+
+Recommendations deve consultar o catalogo NVIDIA pelo contrato publico:
+
+```txt
+nvidia_knowledge/application/public/technology_catalog.py
+```
+
+Na V1, esse contrato e atendido por um catalogo estatico. Em V2, pode passar a
+usar documents/chunks/embeddings sem quebrar quem chama.
+
 ---
 
 ## 3. Mensagens por Fila
@@ -133,6 +144,13 @@ POST /rag/search
 POST /rag/answer
 ```
 
+NVIDIA Knowledge V1 tambem e sincronico:
+
+```txt
+GET /nvidia-knowledge/technologies
+GET /nvidia-knowledge/technologies/{slug}
+```
+
 ---
 
 ## 6. Validacao por Testes
@@ -140,7 +158,7 @@ POST /rag/answer
 Resultado unitario recente:
 
 ```txt
-292 passed
+297 passed
 ```
 
 ---
@@ -159,6 +177,6 @@ estado operacional fica persistido
 Os proximos modulos devem consumir esses contratos, especialmente:
 
 ```txt
-NVIDIA Knowledge V1 -> ingestion/embeddings/RAG quando houver fonte citavel
 Recommendations V1 -> startups + RAG + NVIDIA Knowledge
+Briefing V1 -> recommendations + evidencias citadas
 ```

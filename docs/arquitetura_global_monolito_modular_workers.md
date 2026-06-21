@@ -2,9 +2,9 @@
 
 > Atualizacao em 21/06/2026: este documento descreve a arquitetura alvo e
 > alguns exemplos historicos. O estado real atual ja inclui `scraping`,
-> `agents`, `ingestion`, `embeddings`, `startups` e `rag`. O proximo bloco de
-> produto e `NVIDIA Knowledge V1`. Para a fotografia operacional atual, leia
-> `docs/estado_atual_do_projeto.md`.
+> `agents`, `ingestion`, `embeddings`, `startups`, `rag` e
+> `nvidia_knowledge`. O proximo bloco de produto e `Recommendations V1`. Para
+> a fotografia operacional atual, leia `docs/estado_atual_do_projeto.md`.
 
 ## Estado atual da arquitetura
 
@@ -21,12 +21,12 @@ ingestion + ingestion_worker
 embeddings + embedding_worker
 startups V1
 rag V2
+nvidia_knowledge V1
 ```
 
 Ainda pendente:
 
 ```txt
-nvidia_knowledge
 recommendations
 briefing
 orquestracao end-to-end

@@ -24,6 +24,7 @@ O projeto segue um monolito modular com workers separados para tarefas longas.
 | embeddings | implementado | Embeddings V5 |
 | startups | implementado | Startups V1 |
 | rag | implementado | RAG V2 |
+| nvidia_knowledge | implementado | NVIDIA Knowledge V1 |
 
 ---
 
@@ -244,7 +245,30 @@ docs/rag/rag_v2_resposta_com_citacoes.md
 
 ---
 
-## 9. Infraestrutura Compartilhada
+## 9. NVIDIA Knowledge - V1
+
+Responsabilidade:
+
+```txt
+catalogo NVIDIA -> tecnologias, categorias, casos de uso e fontes oficiais
+```
+
+Entregas:
+
+```txt
+NvidiaTechnology
+NvidiaTechnologyCatalog
+catalogo estatico versionado em codigo
+GET /nvidia-knowledge/technologies
+GET /nvidia-knowledge/technologies/{slug}
+filtros por categoria e query textual simples
+```
+
+Documento: `docs/nvidia_knowledge/nvidia_knowledge_v1_catalogo_inicial.md`.
+
+---
+
+## 10. Infraestrutura Compartilhada
 
 ```txt
 PostgreSQL  -> fonte da verdade relacional
@@ -272,7 +296,7 @@ workers/embedding_worker
 
 ---
 
-## 10. Migrations
+## 11. Migrations
 
 | Revisao | Descricao |
 |---|---|
@@ -293,12 +317,12 @@ c19a4e5f6b20
 
 ---
 
-## 11. Testes
+## 12. Testes
 
 Validacao unitaria recente:
 
 ```txt
-292 passed
+297 passed
 ```
 
 Observacao: testes de integracao existem, mas dependem de Postgres, Redis e
@@ -306,12 +330,11 @@ Qdrant locais com migrations aplicadas.
 
 ---
 
-## 12. O Que Ainda Falta
+## 13. O Que Ainda Falta
 
 Modulos ainda nao implementados:
 
 ```txt
-nvidia_knowledge
 recommendations
 briefing
 orchestration / analysis job end-to-end
@@ -322,10 +345,10 @@ observabilidade de producao
 
 ---
 
-## 13. Proximo Passo Recomendado
+## 14. Proximo Passo Recomendado
 
 ```txt
-NVIDIA Knowledge V1 - catalogo inicial de tecnologias NVIDIA
+Recommendations V1 - regras deterministicas iniciais
 ```
 
 Motivo:
@@ -336,14 +359,15 @@ ingestion gera documents/chunks
 embeddings gera vetores no Qdrant
 startups organiza entidades/evidencias
 rag recupera evidencias e gera resposta com citacoes
+nvidia_knowledge organiza catalogo tecnico NVIDIA inicial
 ```
 
-Falta agora criar conhecimento NVIDIA estruturado para que recommendations e
-briefing tenham base tecnica citavel.
+Falta agora cruzar perfil/evidencias da startup com o catalogo NVIDIA para gerar
+recomendacoes rastreaveis.
 
 ---
 
-## 14. Fluxo Para MVP
+## 15. Fluxo Para MVP
 
 ```txt
 1. coletar evidencia publica de uma startup        -> implementado
@@ -354,14 +378,14 @@ briefing tenham base tecnica citavel.
 6. buscar evidencias semanticamente                -> implementado
 7. responder perguntas com citacoes                -> implementado
 8. consolidar perfil da startup                    -> basico implementado
-9. consultar conhecimento NVIDIA                   -> pendente
+9. consultar conhecimento NVIDIA                   -> implementado em V1
 10. recomendar tecnologias NVIDIA                  -> pendente
 11. gerar briefing executivo com fontes            -> pendente
 ```
 
 ---
 
-## 15. Referencias
+## 16. Referencias
 
 | Documento | Caminho |
 |---|---|

@@ -21,7 +21,7 @@ metadados especificos para conhecimento tecnico NVIDIA.
 
 | Versao | Status | Objetivo |
 |---|---|---|
-| NVIDIA Knowledge V1 | Futuro | Catalogo inicial de tecnologias |
+| NVIDIA Knowledge V1 | Implementado | Catalogo inicial de tecnologias |
 | NVIDIA Knowledge V2 | Futuro | Ingestao de fontes oficiais |
 | NVIDIA Knowledge V3 | Futuro | Metadados tecnicos |
 | NVIDIA Knowledge V4 | Futuro | Busca por caso de uso |
@@ -33,8 +33,7 @@ metadados especificos para conhecimento tecnico NVIDIA.
 Status:
 
 ```txt
-pendente; deve vir depois de RAG V1/V2 ou em paralelo se o catalogo for
-necessario para Recommendations V1
+implementado
 ```
 
 Entregaveis:
@@ -42,7 +41,11 @@ Entregaveis:
 - entidade `NvidiaTechnology`;
 - catalogo inicial de tecnologias;
 - categoria, descricao e casos de uso;
-- fonte oficial associada quando existir.
+- fonte oficial associada;
+- contrato publico `NvidiaTechnologyCatalog`;
+- rotas `GET /nvidia-knowledge/technologies` e
+  `GET /nvidia-knowledge/technologies/{slug}`;
+- filtros por categoria e busca textual simples.
 
 Exemplos:
 
@@ -54,8 +57,11 @@ TensorRT-LLM
 RAPIDS
 Riva
 CUDA
-DGX Cloud
+NVIDIA AI Enterprise
+MONAI
 ```
+
+Documento da entrega: `docs/nvidia_knowledge/nvidia_knowledge_v1_catalogo_inicial.md`.
 
 ---
 

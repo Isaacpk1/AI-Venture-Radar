@@ -18,6 +18,9 @@ from apps.api.src.modules.embeddings.presentation.routes import (
 from apps.api.src.modules.ingestion.presentation.routes import (
     router as ingestion_router,
 )
+from apps.api.src.modules.nvidia_knowledge.presentation.routes import (
+    router as nvidia_knowledge_router,
+)
 from apps.api.src.modules.rag.presentation.routes import (
     router as rag_router,
 )
@@ -75,3 +78,4 @@ app.include_router(ingestion_router)
 app.include_router(embeddings_router)
 app.include_router(startups_router)
 app.include_router(rag_router)
+app.include_router(nvidia_knowledge_router)

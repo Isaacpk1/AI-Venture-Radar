@@ -25,7 +25,7 @@ na V2. Isso e normal e deixa a arquitetura mais facil de entender.
 | embeddings | implementado | Embeddings V5 |
 | startups | implementado | Startups V1 |
 | rag | implementado | RAG V2 |
-| nvidia_knowledge | ainda nao implementado | futuro NVIDIA Knowledge V1 |
+| nvidia_knowledge | implementado | NVIDIA Knowledge V1 |
 | recommendations | ainda nao implementado | futuro Recommendations V1 |
 | briefing | ainda nao implementado | futuro Briefing V1 |
 
@@ -67,7 +67,8 @@ Estado atual dessa ordem:
 3. startups              -> implementado em V1 basico
 4. embeddings + Qdrant   -> implementado ate V5 operacional
 5. RAG                   -> V2 implementado
-6. NVIDIA Knowledge      -> proximo bloco
+6. NVIDIA Knowledge      -> V1 implementado
+7. Recommendations       -> proximo bloco
 ```
 
 ---
@@ -94,24 +95,24 @@ Esse caminho melhora a robustez operacional:
 ### Caminho de produto
 
 ```txt
-NVIDIA Knowledge V1 - catalogo inicial
+Recommendations V1 - regras deterministicas
 ```
 
 Esse caminho usa o que ja foi construido:
 
 - RAG V2 ja busca evidencias e gera resposta citada;
 - startups ja tem modelo relacional basico;
-- recommendations precisa de catalogo NVIDIA para gerar justificativa tecnica.
+- NVIDIA Knowledge V1 ja tem catalogo tecnico inicial.
 
 Recomendacao atual:
 
 ```txt
-fazer NVIDIA Knowledge V1 agora
+fazer Recommendations V1 agora
 manter hardening de integracao como trilha tecnica paralela
 ```
 
-Motivo: o projeto ja consegue responder com evidencias. Agora falta uma base
-NVIDIA citavel para alimentar recomendacoes e briefings.
+Motivo: o projeto ja consegue responder com evidencias e consultar um catalogo
+NVIDIA inicial. Agora falta transformar isso em recomendacoes rastreaveis.
 
 ---
 
@@ -211,5 +212,5 @@ fluxo:
 11. gerar briefing executivo com fontes
 ```
 
-Hoje ja temos os passos 1, 2, 3, 4, 5, 6, 8 e parte do 7 em boa forma. O
-proximo bloco e criar a base NVIDIA Knowledge.
+Hoje ja temos os passos 1, 2, 3, 4, 5, 6, 8, 9 e parte do 7 em boa forma. O
+proximo bloco e criar Recommendations V1.

@@ -98,6 +98,6 @@ agent -> contratos publicos -> services/use cases/tools -> resultado estruturado
 ```
 
 O proximo passo de produto nao e criar outro agente imediatamente. Com `RAG V2`
-ja implementado, o mais importante agora e criar `NVIDIA Knowledge V1`, para que
-agentes e recomendacoes futuras tenham uma base tecnica citavel para chamar por
-contrato publico.
+e `NVIDIA Knowledge V1` implementados, o mais importante agora e criar
+`Recommendations V1`, para que agentes futuros tenham uma recomendacao tecnica
+rastreavel para chamar por contrato publico.

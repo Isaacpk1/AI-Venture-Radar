@@ -14,6 +14,7 @@ Ingestion V1
 Embeddings V5
 Startups V1
 RAG V2
+NVIDIA Knowledge V1
 ```
 
 O sistema ja consegue:
@@ -30,12 +31,13 @@ associar evidencias a startup
 executar agentes com checkpoint e human-in-the-loop
 buscar evidencias semanticamente com POST /rag/search
 responder perguntas com citacoes via POST /rag/answer
+consultar catalogo NVIDIA via GET /nvidia-knowledge/technologies
 ```
 
 Validacao unitaria recente:
 
 ```txt
-292 passed
+297 passed
 ```
 
 ---
@@ -67,28 +69,30 @@ POST /analysis/jobs
 
 ---
 
-## 3. Proxima Entrega: NVIDIA Knowledge V1
+## 3. Proxima Entrega: Recommendations V1
 
 Objetivo:
 
 ```txt
-catalogo NVIDIA -> conhecimento citavel -> base para recommendations
+startup + evidencias + catalogo NVIDIA -> recomendacoes rastreaveis
 ```
 
 Entregaveis recomendados:
 
 ```txt
-catalogo inicial de tecnologias NVIDIA
-casos de uso por tecnologia
-fontes oficiais e URLs
-metadados basicos para match
-contrato publico para consulta pelo modulo recommendations
+entidade Recommendation
+regras deterministicas por setor/caso de uso
+consulta ao catalogo NVIDIA
+score inicial de aderencia
+justificativa simples e rastreavel
+testes unitarios das regras
 ```
 
 Criterio de pronto:
 
 ```txt
-o sistema consegue listar tecnologias NVIDIA relevantes com fonte e caso de uso
+uma startup com perfil estruturado recebe recomendacoes iniciais com tecnologia,
+score e justificativa
 ```
 
 ---
@@ -106,6 +110,7 @@ resposta estruturada com citacoes por chunk/source_url
 ### NVIDIA Knowledge V1
 
 ```txt
+implementado
 catalogo inicial de tecnologias NVIDIA
 casos de uso
 fontes oficiais
@@ -146,10 +151,10 @@ ligacao entre scraping, ingestion, embeddings, startups, rag e briefing
 ## 5. Ordem Recomendada
 
 ```txt
-1. NVIDIA Knowledge V1 - catalogo inicial
-2. Recommendations V1 - regras deterministicas
-3. Briefing V1 - Markdown executivo
-4. Orchestration V1 - pipeline end-to-end
+1. Recommendations V1 - regras deterministicas
+2. Briefing V1 - Markdown executivo
+3. Orchestration V1 - pipeline end-to-end
+4. NVIDIA Knowledge V2 - ingestao de fontes oficiais
 5. Hardening de integracao/observabilidade
 ```
 
@@ -188,4 +193,5 @@ scraping -> ingestion -> embeddings -> RAG -> recommendations -> briefing
 ```
 
 O projeto ja tem scraping, ingestion, embeddings, startups basico e busca
-semantica com resposta citada. A proxima etapa e conhecimento NVIDIA.
+semantica com resposta citada, alem de catalogo NVIDIA inicial. A proxima etapa
+e recommendations.

@@ -34,7 +34,7 @@ converter tipos serializaveis e chamar factories/casos de uso.
 
 ## 2. Modulos Implementados
 
-Hoje existem seis modulos implementados:
+Hoje existem sete modulos implementados:
 
 ```txt
 apps/api/src/modules/scraping
@@ -43,6 +43,7 @@ apps/api/src/modules/ingestion
 apps/api/src/modules/embeddings
 apps/api/src/modules/startups
 apps/api/src/modules/rag
+apps/api/src/modules/nvidia_knowledge
 ```
 
 ### Scraping
@@ -124,6 +125,20 @@ POST /rag/search
 POST /rag/answer
 ```
 
+### NVIDIA Knowledge
+
+Status: de acordo.
+
+Operacao sincrona em V1. Expoe catalogo estatico versionado em codigo e contrato
+publico para recommendations e agents futuros:
+
+```txt
+NvidiaTechnologyCatalog
+StaticNvidiaTechnologyRepository
+GET /nvidia-knowledge/technologies
+GET /nvidia-knowledge/technologies/{slug}
+```
+
 ---
 
 ## 3. Workers Existentes
@@ -163,7 +178,7 @@ Comando executado recentemente:
 Resultado:
 
 ```txt
-292 passed
+297 passed
 ```
 
 Testes de integracao existem, mas dependem de Postgres/Redis/Qdrant locais com
@@ -176,11 +191,10 @@ migrations aplicadas.
 Arquiteturalmente, o sistema esta coerente. O que ainda falta e produto:
 
 ```txt
-NVIDIA Knowledge V1
 Recommendations V1
 Briefing V1
 Orchestrator / analysis job end-to-end
 ```
 
-O proximo passo recomendado e `NVIDIA Knowledge V1`, porque RAG V2 ja responde
-com citacoes e recommendations precisa de uma base NVIDIA citavel.
+O proximo passo recomendado e `Recommendations V1`, porque RAG V2 ja responde
+com citacoes e NVIDIA Knowledge V1 ja fornece uma base tecnica inicial.
