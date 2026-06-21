@@ -1,5 +1,6 @@
 """Testes da composicao de dependencias do modulo embeddings."""
 
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -8,16 +9,47 @@ from apps.api.src.modules.embeddings.application.dto import GenerateChunkEmbeddi
 from apps.api.src.modules.embeddings.application.use_cases.generate_chunk_embedding import (
     GenerateChunkEmbedding,
 )
+from apps.api.src.modules.embeddings.application.use_cases.upsert_chunk_embedding import (
+    UpsertChunkEmbedding,
+)
+from apps.api.src.modules.embeddings.domain.exceptions import (
+    EmbeddingServiceUnavailableError,
+)
+from apps.api.src.modules.embeddings.factories import embeddings_factory as factory_module
 from apps.api.src.modules.embeddings.factories.embeddings_factory import EmbeddingsFactory
-from apps.api.src.modules.embeddings.infrastructure.fake.deterministic_fake_provider import (
-    DeterministicFakeEmbeddingProvider,
+from apps.api.src.modules.embeddings.infrastructure.gemini.gemini_embedding_provider import (
+    GeminiEmbeddingProvider,
+)
+from apps.api.src.modules.embeddings.infrastructure.qdrant.qdrant_vector_repository import (
+    QdrantVectorRepository,
 )
 
 
-def test_create_embedding_service_returns_fake_provider() -> None:
+def _fake_settings(*, gemini_api_key: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        gemini_api_key=gemini_api_key,
+        gemini_embedding_model="models/embedding-test",
+    )
+
+
+def test_create_embedding_service_returns_none_without_gemini_api_key(monkeypatch) -> None:
+    monkeypatch.setattr(
+        factory_module, "get_settings", lambda: _fake_settings(gemini_api_key="")
+    )
+
+    assert EmbeddingsFactory.create_embedding_service() is None
+
+
+def test_create_embedding_service_returns_gemini_provider_when_api_key_present(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        factory_module, "get_settings", lambda: _fake_settings(gemini_api_key="secret")
+    )
+
     service = EmbeddingsFactory.create_embedding_service()
 
-    assert isinstance(service, DeterministicFakeEmbeddingProvider)
+    assert isinstance(service, GeminiEmbeddingProvider)
 
 
 def test_create_generate_chunk_embedding_returns_use_case() -> None:
@@ -27,11 +59,27 @@ def test_create_generate_chunk_embedding_returns_use_case() -> None:
 
 
 @pytest.mark.anyio
-async def test_create_generate_chunk_embedding_wires_dependency_end_to_end() -> None:
+async def test_create_generate_chunk_embedding_raises_without_gemini_api_key(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        factory_module, "get_settings", lambda: _fake_settings(gemini_api_key="")
+    )
     use_case = EmbeddingsFactory.create_generate_chunk_embedding()
 
-    view = await use_case.execute(
-        GenerateChunkEmbeddingInput(chunk_id=uuid4(), text="texto valido")
-    )
+    with pytest.raises(EmbeddingServiceUnavailableError):
+        await use_case.execute(
+            GenerateChunkEmbeddingInput(chunk_id=uuid4(), text="texto valido")
+        )
 
-    assert len(view.values) == view.dimension
+
+def test_create_vector_repository_returns_qdrant_repository() -> None:
+    repository = EmbeddingsFactory.create_vector_repository()
+
+    assert isinstance(repository, QdrantVectorRepository)
+
+
+def test_create_upsert_chunk_embedding_returns_use_case() -> None:
+    use_case = EmbeddingsFactory.create_upsert_chunk_embedding()
+
+    assert isinstance(use_case, UpsertChunkEmbedding)

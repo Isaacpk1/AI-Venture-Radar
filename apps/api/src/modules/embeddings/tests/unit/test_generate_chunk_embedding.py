@@ -14,8 +14,13 @@ from apps.api.src.modules.embeddings.application.public.embedding_service import
 from apps.api.src.modules.embeddings.application.use_cases.generate_chunk_embedding import (
     GenerateChunkEmbedding,
 )
-from apps.api.src.modules.embeddings.domain.exceptions import EmptyChunkTextError
-from apps.api.src.modules.embeddings.factories.embeddings_factory import EmbeddingsFactory
+from apps.api.src.modules.embeddings.domain.exceptions import (
+    EmbeddingServiceUnavailableError,
+    EmptyChunkTextError,
+)
+from apps.api.src.modules.embeddings.infrastructure.fake.deterministic_fake_provider import (
+    DeterministicFakeEmbeddingProvider,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +87,7 @@ async def test_raises_on_empty_text() -> None:
 
 @pytest.mark.anyio
 async def test_same_input_is_stable_across_executions() -> None:
-    use_case = EmbeddingsFactory.create_generate_chunk_embedding()
+    use_case = GenerateChunkEmbedding(embedding_service=DeterministicFakeEmbeddingProvider())
     embedding_input = GenerateChunkEmbeddingInput(
         chunk_id=uuid4(), text="a NVIDIA recomenda NIM para servir LLMs"
     )
@@ -91,3 +96,13 @@ async def test_same_input_is_stable_across_executions() -> None:
     second = await use_case.execute(embedding_input)
 
     assert first.values == second.values
+
+
+@pytest.mark.anyio
+async def test_raises_when_no_embedding_service_configured() -> None:
+    use_case = GenerateChunkEmbedding(embedding_service=None)
+
+    with pytest.raises(EmbeddingServiceUnavailableError):
+        await use_case.execute(
+            GenerateChunkEmbeddingInput(chunk_id=uuid4(), text="texto valido")
+        )

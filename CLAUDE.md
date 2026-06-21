@@ -299,12 +299,12 @@ Testes: 33 unit
 | Versao | Status | O que foi entregue |
 |---|---|---|
 | V1 | Entregue | Contrato publico `EmbeddingService`, DTOs, `GenerateChunkEmbedding`, provider fake deterministico |
-| V2 | Futuro | Provider real (Gemini ou Cohere) por tras do mesmo contrato |
-| V3 | Futuro | Persistencia no Qdrant (`VectorRepository`, upsert) |
+| V2 | Entregue | Provider real (Gemini) por tras do mesmo contrato |
+| V3 | Entregue | Persistencia no Qdrant (`VectorRepository`, upsert, busca) |
 | V4 | Futuro | Worker em batch (`workers/embedding_worker`, fila `embeddings`) |
 | V5 | Futuro | Reembedding e metricas |
 
-**Versao atual: V1**
+**Versao atual: V3**
 
 O que a V1 entregou:
 - `EmbeddingVector` — value object imutavel (`domain/entities.py`), valida `len(values) == dimension`
@@ -315,9 +315,23 @@ O que a V1 entregou:
 - `DeterministicFakeEmbeddingProvider` — implementacao V1 do contrato (infra), gera vetor estavel via SHA-256 do texto, sem chamar API externa
 - `EmbeddingsFactory` — composicao das dependencias
 
-Sem banco, sem Qdrant, sem worker, sem presentation — nada disso tem referente em V1 (decisao deliberada, ver `docs/embeddings/roadmap_embeddings.md`). `GenerateChunkEmbedding` (use case) e `DeterministicFakeEmbeddingProvider` (infra) sao classes separadas — o use case nunca implementa o contrato publico diretamente, mesmo padrao do `EvidenceValidationService` em `agents`. Isso evita um refactor forcado quando a V2 trocar o provider fake por um real.
+Sem banco, sem Qdrant, sem worker, sem presentation — nada disso tinha referente em V1 (decisao deliberada, ver `docs/embeddings/roadmap_embeddings.md`). `GenerateChunkEmbedding` (use case) e `DeterministicFakeEmbeddingProvider` (infra) sao classes separadas — o use case nunca implementa o contrato publico diretamente, mesmo padrao do `EvidenceValidationService` em `agents`. Isso evitou um refactor forcado quando a V2 trocou o provider fake por um real.
 
-Testes: 17 unit
+O que a V2 entregou:
+- `GeminiEmbeddingProvider` (`infrastructure/gemini/`) — implementacao real do `EmbeddingService` via `GoogleGenerativeAIEmbeddings` (LangChain), `embedding_client` injetavel para testes sem rede
+- `EmbeddingServiceUnavailableError`, `EmbeddingGenerationError` — novas excecoes de dominio
+- `EmbeddingsFactory.create_embedding_service()` devolve `None` sem `GEMINI_API_KEY` configurada — sem fallback silencioso para o fake; `GenerateChunkEmbedding.execute()` levanta `EmbeddingServiceUnavailableError` so na hora do uso real (mesmo padrao do `AgentServiceUnavailableError` em `agents`)
+- Setting nova: `gemini_embedding_model` (default `models/text-embedding-004`)
+
+O que a V3 entregou:
+- DTOs: `UpsertChunkEmbeddingInput`, `ChunkEmbeddingRecord`, `ChunkSearchResult`
+- Contrato publico: `VectorRepository` em `application/public/vector_repository.py` (upsert + search) — publico desde ja porque o RAG futuro vai chamar `search()` direto
+- Caso de uso `UpsertChunkEmbedding` — compoe `GenerateChunkEmbedding` + `VectorRepository`
+- `QdrantVectorRepository` (`infrastructure/qdrant/`) — usa `AsyncQdrantClient`; cria a colecao de forma idempotente no primeiro upsert, usando a dimensao do vetor inserido
+- Setting nova: `qdrant_collection_name` (default `chunk_embeddings`); dependencia nova: `qdrant-client>=1.12,<2`
+- Erros do client do Qdrant nao sao empacotados em excecao de dominio — mesmo padrao dos repositorios Postgres existentes
+
+Testes: 26 unit + 1 integracao (a de integracao exige Qdrant real rodando)
 
 ---
 
@@ -386,8 +400,8 @@ chunks                  fragmentos de texto prontos para embedding
 | scraping | 130 | 2026-06-16 |
 | agents | 57 unit | 2026-06-16 |
 | ingestion | 33 unit | 2026-06-16 |
-| embeddings | 17 unit | 2026-06-21 |
-| **Total** | **238** | **2026-06-21** |
+| embeddings | 26 unit + 1 integracao | 2026-06-21 |
+| **Total** | **247** | **2026-06-21** |
 
 Comando para verificar:
 ```bash
@@ -402,15 +416,15 @@ venv/Scripts/python.exe -m pytest apps/api/src/modules/ -q
 - **Scraping V8** — pipeline completa, worker operacional, 130 testes
 - **Agents V7** — checkpoint PostgreSQL, human-in-the-loop completo (GET + POST /resume + interrupt() real), 57 unit testes
 - **Ingestion V1** — TextCleaner, TextChunker, Document, Chunk, worker ingestion_worker, 33 testes
-- **Embeddings V1** — contrato publico `EmbeddingService`, `GenerateChunkEmbedding`, provider fake deterministico, 17 testes
+- **Embeddings V3** — contrato publico `EmbeddingService` (provider real Gemini) + `VectorRepository` (Qdrant, upsert/search), 26 unit + 1 integracao
 
 ### Next step (decisao pendente, dois caminhos validos)
-- **Embeddings V2/V3** — provider real (Gemini/Cohere) + persistencia no Qdrant, aprofunda o modulo que acabou de nascer
+- **Embeddings V4** — worker em batch (`workers/embedding_worker`, fila `embeddings`)
 - **Startups V1** — modelo relacional de startups e evidencias, item 1 do backlog macro (`docs/roadmap_proximos_passos.md`)
 
 ### Backlog (in order)
 1. Startups V1 — modelo relacional de startups
-2. Embeddings V2/V3 — provider real + persistencia Qdrant
+2. Embeddings V4/V5 — worker em batch + reembedding/metricas
 3. RAG V1 — busca hibrida + reranking + resposta com citacoes
 4. NVIDIA knowledge ingestion — base de conhecimento NVIDIA no Qdrant
 5. Recommendations V1 — motor de recomendacao
@@ -587,9 +601,11 @@ All env-var loading belongs in `apps/api/src/config/settings.py`. Never spread e
 ```
 DATABASE_URL
 QDRANT_URL
+QDRANT_COLLECTION_NAME   ← colecao de vetores de chunks (embeddings V3)
 REDIS_URL
 FIRECRAWL_API_KEY
 LLM_API_KEY          ← Gemini API key
+GEMINI_EMBEDDING_MODEL   ← modelo de embedding (embeddings V2), default models/text-embedding-004
 COHERE_API_KEY
 ENVIRONMENT
 LOG_LEVEL
@@ -630,5 +646,6 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Agents V5 | `docs/agents/agents_v5_executar_grafos_pelo_agent_run.md` |
 | Agents V6 | `docs/agents/agents_v6_checkpoint_postgres.md` |
 | Agents V7 (current) | `docs/agents/agents_v7_human_in_the_loop.md` |
-| Embeddings V1 (current) | `docs/embeddings/embeddings_v1_contratos_e_fake.md` |
+| Embeddings V1 | `docs/embeddings/embeddings_v1_contratos_e_fake.md` |
+| Embeddings V2+V3 (current) | `docs/embeddings/embeddings_v2_v3_provider_real_e_qdrant.md` |
 | Estado atual do projeto | `docs/estado_atual_do_projeto.md` |

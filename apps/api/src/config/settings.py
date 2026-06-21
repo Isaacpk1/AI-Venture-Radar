@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     # Infrastructure
     database_url: str = "postgresql+asyncpg://postgres:postgres@127.0.0.1:5433/radar"
     qdrant_url: str = "http://localhost:6333"
+    qdrant_collection_name: str = "chunk_embeddings"
     redis_url: str = "redis://localhost:6379"
 
     # External APIs
@@ -21,6 +22,7 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
+    gemini_embedding_model: str = "models/text-embedding-004"
     cohere_api_key: str = ""
 
     # Runtime
