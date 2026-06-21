@@ -294,6 +294,33 @@ Testes: 33 unit
 
 ---
 
+### Embeddings module
+
+| Versao | Status | O que foi entregue |
+|---|---|---|
+| V1 | Entregue | Contrato publico `EmbeddingService`, DTOs, `GenerateChunkEmbedding`, provider fake deterministico |
+| V2 | Futuro | Provider real (Gemini ou Cohere) por tras do mesmo contrato |
+| V3 | Futuro | Persistencia no Qdrant (`VectorRepository`, upsert) |
+| V4 | Futuro | Worker em batch (`workers/embedding_worker`, fila `embeddings`) |
+| V5 | Futuro | Reembedding e metricas |
+
+**Versao atual: V1**
+
+O que a V1 entregou:
+- `EmbeddingVector` — value object imutavel (`domain/entities.py`), valida `len(values) == dimension`
+- `EmbeddingsError`, `EmptyChunkTextError`, `InvalidEmbeddingDimensionError` — excecoes de dominio
+- DTOs: `GenerateChunkEmbeddingInput`, `ChunkEmbeddingView`
+- Contrato publico: `EmbeddingService` em `application/public/embedding_service.py` (unico arquivo que outros modulos podem importar)
+- Caso de uso `GenerateChunkEmbedding` — valida texto vazio e delega ao `EmbeddingService` injetado
+- `DeterministicFakeEmbeddingProvider` — implementacao V1 do contrato (infra), gera vetor estavel via SHA-256 do texto, sem chamar API externa
+- `EmbeddingsFactory` — composicao das dependencias
+
+Sem banco, sem Qdrant, sem worker, sem presentation — nada disso tem referente em V1 (decisao deliberada, ver `docs/embeddings/roadmap_embeddings.md`). `GenerateChunkEmbedding` (use case) e `DeterministicFakeEmbeddingProvider` (infra) sao classes separadas — o use case nunca implementa o contrato publico diretamente, mesmo padrao do `EvidenceValidationService` em `agents`. Isso evita um refactor forcado quando a V2 trocar o provider fake por um real.
+
+Testes: 17 unit
+
+---
+
 ### Startups module
 
 | Versao | Status | O que foi entregue |
@@ -359,7 +386,8 @@ chunks                  fragmentos de texto prontos para embedding
 | scraping | 130 | 2026-06-16 |
 | agents | 57 unit | 2026-06-16 |
 | ingestion | 33 unit | 2026-06-16 |
-| **Total** | **221** | **2026-06-16** |
+| embeddings | 17 unit | 2026-06-21 |
+| **Total** | **238** | **2026-06-21** |
 
 Comando para verificar:
 ```bash
@@ -368,23 +396,25 @@ venv/Scripts/python.exe -m pytest apps/api/src/modules/ -q
 
 ---
 
-## Current state summary (2026-06-16)
+## Current state summary (2026-06-21)
 
 ### Implemented and working
 - **Scraping V8** — pipeline completa, worker operacional, 130 testes
 - **Agents V7** — checkpoint PostgreSQL, human-in-the-loop completo (GET + POST /resume + interrupt() real), 57 unit testes
 - **Ingestion V1** — TextCleaner, TextChunker, Document, Chunk, worker ingestion_worker, 33 testes
+- **Embeddings V1** — contrato publico `EmbeddingService`, `GenerateChunkEmbedding`, provider fake deterministico, 17 testes
 
-### Next step
-- **Embeddings V1** — vetorizar chunks no Qdrant (embedding via Gemini ou sentence-transformers)
+### Next step (decisao pendente, dois caminhos validos)
+- **Embeddings V2/V3** — provider real (Gemini/Cohere) + persistencia no Qdrant, aprofunda o modulo que acabou de nascer
+- **Startups V1** — modelo relacional de startups e evidencias, item 1 do backlog macro (`docs/roadmap_proximos_passos.md`)
 
 ### Backlog (in order)
 1. Startups V1 — modelo relacional de startups
-3. Embeddings + Qdrant — vetorizacao de chunks
-4. RAG V1 — busca hibrida + reranking + resposta com citacoes
-5. NVIDIA knowledge ingestion — base de conhecimento NVIDIA no Qdrant
-6. Recommendations V1 — motor de recomendacao
-7. Briefing V1 — relatorio executivo final
+2. Embeddings V2/V3 — provider real + persistencia Qdrant
+3. RAG V1 — busca hibrida + reranking + resposta com citacoes
+4. NVIDIA knowledge ingestion — base de conhecimento NVIDIA no Qdrant
+5. Recommendations V1 — motor de recomendacao
+6. Briefing V1 — relatorio executivo final
 
 ---
 
@@ -600,4 +630,5 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Agents V5 | `docs/agents/agents_v5_executar_grafos_pelo_agent_run.md` |
 | Agents V6 | `docs/agents/agents_v6_checkpoint_postgres.md` |
 | Agents V7 (current) | `docs/agents/agents_v7_human_in_the_loop.md` |
+| Embeddings V1 (current) | `docs/embeddings/embeddings_v1_contratos_e_fake.md` |
 | Estado atual do projeto | `docs/estado_atual_do_projeto.md` |

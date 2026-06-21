@@ -40,6 +40,11 @@ from apps.api.src.modules.agents.infrastructure.database.models import (  # noqa
     agent_run_model,
     agent_step_model,
 )
+from apps.api.src.modules.ingestion.infrastructure.database.models import (  # noqa: F401
+    chunk_model,
+    document_model,
+    ingestion_job_model,
+)
 
 # Objeto de configuração do Alembic, vindo do alembic.ini.
 config = context.config
