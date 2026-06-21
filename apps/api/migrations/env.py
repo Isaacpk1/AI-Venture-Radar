@@ -45,6 +45,10 @@ from apps.api.src.modules.ingestion.infrastructure.database.models import (  # n
     document_model,
     ingestion_job_model,
 )
+from apps.api.src.modules.embeddings.infrastructure.database.models import (  # noqa: F401
+    embedding_job_chunk_model,
+    embedding_job_model,
+)
 
 # Objeto de configuração do Alembic, vindo do alembic.ini.
 config = context.config

@@ -1,24 +1,49 @@
 """Composicao das dependencias concretas do modulo embeddings."""
 
 from apps.api.src.config.settings import get_settings
+from apps.api.src.modules.embeddings.application.ports import (
+    ChunkSourceReader,
+    EmbeddingTaskDispatcher,
+)
 from apps.api.src.modules.embeddings.application.public.embedding_service import (
     EmbeddingService,
 )
 from apps.api.src.modules.embeddings.application.public.vector_repository import (
     VectorRepository,
 )
+from apps.api.src.modules.embeddings.application.use_cases.create_embedding_job import (
+    CreateEmbeddingJob,
+)
+from apps.api.src.modules.embeddings.application.use_cases.execute_embedding_job import (
+    ExecuteEmbeddingJob,
+)
 from apps.api.src.modules.embeddings.application.use_cases.generate_chunk_embedding import (
     GenerateChunkEmbedding,
+)
+from apps.api.src.modules.embeddings.application.use_cases.get_embedding_job import (
+    GetEmbeddingJob,
 )
 from apps.api.src.modules.embeddings.application.use_cases.upsert_chunk_embedding import (
     UpsertChunkEmbedding,
 )
+from apps.api.src.modules.embeddings.infrastructure.database.postgres_unit_of_work import (
+    PostgresEmbeddingsUnitOfWork,
+)
 from apps.api.src.modules.embeddings.infrastructure.gemini.gemini_embedding_provider import (
     GeminiEmbeddingProvider,
+)
+from apps.api.src.modules.embeddings.infrastructure.ingestion_adapters.ingestion_chunk_reader import (
+    IngestionChunkReader,
 )
 from apps.api.src.modules.embeddings.infrastructure.qdrant.qdrant_vector_repository import (
     QdrantVectorRepository,
 )
+from apps.api.src.modules.embeddings.infrastructure.queue.dramatiq_embedding_dispatcher import (
+    DramatiqEmbeddingJobPublisher,
+    DramatiqEmbeddingTaskDispatcher,
+)
+from apps.api.src.modules.ingestion.factories.ingestion_factory import IngestionFactory
+from apps.api.src.shared.queue.dramatiq_broker import broker
 
 
 class EmbeddingsFactory:
@@ -70,3 +95,36 @@ class EmbeddingsFactory:
             generate_chunk_embedding=EmbeddingsFactory.create_generate_chunk_embedding(),
             vector_repository=EmbeddingsFactory.create_vector_repository(),
         )
+
+    @staticmethod
+    def create_chunk_source_reader() -> ChunkSourceReader:
+        """Cria o leitor de chunks, embrulhando o contrato publico do ingestion."""
+
+        return IngestionChunkReader(
+            IngestionFactory.create_ingested_document_reader()
+        )
+
+    @staticmethod
+    def create_task_dispatcher() -> EmbeddingTaskDispatcher:
+        return DramatiqEmbeddingTaskDispatcher(
+            DramatiqEmbeddingJobPublisher(broker)
+        )
+
+    @staticmethod
+    def create_create_embedding_job() -> CreateEmbeddingJob:
+        return CreateEmbeddingJob(
+            uow_factory=PostgresEmbeddingsUnitOfWork,
+            task_dispatcher=EmbeddingsFactory.create_task_dispatcher(),
+        )
+
+    @staticmethod
+    def create_execute_embedding_job() -> ExecuteEmbeddingJob:
+        return ExecuteEmbeddingJob(
+            uow_factory=PostgresEmbeddingsUnitOfWork,
+            chunk_source_reader=EmbeddingsFactory.create_chunk_source_reader(),
+            upsert_chunk_embedding=EmbeddingsFactory.create_upsert_chunk_embedding(),
+        )
+
+    @staticmethod
+    def create_get_embedding_job() -> GetEmbeddingJob:
+        return GetEmbeddingJob(PostgresEmbeddingsUnitOfWork)

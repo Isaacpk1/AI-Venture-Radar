@@ -6,8 +6,17 @@ from uuid import uuid4
 import pytest
 
 from apps.api.src.modules.embeddings.application.dto import GenerateChunkEmbeddingInput
+from apps.api.src.modules.embeddings.application.use_cases.create_embedding_job import (
+    CreateEmbeddingJob,
+)
+from apps.api.src.modules.embeddings.application.use_cases.execute_embedding_job import (
+    ExecuteEmbeddingJob,
+)
 from apps.api.src.modules.embeddings.application.use_cases.generate_chunk_embedding import (
     GenerateChunkEmbedding,
+)
+from apps.api.src.modules.embeddings.application.use_cases.get_embedding_job import (
+    GetEmbeddingJob,
 )
 from apps.api.src.modules.embeddings.application.use_cases.upsert_chunk_embedding import (
     UpsertChunkEmbedding,
@@ -19,6 +28,9 @@ from apps.api.src.modules.embeddings.factories import embeddings_factory as fact
 from apps.api.src.modules.embeddings.factories.embeddings_factory import EmbeddingsFactory
 from apps.api.src.modules.embeddings.infrastructure.gemini.gemini_embedding_provider import (
     GeminiEmbeddingProvider,
+)
+from apps.api.src.modules.embeddings.infrastructure.ingestion_adapters.ingestion_chunk_reader import (
+    IngestionChunkReader,
 )
 from apps.api.src.modules.embeddings.infrastructure.qdrant.qdrant_vector_repository import (
     QdrantVectorRepository,
@@ -83,3 +95,27 @@ def test_create_upsert_chunk_embedding_returns_use_case() -> None:
     use_case = EmbeddingsFactory.create_upsert_chunk_embedding()
 
     assert isinstance(use_case, UpsertChunkEmbedding)
+
+
+def test_create_chunk_source_reader_returns_ingestion_chunk_reader() -> None:
+    reader = EmbeddingsFactory.create_chunk_source_reader()
+
+    assert isinstance(reader, IngestionChunkReader)
+
+
+def test_create_create_embedding_job_returns_use_case() -> None:
+    use_case = EmbeddingsFactory.create_create_embedding_job()
+
+    assert isinstance(use_case, CreateEmbeddingJob)
+
+
+def test_create_execute_embedding_job_returns_use_case() -> None:
+    use_case = EmbeddingsFactory.create_execute_embedding_job()
+
+    assert isinstance(use_case, ExecuteEmbeddingJob)
+
+
+def test_create_get_embedding_job_returns_use_case() -> None:
+    use_case = EmbeddingsFactory.create_get_embedding_job()
+
+    assert isinstance(use_case, GetEmbeddingJob)

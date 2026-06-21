@@ -19,6 +19,16 @@ class IngestedDocumentSummary:
     chunk_count: int
 
 
+@dataclass
+class ChunkRecord:
+    """Chunk pronto para embedding, com a URL de origem do documento."""
+
+    id: UUID
+    document_id: UUID
+    text: str
+    source_url: str
+
+
 class IngestedDocumentReader(ABC):
     """Permite que outros modulos consultem documentos ja ingeridos."""
 
@@ -27,3 +37,9 @@ class IngestedDocumentReader(ABC):
         self, scraping_result_id: UUID
     ) -> IngestedDocumentSummary | None:
         """Retorna o sumario do documento ingerido ou ``None``."""
+
+    @abstractmethod
+    async def list_chunks_by_document_id(
+        self, document_id: UUID
+    ) -> list[ChunkRecord]:
+        """Retorna todos os chunks de um documento, ordenados por posicao."""

@@ -288,9 +288,14 @@ O que a V1 entregou:
 - Presentation: `POST /ingestion/jobs` e `GET /ingestion/jobs/{id}`
 - Contrato publico: `IngestedDocumentReader` em `application/public/`
 
+Extensao feita durante a entrega do Embeddings V4 (modulo `ingestion` continua V1, isso nao e' uma nova versao, e' so a primeira vez que o contrato publico ganhou implementacao real):
+- Novo metodo `list_chunks_by_document_id()` em `IngestedDocumentReader` (`ChunkRecord` como DTO de retorno)
+- `PostgresIngestedDocumentReader` (`infrastructure/database/`) — primeira implementacao concreta do contrato (existia desde a V1 mas nunca tinha sido implementado nem usado); SQL textual, mesmo padrao do `PostgresScrapingResultReader`
+- `IngestionFactory.create_ingested_document_reader()`
+
 Tabelas: `ingestion_jobs`, `documents`, `chunks`
 Worker: `workers/ingestion_worker/` — consome fila `ingestion`
-Testes: 33 unit
+Testes: 33 unit + 1 integracao (novo, exige Postgres real rodando)
 
 ---
 
@@ -301,10 +306,10 @@ Testes: 33 unit
 | V1 | Entregue | Contrato publico `EmbeddingService`, DTOs, `GenerateChunkEmbedding`, provider fake deterministico |
 | V2 | Entregue | Provider real (Gemini) por tras do mesmo contrato |
 | V3 | Entregue | Persistencia no Qdrant (`VectorRepository`, upsert, busca) |
-| V4 | Futuro | Worker em batch (`workers/embedding_worker`, fila `embeddings`) |
+| V4 | Entregue | Worker em batch (`workers/embedding_worker`, fila `embeddings`), `EmbeddingJob`/`EmbeddingJobChunk`, retry/backoff via Dramatiq |
 | V5 | Futuro | Reembedding e metricas |
 
-**Versao atual: V3**
+**Versao atual: V4**
 
 O que a V1 entregou:
 - `EmbeddingVector` — value object imutavel (`domain/entities.py`), valida `len(values) == dimension`
@@ -331,7 +336,22 @@ O que a V3 entregou:
 - Setting nova: `qdrant_collection_name` (default `chunk_embeddings`); dependencia nova: `qdrant-client>=1.12,<2`
 - Erros do client do Qdrant nao sao empacotados em excecao de dominio — mesmo padrao dos repositorios Postgres existentes
 
-Testes: 26 unit + 1 integracao (a de integracao exige Qdrant real rodando)
+O que a V4 entregou:
+- `EmbeddingJob` + `EmbeddingJobChunk` (`domain/entities.py`) — par "job + filhos" igual `AgentRun`/`AgentStep`, status agregado (`PENDING/RUNNING/COMPLETED/PARTIAL/FAILED`) e status por chunk (`PENDING/COMPLETED/FAILED`)
+- Retry sem scheduler customizado: `EmbeddingJobChunk.record_failure()` incrementa `attempt_count` e so fica `FAILED` (terminal) ao atingir `MAX_CHUNK_ATTEMPTS=3`; enquanto isso fica `PENDING`. `ExecuteEmbeddingJob` levanta `EmbeddingJobPartiallyFailedError` quando sobra chunk pendente, e o Dramatiq (`max_retries=3`, mesmo valor de todos os workers) reentrega a mensagem — so reprocessa os chunks ainda pendentes (idempotente, mesmo padrao de guarda do `ExecuteScrapingJob`)
+- Cada chunk e' salvo (e comitado) individualmente durante o loop, nao numa transacao unica presa durante N chamadas de rede sequenciais
+- Mudanca no modulo `ingestion` (entrega cruzada, ver secao do modulo ingestion): novo metodo `list_chunks_by_document_id()` no contrato publico `IngestedDocumentReader`, e a primeira implementacao concreta (`PostgresIngestedDocumentReader`) — o contrato existia desde a V1 do ingestion mas nunca tinha sido implementado
+- `IngestionChunkReader` (`infrastructure/ingestion_adapters/`) — adapter que implementa a porta interna `ChunkSourceReader` embrulhando o contrato publico do ingestion; `EmbeddingsFactory` importa `IngestionFactory` direto e chama `create_ingested_document_reader()` (mesmo padrao de `scraping_factory.py` chamando `AgentsFactory`)
+- Casos de uso `CreateEmbeddingJob`, `ExecuteEmbeddingJob`, `GetEmbeddingJob`; dispatcher Dramatiq (`DramatiqEmbeddingJobPublisher`/`DramatiqEmbeddingTaskDispatcher`)
+- Migration `b7e2c4f8a1d3`: tabelas `embedding_jobs`, `embedding_job_chunks` (FK cross-modulo no nivel do banco para `documents.id`/`chunks.id` — permitido; import de classes Python entre modulos e' que e' proibido)
+- Worker: `workers/embedding_worker/` — consome fila `embeddings`
+- Presentation: `POST /embeddings/jobs` e `GET /embeddings/jobs/{id}`
+
+Limite conhecido: se um chunk falhar persistentemente e o job tambem esgotar as 3 entregas do Dramatiq antes do chunk atingir seu proprio teto de tentativas, o job fica em RUNNING sem mais progresso automatico — aceitavel para um worker "basico" (V4); nao resolvido agora.
+
+Tabelas: `embedding_jobs`, `embedding_job_chunks`
+Worker: `workers/embedding_worker/` — consome fila `embeddings`
+Testes: 56 unit + 2 integracao (exigem Postgres e Qdrant reais rodando)
 
 ---
 
@@ -371,8 +391,9 @@ Testes: 26 unit + 1 integracao (a de integracao exige Qdrant real rodando)
 | `7c9f2a1b4d6e` | 2026-06-15 | Cria tabelas de agents (agent_runs, agent_steps) |
 | `9e1f3b5c8a2d` | 2026-06-16 | Cria tabelas de checkpoint LangGraph (V6) |
 | `3f8d1e2a9c7b` | 2026-06-16 | Cria tabelas de ingestion (ingestion_jobs, documents, chunks) |
+| `b7e2c4f8a1d3` | 2026-06-21 | Cria tabelas de embeddings (embedding_jobs, embedding_job_chunks) |
 
-**Head atual: `3f8d1e2a9c7b`**
+**Head atual: `b7e2c4f8a1d3`**
 
 ### Tabelas existentes
 
@@ -389,6 +410,8 @@ checkpoint_migrations   versao das migrations internas do LangGraph
 ingestion_jobs          status do job de ingestion (1-para-1 com scraping_result)
 documents               documento limpo e normalizado (clean_text + word_count + chunk_count)
 chunks                  fragmentos de texto prontos para embedding
+embedding_jobs          status agregado do job de embeddings (1-para-1 com document)
+embedding_job_chunks    status por chunk dentro de um embedding_job (attempt_count, error_message)
 ```
 
 ---
@@ -399,9 +422,9 @@ chunks                  fragmentos de texto prontos para embedding
 |---|---|---|
 | scraping | 130 | 2026-06-16 |
 | agents | 57 unit | 2026-06-16 |
-| ingestion | 33 unit | 2026-06-16 |
-| embeddings | 26 unit + 1 integracao | 2026-06-21 |
-| **Total** | **247** | **2026-06-21** |
+| ingestion | 33 unit + 1 integracao | 2026-06-21 |
+| embeddings | 56 unit + 2 integracao | 2026-06-21 |
+| **Total** | **280** | **2026-06-21** |
 
 Comando para verificar:
 ```bash
@@ -415,16 +438,16 @@ venv/Scripts/python.exe -m pytest apps/api/src/modules/ -q
 ### Implemented and working
 - **Scraping V8** — pipeline completa, worker operacional, 130 testes
 - **Agents V7** — checkpoint PostgreSQL, human-in-the-loop completo (GET + POST /resume + interrupt() real), 57 unit testes
-- **Ingestion V1** — TextCleaner, TextChunker, Document, Chunk, worker ingestion_worker, 33 testes
-- **Embeddings V3** — contrato publico `EmbeddingService` (provider real Gemini) + `VectorRepository` (Qdrant, upsert/search), 26 unit + 1 integracao
+- **Ingestion V1** — TextCleaner, TextChunker, Document, Chunk, worker ingestion_worker, 33 unit + 1 integracao (contrato publico `IngestedDocumentReader` agora implementado)
+- **Embeddings V4** — `EmbeddingService` (Gemini) + `VectorRepository` (Qdrant) + `EmbeddingJob`/`EmbeddingJobChunk` + worker em batch com retry/backoff, 56 unit + 2 integracao
 
 ### Next step (decisao pendente, dois caminhos validos)
-- **Embeddings V4** — worker em batch (`workers/embedding_worker`, fila `embeddings`)
+- **Embeddings V5** — reembedding e metricas (custo, latencia, modelo usado)
 - **Startups V1** — modelo relacional de startups e evidencias, item 1 do backlog macro (`docs/roadmap_proximos_passos.md`)
 
 ### Backlog (in order)
 1. Startups V1 — modelo relacional de startups
-2. Embeddings V4/V5 — worker em batch + reembedding/metricas
+2. Embeddings V5 — reembedding e metricas
 3. RAG V1 — busca hibrida + reranking + resposta com citacoes
 4. NVIDIA knowledge ingestion — base de conhecimento NVIDIA no Qdrant
 5. Recommendations V1 — motor de recomendacao
@@ -647,5 +670,6 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Agents V6 | `docs/agents/agents_v6_checkpoint_postgres.md` |
 | Agents V7 (current) | `docs/agents/agents_v7_human_in_the_loop.md` |
 | Embeddings V1 | `docs/embeddings/embeddings_v1_contratos_e_fake.md` |
-| Embeddings V2+V3 (current) | `docs/embeddings/embeddings_v2_v3_provider_real_e_qdrant.md` |
+| Embeddings V2+V3 | `docs/embeddings/embeddings_v2_v3_provider_real_e_qdrant.md` |
+| Embeddings V4 (current) | `docs/embeddings/embeddings_v4_worker_em_lote.md` |
 | Estado atual do projeto | `docs/estado_atual_do_projeto.md` |

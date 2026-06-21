@@ -2,6 +2,7 @@
 
 from apps.api.src.modules.embeddings.application.dto import (
     ChunkEmbeddingRecord,
+    ChunkEmbeddingView,
     GenerateChunkEmbeddingInput,
     UpsertChunkEmbeddingInput,
 )
@@ -25,7 +26,9 @@ class UpsertChunkEmbedding:
         self._generate_chunk_embedding = generate_chunk_embedding
         self._vector_repository = vector_repository
 
-    async def execute(self, upsert_input: UpsertChunkEmbeddingInput) -> None:
+    async def execute(
+        self, upsert_input: UpsertChunkEmbeddingInput
+    ) -> ChunkEmbeddingView:
         view = await self._generate_chunk_embedding.execute(
             GenerateChunkEmbeddingInput(
                 chunk_id=upsert_input.chunk_id, text=upsert_input.text
@@ -41,3 +44,4 @@ class UpsertChunkEmbedding:
                 model_name=view.model_name,
             )
         )
+        return view

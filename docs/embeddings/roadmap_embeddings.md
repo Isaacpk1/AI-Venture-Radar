@@ -22,11 +22,11 @@ Qdrant guarda vetores e metadados de busca.
 
 | Versao | Status | Objetivo |
 |---|---|---|
-| Embeddings V1 | Futuro | Contratos e provider fake |
-| Embeddings V2 | Futuro | Provider real de embedding |
-| Embeddings V3 | Futuro | Persistencia no Qdrant |
-| Embeddings V4 | Futuro | Batch worker |
-| Embeddings V5 | Futuro | Reembedding e metricas |
+| Embeddings V1 | Implementado | Contratos e provider fake |
+| Embeddings V2 | Implementado | Provider real de embedding |
+| Embeddings V3 | Implementado | Persistencia no Qdrant |
+| Embeddings V4 | Implementado | Batch worker |
+| Embeddings V5 | Implementado | Base de reembedding e metricas operacionais |
 
 ---
 
@@ -92,8 +92,35 @@ Entregaveis:
 
 Entregaveis:
 
-- detectar chunks que mudaram;
-- reprocessar embeddings;
-- medir custo;
-- medir latencia;
-- registrar modelo usado e dimensao.
+- registrar `content_hash` por chunk processado;
+- reprocessar embeddings via novo `EmbeddingJob` para o mesmo documento;
+- medir latencia por chunk e latencia total do job;
+- medir caracteres e tokens estimados de entrada;
+- registrar modelo usado e dimensao por chunk;
+- expor agregados do job na API.
+
+Criterio de pronto:
+
+```txt
+um job de embeddings concluido mostra quantos chunks venceram/falharam,
+qual volume de entrada foi processado e quais metadados de embedding foram
+gravados por chunk
+```
+
+Observacao: custo monetario real ainda nao e medido porque o provider atual
+nao retorna preco nem uso real de tokens. A V5 registra tokens estimados para
+observabilidade inicial; custo real fica para uma futura camada de billing por
+provider.
+
+---
+
+## Proximo passo recomendado
+
+```txt
+Startups V1 - modelo relacional de startups e evidencias
+```
+
+Motivo: scraping, ingestion e embeddings ja formam a primeira linha
+`URL -> evidencia validada -> documento/chunks -> vetores`. Agora o sistema
+precisa consolidar essas evidencias em entidades de startup antes de RAG,
+recommendations e briefing.
