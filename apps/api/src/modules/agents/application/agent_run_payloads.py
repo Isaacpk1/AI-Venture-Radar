@@ -11,6 +11,9 @@ from apps.api.src.modules.agents.application.dto import (
     EvidenceValidationResult,
     ExtractionInput,
     ExtractionResult,
+    NvidiaRagCitation,
+    NvidiaRagInput,
+    NvidiaRagResult,
     SearchPlanInput,
     SearchPlanResult,
     SearchQuerySuggestion,
@@ -218,6 +221,43 @@ def extraction_result_from_payload(payload: dict[str, object]) -> ExtractionResu
             else None
         ),
         customers=[str(name) for name in payload.get("customers", [])],
+    )
+
+
+def nvidia_rag_input_from_payload(payload: dict[str, object]) -> NvidiaRagInput:
+    """Reconstrói ``NvidiaRagInput`` a partir do JSON persistido."""
+
+    return NvidiaRagInput(
+        query=str(payload["query"]),
+        limit=int(payload.get("limit", 5)),
+    )
+
+
+def nvidia_rag_result_to_payload(result: NvidiaRagResult) -> dict[str, object]:
+    """Serializa resultado do NVIDIA RAG Agent para JSON."""
+
+    return {
+        "answer": result.answer,
+        "citations": [
+            {"source_url": citation.source_url, "quote": citation.quote}
+            for citation in result.citations
+        ],
+    }
+
+
+def nvidia_rag_result_from_payload(payload: dict[str, object]) -> NvidiaRagResult:
+    """Reconstrói resultado do NVIDIA RAG Agent quando necessario em testes."""
+
+    return NvidiaRagResult(
+        answer=str(payload["answer"]),
+        citations=[
+            NvidiaRagCitation(
+                source_url=str(item["source_url"]),
+                quote=str(item["quote"]),
+            )
+            for item in payload.get("citations", [])
+            if isinstance(item, dict)
+        ],
     )
 
 

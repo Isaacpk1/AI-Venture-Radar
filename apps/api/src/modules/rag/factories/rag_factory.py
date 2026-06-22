@@ -9,6 +9,9 @@ from apps.api.src.modules.rag.application.ports import LexicalSearchRepository, 
 from apps.api.src.modules.rag.application.public.answer_generator import (
     RagAnswerGenerator,
 )
+from apps.api.src.modules.rag.application.public.question_answerer import (
+    RagQuestionAnswerer,
+)
 from apps.api.src.modules.rag.application.use_cases.answer_question import (
     AnswerQuestion,
 )
@@ -74,3 +77,14 @@ class RagFactory:
             search_evidence=RagFactory.create_search_evidence(),
             answer_generator=RagFactory.create_answer_generator(),
         )
+
+    @staticmethod
+    def create_question_answerer() -> RagQuestionAnswerer:
+        """Expoe `AnswerQuestion` pelo contrato publico para outros modulos.
+
+        Mesmo padrao de `RecommendationsFactory.create_recommendation_generator()`:
+        a classe concreta ja implementa o contrato direto, este metodo so
+        existe para dar um nome de chamada explicito a quem consome de fora.
+        """
+
+        return RagFactory.create_answer_question()

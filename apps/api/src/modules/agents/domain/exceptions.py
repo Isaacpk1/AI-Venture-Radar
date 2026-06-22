@@ -34,6 +34,10 @@ class AgentExtractionError(AgentError):
     """O agente nao conseguiu extrair dados estruturados das evidencias."""
 
 
+class AgentRagQueryError(AgentError):
+    """O agente nao conseguiu consultar a base de conhecimento NVIDIA via RAG."""
+
+
 class AgentTaskDispatchError(AgentError):
     """O job de agente nao foi publicado na fila."""
 

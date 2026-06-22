@@ -51,6 +51,8 @@ Qdrant sejam recuperaveis por filtro de corpus.
 
 ## Limites
 
-Este slice ainda usa advance explicito via API. O proximo incremento natural e
-criar o dispatcher/worker dedicado para reenfileirar `UrlIngestionJob`
-automaticamente ate estado terminal.
+Este slice usava advance explicito via API. O dispatcher/worker dedicado para
+reenfileirar `UrlIngestionJob` automaticamente ate estado terminal foi
+entregue depois — ver `docs/orchestration/orchestration_v2_worker_automatico.md`.
+A rota `POST /url-ingestion/jobs/{id}/advance` continua existindo, agora so
+para destravar manualmente um job que esgotou os retries automaticos.

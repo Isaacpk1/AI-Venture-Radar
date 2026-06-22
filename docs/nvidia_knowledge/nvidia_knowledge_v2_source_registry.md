@@ -104,21 +104,23 @@ Resposta:
 }
 ```
 
-Esta entrega cria jobs rastreaveis em `url_ingestion_jobs`. O avanço ainda é
-explicito via `POST /url-ingestion/jobs/{job_id}/advance`; o worker dedicado
-para reenfileirar automaticamente fica como proximo incremento.
+Esta entrega cria jobs rastreaveis em `url_ingestion_jobs`. O avanco agora e'
+automatico via `workers/orchestration_worker/` (fila `url_ingestion`), ver
+`docs/orchestration/orchestration_v2_worker_automatico.md`; `POST
+/url-ingestion/jobs/{job_id}/advance` continua disponivel so para destravar
+manualmente um job que esgotou os retries automaticos.
 
 ## Proximo Passo
 
-Criar o executor de ingestao NVIDIA:
+Rodar o executor de ingestao NVIDIA contra as fontes reais:
 
 ```txt
 NvidiaKnowledgeSourceRegistry
 -> url_ingestion_job (entregue)
--> advance/polling do resultado aprovado
+-> advance automatico via worker (entregue)
 -> ingestion com source_type=nvidia_knowledge
 -> embedding job
--> RAG filtrado
+-> RAG filtrado (validar fim a fim com fontes reais)
 ```
 
 Pre-requisito entregue apos este registry: `ingestion_jobs.source_type`, para

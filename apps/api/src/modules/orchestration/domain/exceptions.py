@@ -31,3 +31,7 @@ class UrlIngestionStillProcessingError(OrchestrationError):
     Nao e' uma falha real: o Dramatiq reentrega a mensagem com backoff
     (mesmo padrao de ``EmbeddingJobPartiallyFailedError`` em embeddings).
     """
+
+
+class UrlIngestionTaskDispatchError(OrchestrationError):
+    """Falha ao publicar o job na fila de url ingestion."""

@@ -24,8 +24,9 @@ from apps.api.src.modules.orchestration.infrastructure.embeddings_adapters.embed
 from apps.api.src.modules.orchestration.infrastructure.ingestion_adapters.ingestion_adapter import (
     IngestionModulePort,
 )
-from apps.api.src.modules.orchestration.infrastructure.queue.noop_url_ingestion_dispatcher import (
-    NoopUrlIngestionTaskDispatcher,
+from apps.api.src.modules.orchestration.infrastructure.queue.dramatiq_url_ingestion_dispatcher import (
+    DramatiqUrlIngestionJobPublisher,
+    DramatiqUrlIngestionTaskDispatcher,
 )
 from apps.api.src.modules.orchestration.infrastructure.scraping_adapters.scraping_adapter import (
     ScrapingModulePort,
@@ -46,6 +47,7 @@ from apps.api.src.modules.recommendations.factories.recommendations_factory impo
     RecommendationsFactory,
 )
 from apps.api.src.modules.scraping.factories.scraping_factory import ScrapingFactory
+from apps.api.src.shared.queue.dramatiq_broker import broker
 
 
 class OrchestrationFactory:
@@ -74,10 +76,16 @@ class OrchestrationFactory:
         return ListAnalysisJobs(PostgresAnalysisUnitOfWork)
 
     @staticmethod
+    def create_url_ingestion_task_dispatcher() -> DramatiqUrlIngestionTaskDispatcher:
+        return DramatiqUrlIngestionTaskDispatcher(
+            DramatiqUrlIngestionJobPublisher(broker)
+        )
+
+    @staticmethod
     def create_create_url_ingestion_job() -> CreateUrlIngestionJob:
         return CreateUrlIngestionJob(
             PostgresAnalysisUnitOfWork,
-            NoopUrlIngestionTaskDispatcher(),
+            OrchestrationFactory.create_url_ingestion_task_dispatcher(),
         )
 
     @staticmethod

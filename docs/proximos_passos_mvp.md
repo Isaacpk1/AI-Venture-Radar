@@ -9,7 +9,7 @@ para aproximar o projeto do brief original completo.
 
 ```txt
 Scraping V8
-Agents V9
+Agents V10
 Ingestion V1
 Embeddings V5
 Startups V3
@@ -19,6 +19,7 @@ NVIDIA Knowledge V2 source registry + url_ingestion_jobs
 Recommendations V1
 Briefing V1
 Orchestration V1
+Orchestration V2 parcial - url_ingestion_jobs + worker automatico (scraping->ingestion->embeddings)
 ```
 
 Fluxo backend disponivel:
@@ -59,19 +60,23 @@ Valor default: `startup_evidence`. Conteudo NVIDIA devera usar
 
 As URLs oficiais NVIDIA ja foram registradas em `/nvidia-knowledge/sources`.
 A rota `POST /nvidia-knowledge/ingestion/jobs` ja cria `url_ingestion_jobs`
-com `source_type="nvidia_knowledge"`. Ainda falta automatizar o advance desses
-jobs por worker/dispatcher ate embedding concluido.
+com `source_type="nvidia_knowledge"`. O advance desses jobs ate embedding
+concluido agora e automatico (`workers/orchestration_worker/`, fila
+`url_ingestion`) — falta rodar contra as fontes reais e validar no RAG
+filtrado.
 
 ### 2. Agentes Restantes Do Brief
 
 ```txt
-Agents V10 - NVIDIA RAG Agent
+Agents V10 - NVIDIA RAG Agent - ENTREGUE
 Agents V11 - Recommendation Agent
 Agents V12 - Briefing Agent
 ```
 
 Eles devem orquestrar contratos publicos existentes, nao reimplementar regra de
-negocio dentro dos grafos.
+negocio dentro dos grafos. O NVIDIA RAG Agent (V10) e o primeiro exemplo
+disso: chama `rag/application/public/question_answerer.py` como tool, sem
+LLM client proprio.
 
 ### 3. Recommendation Mais Rica
 
@@ -121,8 +126,8 @@ deploy/dev setup reprodutivel
 2. NVIDIA Knowledge V2 fundacao source_type - feito
 3. NVIDIA Knowledge V2 source registry - feito
 4. NVIDIA Knowledge V2 submissao do registry para url_ingestion_jobs - feito
-5. Orchestration V2 worker/dispatcher para advance automatico
-6. NVIDIA RAG Agent
+5. Orchestration V2 worker/dispatcher para advance automatico - feito
+6. NVIDIA RAG Agent - feito
 7. Recommendation Agent + enriquecimento de recommendations
 8. Briefing Agent
 9. Orchestration V2 por URL bruta

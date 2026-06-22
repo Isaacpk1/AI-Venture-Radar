@@ -31,7 +31,7 @@ visiveis so olhando o roadmap interno.
 | # | Entregavel do case | Estado | Observacao |
 |---|---|---|---|
 | 1 | Pipeline de scraping | Completo | Scraping V8 |
-| 2 | Sistema multiagente (LangGraph) | Parcial (3/8 agentes) | Ver secao 3 |
+| 2 | Sistema multiagente (LangGraph) | Parcial (5/8 agentes) | Ver secao 3 |
 | 3 | RAG NVIDIA com reranking | Completo | RAG V4: busca hibrida (vetorial+lexical, RRF) + Cohere Rerank |
 | 4 | Motor de recomendacao | Parcial | Recommendations V1 entrega o cruzamento, mas determinístico por keyword; classificacao da startup ja existe (Agents V9/Startups V3) mas `recommendations` ainda nao a consulta, e nao usa o RAG |
 | 5 | Interface web | Nao iniciado | Stack ja decidida em CLAUDE.md (Next.js + TS + Tailwind + TanStack Query), zero codigo |
@@ -41,19 +41,18 @@ visiveis so olhando o roadmap interno.
 
 ## 3. Sistema multiagente: o que falta e por que nao e "atraso"
 
-O brief pede 8 agentes LangGraph. Hoje existem 3 implementados como
-agentes de fato (`agents` module V9) e os outros 3 (Extractor, NVIDIA RAG,
-Recommendation, Briefing — 4, na verdade, ver tabela) ainda sao
-**modulos deterministicos de codigo**, nao agentes, ou nem existem ainda:
+O brief pede 8 agentes LangGraph. Hoje existem 5 implementados como
+agentes de fato (`agents` module V10) e os outros 2 (Recommendation,
+Briefing) ainda sao **modulos deterministicos de codigo**, nao agentes:
 
 | Agente do brief | Estado | Onde vive hoje |
 |---|---|---|
 | Search Planner Agent | Implementado | `agents` (SearchPlanningGraph) |
 | Scraper Agent | Implementado (nao e um "agente" LLM, e o pipeline `scraping`) | `scraping` V8 |
-| Extractor Agent | Nao implementado | planejado como `agents` V8 ("Extraction Agent", Futuro) |
+| Extractor Agent | **Implementado** | `agents` V8 (`docs/agents/agents_v8_extraction_agent.md`) |
 | Evidence Validator Agent | Implementado | `agents` (EvidenceValidationGraph) |
 | Startup Classifier Agent | **Implementado** | `agents` V9 + `startups` V3 (`docs/agents/agents_v9_startup_classifier.md`) |
-| NVIDIA RAG Agent | Nao implementado como agente | hoje e so `rag` V2 (modulo, sem agente por cima); planejado como `agents` V10 |
+| NVIDIA RAG Agent | **Implementado** | `agents` V10, chama `rag/application/public/` como tool (`docs/agents/agents_v10_nvidia_rag_agent.md`); util de verdade so depois que NVIDIA Knowledge V2 ingerir docs reais |
 | Recommendation Agent | Nao implementado como agente | `recommendations` V1 resolve a logica via regra de codigo; "Agent Recommendation" ja era planejado como `recommendations` V3 e `agents` V11 |
 | Briefing Agent | Nao implementado como agente | `briefing` V1 resolve via template determinístico; "Agente de Briefing" ja era planejado como `briefing` V2 e `agents` V12 |
 
@@ -119,8 +118,8 @@ reranking via Cohere Rerank, degradacao
 ```
 
 Ver `docs/rag/rag_v3_busca_hibrida.md` e `docs/rag/rag_v4_reranking.md`.
-Agora o futuro `NVIDIA RAG Agent` (item 4 da secao 8) tem uma base de
-recuperacao da qualidade que o brief espera.
+O `NVIDIA RAG Agent` (Agents V10, item 4 da secao 8, ja ENTREGUE) usa essa
+base de recuperacao como tool.
 
 ---
 
@@ -231,20 +230,23 @@ pipeline estiver mais maduro.
    Entregavel 3 por completo; ver docs/rag/rag_v3_busca_hibrida.md e
    docs/rag/rag_v4_reranking.md).
 
-4. Construir os 4 agentes LangGraph que ainda faltam (Extractor, NVIDIA
-   RAG, Recommendation, Briefing) como orquestradores sobre os modulos
-   deterministicos existentes — fecha o Entregavel 2. Decisao de design
-   confirmada e ja aplicada no Startup Classifier (tool-calling sobre o
-   contrato publico do modulo deterministico, mesmo padrao repetido no
-   Extraction Agent). NVIDIA RAG Agent agora tem RAG V3/V4 como base de
-   recuperacao pronta. Ordem combinada com o usuario:
+4. Construir os 2 agentes LangGraph que ainda faltam (Recommendation,
+   Briefing) como orquestradores sobre os modulos deterministicos
+   existentes — fecha o Entregavel 2. Decisao de design confirmada e ja
+   aplicada no Startup Classifier, repetida no Extraction Agent e no
+   NVIDIA RAG Agent (tool-calling sobre o contrato publico do modulo
+   deterministico, sem LLM client proprio quando o modulo chamado ja
+   gera a resposta). Ordem combinada com o usuario:
 
    ```txt
    Extractor (Agents V8)         ENTREGUE (docs/agents/agents_v8_extraction_agent.md)
+   NVIDIA RAG Agent (V10)        ENTREGUE (docs/agents/agents_v10_nvidia_rag_agent.md);
+                                  chama rag/application/public/ como tool
    NVIDIA Knowledge V2           PROXIMO PASSO (ingestao real de docs
                                   NVIDIA via scraping/ingestion/embeddings,
                                   ver docs/nvidia_knowledge/roadmap_nvidia_knowledge.md)
-   NVIDIA RAG Agent (V10)        depende do item acima
+                                  -- nao bloqueia mais o agente em si, so
+                                  a qualidade das respostas dele
    Recommendation Agent (V11)    sem bloqueio adicional
    Briefing Agent (V12)          sem bloqueio adicional
    ```

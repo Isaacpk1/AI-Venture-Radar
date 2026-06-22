@@ -38,6 +38,7 @@ class AgentType(StrEnum):
     SEARCH_PLANNING = "search_planning"
     STARTUP_CLASSIFIER = "startup_classifier"
     EXTRACTION = "extraction"
+    NVIDIA_RAG = "nvidia_rag"
 
 
 class StartupMaturityLevel(StrEnum):

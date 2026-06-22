@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
-## Authoritative Current State (2026-06-21)
+## Authoritative Current State (2026-06-22)
 
 Use this section as the source of truth when older historical sections below
 disagree.
@@ -13,7 +13,7 @@ Implemented:
 
 ```txt
 Scraping V8
-Agents V9 (+ Startup Classifier Agent, Extraction Agent V8)
+Agents V10 (+ Startup Classifier Agent, Extraction Agent V8, NVIDIA RAG Agent V10)
 Ingestion V1 + ingestion_worker
 Embeddings V5 + embedding_worker
 Startups V2 + V3 (slices iniciais: campos estruturados + classificacao de maturidade em IA)
@@ -22,7 +22,7 @@ NVIDIA Knowledge V1
 NVIDIA Knowledge V2 foundation (`source_type` + source registry + url ingestion jobs)
 Recommendations V1
 Briefing V1
-Orchestration V1 + V2 partial URL ingestion jobs
+Orchestration V1 + V2 partial URL ingestion jobs + orchestration_worker automatico
 ```
 
 MVP macro backlog (`docs/roadmap_proximos_passos.md`) is complete, and the
@@ -37,13 +37,13 @@ Pending:
 Frontend
 Auth
 Production observability
-Orchestration V2 - automatic worker/dispatcher for URL ingestion jobs and continuation to briefing
+Orchestration V2 - URL bruta ate startup/recommendations/briefing (worker automatico de scraping->ingestion->embeddings ja entregue)
 ```
 
 Recent validation:
 
 ```txt
-405 passed, 1 warning
+402 passed, 13 skipped (sem Postgres/Redis/Qdrant locais ativos nesta verificacao)
 Integration tests are skipped explicitly when local Postgres/Redis/Qdrant
 are not reachable; with infra active, they run normally.
 ```
@@ -59,12 +59,18 @@ via `documents.source_type`, Qdrant payload `source_type`, optional RAG
 filters, `GET /nvidia-knowledge/sources`, and
 `POST /nvidia-knowledge/ingestion/jobs` to create `url_ingestion_jobs`
 with `source_type="nvidia_knowledge"`. Orchestration V2 now has
-`url_ingestion_jobs` plus explicit advance through scraping -> ingestion ->
-embeddings. Next is the automatic worker/dispatcher for these jobs, then
-NVIDIA RAG Agent (V10) -> Recommendation Agent (V11) -> Briefing Agent (V12). wiring
-Startup.ai_maturity_level into recommendations' scoring is a smaller
-separate follow-up, not done yet. Frontend and integration hardening remain
-open and can run in parallel.
+`url_ingestion_jobs` plus `workers/orchestration_worker/` reenfileirando
+automaticamente via Dramatiq (fila `url_ingestion`, actor
+`advance_url_ingestion_job`) ate completed|failed, substituindo o advance
+manual. NVIDIA RAG Agent (V10) is done: `NvidiaRagGraph` calls
+`rag/application/public/question_answerer.py` as a tool (no own LLM
+client), filtered to `source_type="nvidia_knowledge"`. It has no
+synchronous consumer yet — reachable only via the generic `agent_runs`
+queue until Recommendation Agent (V11) and Briefing Agent (V12) exist to
+call it as a tool. Next is Recommendation Agent (V11) -> Briefing Agent
+(V12). wiring Startup.ai_maturity_level into recommendations' scoring is
+a smaller separate follow-up, not done yet. Frontend and integration
+hardening remain open and can run in parallel.
 ```
 
 Relevant docs:
@@ -231,6 +237,7 @@ workers/                ← separate processes; thin delegators only
   ingestion_worker/
   embedding_worker/
   agent_worker/
+  orchestration_worker/ ← consome fila url_ingestion, avanca UrlIngestionJob
 packages/
   shared/               ← cross-process DTOs, event types, constants
   prompts/              ← versioned prompt files (.md)
@@ -312,11 +319,11 @@ Testes: 130 (unit + integration)
 | V7 | Entregue | Presentation layer (GET + POST /resume) + interrupt() real em node |
 | V8 | Entregue | Extraction Agent |
 | V9 | Entregue | Startup Classifier Agent |
-| V10 | Futuro | NVIDIA Knowledge Agent |
+| V10 | Entregue | NVIDIA RAG Agent |
 | V11 | Futuro | Recommendation Agent |
 | V12 | Futuro | Briefing Agent |
 
-**Versao atual: V9** (V8 entregue depois, fora de ordem — desbloqueado pelo Startups V2)
+**Versao atual: V10**
 
 O que a V8 entregou (entregue depois da V9, desbloqueado pelo Startups V2):
 - `AgentType.EXTRACTION` + `ExtractedFundingStage` (enum, vocabulario interno, mesmos valores de `startups.FundingStage`)
@@ -339,6 +346,18 @@ O que a V9 entregou:
 
 Documento da entrega: `docs/agents/agents_v9_startup_classifier.md`.
 Contraparte de dados: `docs/startups/startups_v3_classificacao_maturidade.md` (Startups V3).
+
+O que a V10 entregou:
+- `AgentType.NVIDIA_RAG` (vocabulario interno, sem equivalente em outro modulo — este agente nao tem "consumidor com vocabulario proprio" como Extraction/Startup Classifier tem em `startups`)
+- `NvidiaRagInput`/`NvidiaRagCitation`/`NvidiaRagResult` (`application/dto.py`) + `NvidiaRagToolPort` (`application/ports.py`, porta interna para chamar `rag` como tool)
+- `NvidiaRagGraph` (`graphs/nvidia_rag/`) — copia estrutural de `ExtractionGraph` (3 nodes, sem interrupt); implementa o contrato publico novo `NvidiaRagService` (`application/public/nvidia_rag.py`)
+- Diferente dos demais agentes: **sem LLM client proprio**. O node `query_rag` chama `RagQuestionAnswererAdapter` (`infrastructure/rag_adapters/`), que implementa `NvidiaRagToolPort` chamando `rag/application/public/question_answerer.py` direto — a geracao de resposta com citacoes ja existe em `rag` V4, reimplementar seria duplicar custo de LLM e violar a regra de nao reimplementar logica de outro modulo
+- Mudanca cruzada em `rag` (continua V4, nao e nova versao): novo contrato publico `RagQuestionAnswerer`; `AnswerQuestion` passou a implementar direto (`answer()` tem a logica, `execute()` delega — mesmo padrao de `GenerateRecommendations`/`GenerateBriefing`); `RagFactory.create_question_answerer()`
+- `AgentType.NVIDIA_RAG` wired em `ExecuteAgentJob`/`ResumeAgentJob`; `AgentsFactory.create_nvidia_rag_service()` segue a mesma regra dos outros 4 agentes (sem `GEMINI_API_KEY`, devolve `None`)
+- Sem consumidor sincrono dedicado ainda (Recommendation Agent V11 e Briefing Agent V12, que vao usa-lo como tool, nao existem); acionavel hoje pela fila generica `agent_runs` com `agent_type=nvidia_rag`
+- Testes: 9 unit (+7 em `agents`: 2 adapter, 2 grafo, 2 `execute_agent_job`, 1 `resume_agent_job`; +0 em `rag`, os testes existentes de `AnswerQuestion.execute()` continuam cobrindo a logica movida para `answer()`)
+
+Documento da entrega: `docs/agents/agents_v10_nvidia_rag_agent.md`.
 
 O que a V6 entregou:
 - `PostgresCheckpointer` em `infrastructure/checkpoints/` wraps `AsyncPostgresSaver` (lazy init)
@@ -685,6 +704,28 @@ O que a V2 parcial entregou:
 
 Documento da entrega parcial: `docs/orchestration/orchestration_v2_url_ingestion_jobs.md`.
 
+Extensao feita depois (continua V2 parcial — fecha o gap do "advance
+explicito" deixado pelo slice anterior, ainda nao cobre URL bruta ate
+startup/briefing):
+- `DramatiqUrlIngestionJobPublisher` + `DramatiqUrlIngestionTaskDispatcher`
+  (`infrastructure/queue/dramatiq_url_ingestion_dispatcher.py`) — mesmo
+  padrao de `DramatiqEmbeddingJobPublisher`/`DramatiqEmbeddingTaskDispatcher`
+  (constroi `dramatiq.Message` direto, sem importar o actor do worker)
+- `workers/orchestration_worker/` — consome a fila `url_ingestion`, actor
+  `advance_url_ingestion_job`, chama `AdvanceUrlIngestionJob.execute()`;
+  `max_retries=50`, backoff 5s-5min (~4h de tentativas automaticas)
+- `UrlIngestionTaskDispatchError` (`domain/exceptions.py`)
+- `OrchestrationFactory.create_create_url_ingestion_job()` agora publica
+  na fila real; `NoopUrlIngestionTaskDispatcher` removido (sem uso)
+- A fila e' o proprio loop de polling: o worker levanta
+  `UrlIngestionStillProcessingError` (ja existia) e o Dramatiq reentrega a
+  mesma mensagem com backoff ate completed|failed
+- `POST /url-ingestion/jobs/{id}/advance` continua existindo para
+  destravar manualmente um job que esgotou os retries automaticos
+- Testes: +3 unit (`test_dramatiq_url_ingestion_dispatcher.py`)
+
+Documento da entrega: `docs/orchestration/orchestration_v2_worker_automatico.md`.
+
 ---
 
 ## Database state
@@ -745,16 +786,23 @@ url_ingestion_jobs      orquestracao URL -> scraping -> ingestion -> embeddings 
 | Modulo | Testes | Ultima verificacao |
 |---|---|---|
 | scraping | 130 | 2026-06-16 |
-| agents | 67 unit + 1 integracao | 2026-06-22 |
+| agents | 74 unit + 1 integracao | 2026-06-22 |
 | ingestion | 33 unit + 1 integracao | 2026-06-21 |
 | embeddings | 56 unit + 2 integracao | 2026-06-21 |
 | startups | 27 unit + 1 integracao | 2026-06-22 |
-| rag | 16 unit + 1 integracao | 2026-06-22 |
+| rag | 17 unit + 1 integracao | 2026-06-22 |
 | nvidia_knowledge | 15 unit | 2026-06-22 |
 | recommendations | 19 unit + 1 integracao | 2026-06-21 |
 | briefing | 15 unit + 1 integracao | 2026-06-21 |
-| orchestration | 11 unit + 1 integracao | 2026-06-22 |
-| **Total** | **405 passed (Postgres/Redis/Qdrant locais ativos)** | **2026-06-22** |
+| orchestration | 14 unit + 1 integracao | 2026-06-22 |
+| **Total** | **402 passed + 13 skipped sem infra local (415 esperado com Postgres/Redis/Qdrant ativos)** | **2026-06-22** |
+
+Nota: as linhas `ingestion` ate `briefing` (exceto `agents`/`rag`) nao
+foram reconferidas nesta verificacao — refletem a ultima contagem
+conhecida, nao necessariamente o numero exato apos as entregas mais
+recentes de `nvidia_knowledge`/`orchestration`. `agents`, `rag`,
+`orchestration` e o `Total` foram medidos de novo nas duas ultimas
+entregas (Orchestration V2 worker + Agents V10).
 
 Comando para verificar:
 ```bash
@@ -1007,8 +1055,9 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Agents V5 | `docs/agents/agents_v5_executar_grafos_pelo_agent_run.md` |
 | Agents V6 | `docs/agents/agents_v6_checkpoint_postgres.md` |
 | Agents V7 | `docs/agents/agents_v7_human_in_the_loop.md` |
-| Agents V8 (current) | `docs/agents/agents_v8_extraction_agent.md` |
-| Agents V9 (current) | `docs/agents/agents_v9_startup_classifier.md` |
+| Agents V8 | `docs/agents/agents_v8_extraction_agent.md` |
+| Agents V9 | `docs/agents/agents_v9_startup_classifier.md` |
+| Agents V10 (current) | `docs/agents/agents_v10_nvidia_rag_agent.md` |
 | Embeddings V1 | `docs/embeddings/embeddings_v1_contratos_e_fake.md` |
 | Embeddings V2+V3 | `docs/embeddings/embeddings_v2_v3_provider_real_e_qdrant.md` |
 | Embeddings V4 | `docs/embeddings/embeddings_v4_worker_em_lote.md` |
@@ -1028,6 +1077,7 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Briefing roadmap | `docs/briefing/roadmap_briefing.md` |
 | Orchestration V1 (current) | `docs/orchestration/orchestration_v1_analysis_jobs.md` |
 | Orchestration V2 URL ingestion jobs | `docs/orchestration/orchestration_v2_url_ingestion_jobs.md` |
+| Orchestration V2 worker automatico (current) | `docs/orchestration/orchestration_v2_worker_automatico.md` |
 | Orchestration roadmap | `docs/orchestration/roadmap_orchestration.md` |
 | Diagnostico vs. case original + prioridades | `docs/diagnostico_case_original_e_novas_prioridades.md` |
 | Estado atual do projeto | `docs/estado_atual_do_projeto.md` |

@@ -80,11 +80,12 @@ Entregaveis:
 - criar/disparar `scraping_job` a partir da URL - entregue;
 - persistir `url_ingestion_jobs` com `source_type` - entregue;
 - avançar scraping -> ingestion -> embeddings por chamada explicita - entregue;
-- worker/dispatcher para reenfileirar advance ate estado terminal;
+- worker/dispatcher para reenfileirar advance ate estado terminal - entregue;
 - seguir para startups/recommendations/briefing;
 - criar ou associar a `Startup` correspondente.
 
-Documento da entrega parcial: `docs/orchestration/orchestration_v2_url_ingestion_jobs.md`.
+Documentos da entrega parcial: `docs/orchestration/orchestration_v2_url_ingestion_jobs.md`
+e `docs/orchestration/orchestration_v2_worker_automatico.md`.
 
 ---
 

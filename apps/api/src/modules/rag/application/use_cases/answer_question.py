@@ -9,6 +9,9 @@ from apps.api.src.modules.rag.application.dto import (
 from apps.api.src.modules.rag.application.public.answer_generator import (
     RagAnswerGenerator,
 )
+from apps.api.src.modules.rag.application.public.question_answerer import (
+    RagQuestionAnswerer,
+)
 from apps.api.src.modules.rag.application.public.retriever import (
     Retriever,
 )
@@ -18,7 +21,7 @@ from apps.api.src.modules.rag.domain.exceptions import (
 )
 
 
-class AnswerQuestion:
+class AnswerQuestion(RagQuestionAnswerer):
     """Recupera evidencias e gera resposta fundamentada."""
 
     def __init__(
@@ -30,7 +33,7 @@ class AnswerQuestion:
         self._search_evidence = search_evidence
         self._answer_generator = answer_generator
 
-    async def execute(self, answer_input: AnswerQuestionInput) -> RagAnswerView:
+    async def answer(self, answer_input: AnswerQuestionInput) -> RagAnswerView:
         if self._answer_generator is None:
             raise RagAnswerServiceUnavailableError(
                 "Servico de resposta RAG nao configurado (verifique GEMINI_API_KEY)."
@@ -54,3 +57,8 @@ class AnswerQuestion:
                 evidences=search_view.results,
             )
         )
+
+    async def execute(self, answer_input: AnswerQuestionInput) -> RagAnswerView:
+        """Alias mantido para a rota `/rag/answer` existente."""
+
+        return await self.answer(answer_input)

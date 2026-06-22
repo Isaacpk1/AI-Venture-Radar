@@ -159,6 +159,35 @@ class ExtractionResult:
 
 
 @dataclass(frozen=True)
+class NvidiaRagInput:
+    """Contexto entregue ao NVIDIA RAG Agent.
+
+    O agente consulta apenas a base de conhecimento NVIDIA (``rag`` filtrado
+    por ``source_type="nvidia_knowledge"``) — isso e' decisao interna do
+    adaptador que chama ``rag``, nao um parametro deste DTO.
+    """
+
+    query: str
+    limit: int = 5
+
+
+@dataclass(frozen=True)
+class NvidiaRagCitation:
+    """Uma citacao usada para fundamentar a resposta do NVIDIA RAG Agent."""
+
+    source_url: str
+    quote: str
+
+
+@dataclass(frozen=True)
+class NvidiaRagResult:
+    """Resposta final produzida pelo NVIDIA RAG Agent, com citacoes."""
+
+    answer: str
+    citations: list[NvidiaRagCitation]
+
+
+@dataclass(frozen=True)
 class CreateAgentRunInput:
     """Entrada para criar uma execucao assincrona de agente."""
 

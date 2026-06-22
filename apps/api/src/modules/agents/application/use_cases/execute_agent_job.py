@@ -7,6 +7,8 @@ from apps.api.src.modules.agents.application.agent_run_payloads import (
     evidence_validation_result_to_payload,
     extraction_input_from_payload,
     extraction_result_to_payload,
+    nvidia_rag_input_from_payload,
+    nvidia_rag_result_to_payload,
     search_plan_input_from_payload,
     search_plan_result_to_payload,
     startup_classification_input_from_payload,
@@ -14,6 +16,9 @@ from apps.api.src.modules.agents.application.agent_run_payloads import (
 )
 from apps.api.src.modules.agents.application.public.extractor import (
     ExtractionService,
+)
+from apps.api.src.modules.agents.application.public.nvidia_rag import (
+    NvidiaRagService,
 )
 from apps.api.src.modules.agents.application.public.search_planner import (
     SearchPlanningService,
@@ -53,12 +58,14 @@ class ExecuteAgentJob:
         search_planning_service: SearchPlanningService | None = None,
         startup_classification_service: StartupClassifierService | None = None,
         extraction_service: ExtractionService | None = None,
+        nvidia_rag_service: NvidiaRagService | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.evidence_validation_service = evidence_validation_service
         self.search_planning_service = search_planning_service
         self.startup_classification_service = startup_classification_service
         self.extraction_service = extraction_service
+        self.nvidia_rag_service = nvidia_rag_service
 
     async def execute(self, *, run_id: UUID) -> None:
         async with self.uow_factory() as uow:
@@ -142,6 +149,17 @@ class ExecuteAgentJob:
                 ex_input, thread_id=thread_id
             )
             return extraction_result_to_payload(result)
+
+        if agent_type is AgentType.NVIDIA_RAG:
+            if self.nvidia_rag_service is None:
+                raise AgentServiceUnavailableError(
+                    "NVIDIA RAG service nao configurado (verifique GEMINI_API_KEY)."
+                )
+            nr_input = nvidia_rag_input_from_payload(input_payload)
+            result = await self.nvidia_rag_service.answer(
+                nr_input, thread_id=thread_id
+            )
+            return nvidia_rag_result_to_payload(result)
 
         raise UnsupportedAgentJobError(
             f"Agent type '{agent_type}' ainda nao tem grafo configurado."

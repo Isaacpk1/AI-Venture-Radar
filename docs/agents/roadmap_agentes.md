@@ -22,7 +22,7 @@ docs/validacao_arquitetural_modulos_workers.md
 | Agents V7 | Implementado | `docs/agents/agents_v7_human_in_the_loop.md` |
 | Agents V8 | Implementado | `docs/agents/agents_v8_extraction_agent.md` |
 | Agents V9 | Implementado | `docs/agents/agents_v9_startup_classifier.md` |
-| Agents V10 | Futuro | NVIDIA Knowledge Agent |
+| Agents V10 | Implementado | `docs/agents/agents_v10_nvidia_rag_agent.md` |
 | Agents V11 | Futuro | Recommendation Agent |
 | Agents V12 | Futuro | Briefing Agent |
 
@@ -124,9 +124,15 @@ Entregue:
 Documento da entrega: `docs/agents/agents_v9_startup_classifier.md`.
 Contraparte de dados: `docs/startups/startups_v3_classificacao_maturidade.md`.
 
-### NVIDIA Knowledge Agent (Agents V10)
+### NVIDIA RAG Agent (Agents V10)
 
-Consulta a base RAG de conhecimento NVIDIA.
+Status:
+
+```txt
+implementado
+```
+
+Consulta a base RAG de conhecimento NVIDIA, com citacoes.
 
 Objetivo:
 
@@ -135,16 +141,36 @@ pergunta/perfil da startup -> trechos relevantes da base NVIDIA, com
 citacoes, para alimentar Recommendation e Briefing Agent
 ```
 
+Entregue:
+
+- `NvidiaRagGraph` (3 nodes, copia estrutural de `ExtractionGraph`, sem
+  interrupt nesta versao) — implementa o contrato publico novo
+  `NvidiaRagService` (`application/public/nvidia_rag.py`);
+- sem LLM client proprio: o node `query_rag` chama
+  `RagQuestionAnswererAdapter`, que implementa a porta interna
+  `NvidiaRagToolPort` chamando `rag/application/public/question_answerer.py`
+  direto, filtrado por `source_type="nvidia_knowledge"` — a geracao de
+  resposta com citacoes ja existe em `rag` V4, este agente so orquestra;
+- `AgentType.NVIDIA_RAG` wired em `ExecuteAgentJob`/`ResumeAgentJob`; sem
+  consumidor sincrono dedicado ainda, acionavel pela fila generica
+  `agent_runs`.
+
 Pre-requisitos:
 
 ```txt
 RAG V3 (busca hibrida vetorial+lexical) e V4 (reranking) - ENTREGUE
 NVIDIA Knowledge V1 com catalogo completo (18 tecnologias) - ENTREGUE
-NVIDIA Knowledge V2 (ingestao real de documentacao NVIDIA via
-  scraping/ingestion/embeddings) - PENDENTE, proximo passo. Sem isso o
-  agente so teria o catalogo estatico para consultar, nao uma base RAG
-  real (ver docs/nvidia_knowledge/roadmap_nvidia_knowledge.md)
 ```
+
+Limite conhecido: o agente esta implementado e funcional, mas so retorna
+resultado util depois que a NVIDIA Knowledge V2 (ingestao real de
+documentacao NVIDIA via scraping/ingestion/embeddings) for executada
+contra as fontes do registry — ainda PENDENTE, ver
+`docs/nvidia_knowledge/roadmap_nvidia_knowledge.md`. Sem isso, uma
+consulta real devolve `RagEvidenceNotFoundError` (sem evidencias indexadas
+com `source_type="nvidia_knowledge"`).
+
+Documento da entrega: `docs/agents/agents_v10_nvidia_rag_agent.md`.
 
 ### Recommendation Agent (Agents V11 = Recommendations V3)
 
@@ -182,19 +208,21 @@ agent -> contratos publicos -> services/use cases/tools -> resultado estruturado
 
 ## Estado atual e proximo passo (atualizado)
 
-Com `Startup Classifier Agent (V9)` e agora `Extraction Agent (V8)`
-implementados, o Entregavel 2 do case ("sistema multiagente") avancou
-para 4/8 agentes reais — ainda faltam 4 dos 8 agentes do brief como
-agentes LangGraph (ver diagnostico, secao 8). Ordem combinada com o
-usuario para fechar essa lacuna:
+Com `Startup Classifier Agent (V9)`, `Extraction Agent (V8)` e agora
+`NVIDIA RAG Agent (V10)` implementados, o Entregavel 2 do case ("sistema
+multiagente") avancou para 5/8 agentes reais — ainda faltam 3 dos 8
+agentes do brief como agentes LangGraph (ver diagnostico, secao 8). Ordem
+combinada com o usuario para fechar essa lacuna:
 
 ```txt
 1. Startup Classifier Agent (V9) - ENTREGUE
 2. Extraction Agent (V8) - ENTREGUE
-3. NVIDIA Knowledge V2 (ingestao real de docs NVIDIA via
-   scraping/ingestion/embeddings) - proximo passo, pre-requisito do
-   NVIDIA Knowledge Agent
-4. NVIDIA Knowledge Agent (V10) - depende de #3
+3. NVIDIA RAG Agent (V10) - ENTREGUE (chama rag/application/public/ como
+   tool; util de verdade so depois que NVIDIA Knowledge V2 rodar contra
+   fontes reais, ver item 4)
+4. NVIDIA Knowledge V2 (ingestao real de docs NVIDIA via
+   scraping/ingestion/embeddings) - pendente, nao bloqueia mais o agente
+   em si, so a qualidade das respostas
 5. Recommendation Agent (V11) e Briefing Agent (V12) - tool-calling sobre
-   os contratos publicos que ja existem
+   os contratos publicos que ja existem, incluindo NvidiaRagService (V10)
 ```

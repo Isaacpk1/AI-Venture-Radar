@@ -10,6 +10,9 @@ from apps.api.src.modules.agents.application.dto import (
     EvidenceValidationResult,
     ExtractionInput,
     ExtractionResult,
+    NvidiaRagCitation,
+    NvidiaRagInput,
+    NvidiaRagResult,
     SearchPlanInput,
     SearchPlanResult,
     SearchQuerySuggestion,
@@ -18,6 +21,9 @@ from apps.api.src.modules.agents.application.dto import (
 )
 from apps.api.src.modules.agents.application.public.extractor import (
     ExtractionService,
+)
+from apps.api.src.modules.agents.application.public.nvidia_rag import (
+    NvidiaRagService,
 )
 from apps.api.src.modules.agents.application.public.search_planner import (
     SearchPlanningService,
@@ -82,6 +88,11 @@ EXTRACTION_PAYLOAD: dict[str, object] = {
     "sector": "LLM customer service",
     "description": "Plataforma de atendimento com LLM proprietario.",
     "evidence_texts": ["Acme foi fundada por Ana Silva, Series A de USD 2M."],
+}
+
+NVIDIA_RAG_PAYLOAD: dict[str, object] = {
+    "query": "O que e o NVIDIA NIM?",
+    "limit": 3,
 }
 
 
@@ -198,6 +209,24 @@ class FakeExtractionService(ExtractionService):
             funding_stage=ExtractedFundingStage.SERIES_A,
             funding_amount_usd=2_000_000.0,
             customers=[],
+        )
+
+
+class FakeNvidiaRagService(NvidiaRagService):
+    async def answer(
+        self,
+        rag_input: NvidiaRagInput,
+        *,
+        thread_id: str | None = None,
+    ) -> NvidiaRagResult:
+        return NvidiaRagResult(
+            answer="NIM e um microservico de inferencia da NVIDIA.",
+            citations=[
+                NvidiaRagCitation(
+                    source_url="https://docs.nvidia.com/nim/",
+                    quote="NIM e um microservico de inferencia.",
+                )
+            ],
         )
 
 
@@ -580,3 +609,63 @@ async def test_thread_id_equals_run_id_string() -> None:
 
     assert len(received_thread_ids) == 1
     assert received_thread_ids[0] == str(run.id)
+
+
+# ---------------------------------------------------------------------------
+# Testes — NVIDIA RAG Agent (V10)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_nvidia_rag_run_completes_with_real_output() -> None:
+    run = AgentRun(
+        id=uuid4(),
+        agent_type=AgentType.NVIDIA_RAG,
+        input_payload=NVIDIA_RAG_PAYLOAD,
+    )
+    runs = {run.id: run}
+    steps = FakeStepRepository()
+
+    use_case = ExecuteAgentJob(
+        uow_factory=make_uow_factory(runs, steps),
+        nvidia_rag_service=FakeNvidiaRagService(),
+    )
+    await use_case.execute(run_id=run.id)
+
+    saved = runs[run.id]
+    assert saved.status is AgentRunStatus.COMPLETED
+    assert saved.output_payload is not None
+    assert saved.output_payload["answer"] == (
+        "NIM e um microservico de inferencia da NVIDIA."
+    )
+    assert saved.output_payload["citations"] == [
+        {
+            "source_url": "https://docs.nvidia.com/nim/",
+            "quote": "NIM e um microservico de inferencia.",
+        }
+    ]
+
+    step = steps.steps[0]
+    assert step.name == "execute_nvidia_rag"
+    assert step.status is AgentStepStatus.COMPLETED
+
+
+@pytest.mark.anyio
+async def test_nvidia_rag_service_none_marks_run_failed() -> None:
+    run = AgentRun(
+        id=uuid4(),
+        agent_type=AgentType.NVIDIA_RAG,
+        input_payload=NVIDIA_RAG_PAYLOAD,
+    )
+    runs = {run.id: run}
+    steps = FakeStepRepository()
+
+    use_case = ExecuteAgentJob(
+        uow_factory=make_uow_factory(runs, steps),
+        nvidia_rag_service=None,
+    )
+    await use_case.execute(run_id=run.id)
+
+    saved = runs[run.id]
+    assert saved.status is AgentRunStatus.FAILED
+    assert "AgentServiceUnavailableError" in (saved.error_message or "")

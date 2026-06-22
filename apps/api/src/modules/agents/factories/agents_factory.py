@@ -11,6 +11,9 @@ from apps.api.src.modules.agents.application.ports import AgentTaskDispatcher
 from apps.api.src.modules.agents.application.public.extractor import (
     ExtractionService,
 )
+from apps.api.src.modules.agents.application.public.nvidia_rag import (
+    NvidiaRagService,
+)
 from apps.api.src.modules.agents.application.public.semantic_investigator import (
     EvidenceValidationService,
 )
@@ -36,6 +39,7 @@ from apps.api.src.modules.agents.graphs.evidence_validation.graph import (
     EvidenceValidationGraph,
 )
 from apps.api.src.modules.agents.graphs.extraction.graph import ExtractionGraph
+from apps.api.src.modules.agents.graphs.nvidia_rag.graph import NvidiaRagGraph
 from apps.api.src.modules.agents.graphs.search_planning.graph import (
     SearchPlanningGraph,
 )
@@ -64,6 +68,10 @@ from apps.api.src.modules.agents.infrastructure.queue.dramatiq_agent_dispatcher 
     DramatiqAgentJobPublisher,
     DramatiqAgentTaskDispatcher,
 )
+from apps.api.src.modules.agents.infrastructure.rag_adapters.rag_question_answerer_adapter import (
+    RagQuestionAnswererAdapter,
+)
+from apps.api.src.modules.rag.factories.rag_factory import RagFactory
 from apps.api.src.shared.queue.dramatiq_broker import broker
 
 
@@ -185,6 +193,30 @@ class AgentsFactory:
         return ExtractionGraph(extractor=extractor, checkpointer=checkpointer)
 
     @staticmethod
+    def create_nvidia_rag_service(
+        checkpointer: PostgresCheckpointer | None = None,
+    ) -> NvidiaRagService | None:
+        """Cria o servico publico do NVIDIA RAG Agent (V10).
+
+        Mesma regra dos demais agentes: sem chave Gemini configurada,
+        devolve ``None`` para evitar custo acidental. A "tool" chamada pelo
+        grafo e' o contrato publico de ``rag`` (``RagFactory``), nao um
+        cliente Gemini proprio — a geracao de resposta com citacoes ja
+        existe em ``rag`` V4.
+        """
+
+        settings = get_settings()
+
+        if not settings.gemini_api_key:
+            return None
+
+        rag_tool = RagQuestionAnswererAdapter(
+            RagFactory.create_question_answerer()
+        )
+
+        return NvidiaRagGraph(rag_tool=rag_tool, checkpointer=checkpointer)
+
+    @staticmethod
     def create_agent_task_dispatcher() -> AgentTaskDispatcher:
         """Cria dispatcher para publicar execucoes na fila ``agents``."""
 
@@ -214,6 +246,7 @@ class AgentsFactory:
                 checkpointer
             ),
             extraction_service=AgentsFactory.create_extraction_service(checkpointer),
+            nvidia_rag_service=AgentsFactory.create_nvidia_rag_service(checkpointer),
         )
 
     @staticmethod
@@ -233,6 +266,7 @@ class AgentsFactory:
                 checkpointer
             ),
             extraction_service=AgentsFactory.create_extraction_service(checkpointer),
+            nvidia_rag_service=AgentsFactory.create_nvidia_rag_service(checkpointer),
         )
 
     @staticmethod
