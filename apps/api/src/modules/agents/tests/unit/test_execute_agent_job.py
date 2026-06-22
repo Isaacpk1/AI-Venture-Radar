@@ -8,15 +8,25 @@ import pytest
 from apps.api.src.modules.agents.application.dto import (
     EvidenceValidationInput,
     EvidenceValidationResult,
+    ExtractionInput,
+    ExtractionResult,
     SearchPlanInput,
     SearchPlanResult,
     SearchQuerySuggestion,
+    StartupClassificationInput,
+    StartupClassificationResult,
+)
+from apps.api.src.modules.agents.application.public.extractor import (
+    ExtractionService,
 )
 from apps.api.src.modules.agents.application.public.search_planner import (
     SearchPlanningService,
 )
 from apps.api.src.modules.agents.application.public.semantic_investigator import (
     EvidenceValidationService,
+)
+from apps.api.src.modules.agents.application.public.startup_classifier import (
+    StartupClassifierService,
 )
 from apps.api.src.modules.agents.application.use_cases.execute_agent_job import (
     ExecuteAgentJob,
@@ -27,6 +37,8 @@ from apps.api.src.modules.agents.domain.enums import (
     AgentRunStatus,
     AgentStepStatus,
     AgentType,
+    ExtractedFundingStage,
+    StartupMaturityLevel,
 )
 from apps.api.src.modules.agents.domain.exceptions import (
     AgentRunInterruptedError,
@@ -54,6 +66,22 @@ SEARCH_PLANNING_PAYLOAD: dict[str, object] = {
     "source_title": "Home",
     "raw_text": "We use AI to improve operations.",
     "reason": "Evidence is generic, need more sources.",
+}
+
+STARTUP_CLASSIFICATION_PAYLOAD: dict[str, object] = {
+    "name": "Acme AI",
+    "sector": "LLM customer service",
+    "description": "Plataforma de atendimento com LLM proprietario.",
+    "country": "BR",
+    "website_url": "https://acme.example.com",
+    "evidence_texts": ["Acme treina modelos proprios de LLM."],
+}
+
+EXTRACTION_PAYLOAD: dict[str, object] = {
+    "name": "Acme AI",
+    "sector": "LLM customer service",
+    "description": "Plataforma de atendimento com LLM proprietario.",
+    "evidence_texts": ["Acme foi fundada por Ana Silva, Series A de USD 2M."],
 }
 
 
@@ -142,6 +170,34 @@ class FakeSearchPlanningService(SearchPlanningService):
                 )
             ],
             reason="Plano gerado pelo fake.",
+        )
+
+
+class FakeStartupClassificationService(StartupClassifierService):
+    async def classify(
+        self,
+        classification_input: StartupClassificationInput,
+        *,
+        thread_id: str | None = None,
+    ) -> StartupClassificationResult:
+        return StartupClassificationResult(
+            level=StartupMaturityLevel.AI_NATIVE,
+            reason="Classificado pelo fake.",
+        )
+
+
+class FakeExtractionService(ExtractionService):
+    async def extract(
+        self,
+        extraction_input: ExtractionInput,
+        *,
+        thread_id: str | None = None,
+    ) -> ExtractionResult:
+        return ExtractionResult(
+            founders=["Ana Silva"],
+            funding_stage=ExtractedFundingStage.SERIES_A,
+            funding_amount_usd=2_000_000.0,
+            customers=[],
         )
 
 
@@ -295,6 +351,112 @@ async def test_search_planning_service_none_marks_run_failed() -> None:
     use_case = ExecuteAgentJob(
         uow_factory=make_uow_factory(runs, steps),
         search_planning_service=None,
+    )
+    await use_case.execute(run_id=run.id)
+
+    saved = runs[run.id]
+    assert saved.status is AgentRunStatus.FAILED
+    assert "AgentServiceUnavailableError" in (saved.error_message or "")
+
+
+# ---------------------------------------------------------------------------
+# Testes — Startup Classification (V9)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_startup_classification_run_completes_with_real_output() -> None:
+    run = AgentRun(
+        id=uuid4(),
+        agent_type=AgentType.STARTUP_CLASSIFIER,
+        input_payload=STARTUP_CLASSIFICATION_PAYLOAD,
+    )
+    runs = {run.id: run}
+    steps = FakeStepRepository()
+
+    use_case = ExecuteAgentJob(
+        uow_factory=make_uow_factory(runs, steps),
+        startup_classification_service=FakeStartupClassificationService(),
+    )
+    await use_case.execute(run_id=run.id)
+
+    saved = runs[run.id]
+    assert saved.status is AgentRunStatus.COMPLETED
+    assert saved.output_payload is not None
+    assert saved.output_payload["level"] == StartupMaturityLevel.AI_NATIVE.value
+    assert saved.output_payload["reason"] == "Classificado pelo fake."
+
+    step = steps.steps[0]
+    assert step.name == "execute_startup_classifier"
+    assert step.status is AgentStepStatus.COMPLETED
+
+
+@pytest.mark.anyio
+async def test_startup_classification_service_none_marks_run_failed() -> None:
+    run = AgentRun(
+        id=uuid4(),
+        agent_type=AgentType.STARTUP_CLASSIFIER,
+        input_payload=STARTUP_CLASSIFICATION_PAYLOAD,
+    )
+    runs = {run.id: run}
+    steps = FakeStepRepository()
+
+    use_case = ExecuteAgentJob(
+        uow_factory=make_uow_factory(runs, steps),
+        startup_classification_service=None,
+    )
+    await use_case.execute(run_id=run.id)
+
+    saved = runs[run.id]
+    assert saved.status is AgentRunStatus.FAILED
+    assert "AgentServiceUnavailableError" in (saved.error_message or "")
+
+
+# ---------------------------------------------------------------------------
+# Testes — Extraction (V8)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_extraction_run_completes_with_real_output() -> None:
+    run = AgentRun(
+        id=uuid4(),
+        agent_type=AgentType.EXTRACTION,
+        input_payload=EXTRACTION_PAYLOAD,
+    )
+    runs = {run.id: run}
+    steps = FakeStepRepository()
+
+    use_case = ExecuteAgentJob(
+        uow_factory=make_uow_factory(runs, steps),
+        extraction_service=FakeExtractionService(),
+    )
+    await use_case.execute(run_id=run.id)
+
+    saved = runs[run.id]
+    assert saved.status is AgentRunStatus.COMPLETED
+    assert saved.output_payload is not None
+    assert saved.output_payload["founders"] == ["Ana Silva"]
+    assert saved.output_payload["funding_stage"] == ExtractedFundingStage.SERIES_A.value
+
+    step = steps.steps[0]
+    assert step.name == "execute_extraction"
+    assert step.status is AgentStepStatus.COMPLETED
+
+
+@pytest.mark.anyio
+async def test_extraction_service_none_marks_run_failed() -> None:
+    run = AgentRun(
+        id=uuid4(),
+        agent_type=AgentType.EXTRACTION,
+        input_payload=EXTRACTION_PAYLOAD,
+    )
+    runs = {run.id: run}
+    steps = FakeStepRepository()
+
+    use_case = ExecuteAgentJob(
+        uow_factory=make_uow_factory(runs, steps),
+        extraction_service=None,
     )
     await use_case.execute(run_id=run.id)
 

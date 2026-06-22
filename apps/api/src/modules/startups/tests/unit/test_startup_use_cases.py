@@ -25,7 +25,7 @@ from apps.api.src.modules.startups.application.use_cases.update_startup import (
     UpdateStartup,
 )
 from apps.api.src.modules.startups.domain.entities import Startup, StartupEvidence
-from apps.api.src.modules.startups.domain.enums import StartupEvidenceType
+from apps.api.src.modules.startups.domain.enums import FundingStage, StartupEvidenceType
 from apps.api.src.modules.startups.domain.exceptions import StartupNotFoundError
 from apps.api.src.modules.startups.domain.repositories import (
     StartupEvidenceRepository,
@@ -144,6 +144,28 @@ async def test_update_startup_changes_existing_record() -> None:
     assert view.name == "New"
     assert view.country == "BR"
     assert uow.startup_repository.items[startup.id].name == "New"
+
+
+@pytest.mark.anyio
+async def test_update_startup_sets_structured_fields() -> None:
+    uow = _make_uow()
+    startup = Startup(name="Acme AI")
+    await uow.startup_repository.save(startup)
+
+    view = await UpdateStartup(lambda: uow).execute(
+        UpdateStartupInput(
+            startup_id=startup.id,
+            founders=["Ana Silva"],
+            funding_stage=FundingStage.SERIES_A,
+            funding_amount_usd=2_000_000.0,
+            customers=["Empresa X"],
+        )
+    )
+
+    assert view.founders == ["Ana Silva"]
+    assert view.funding_stage is FundingStage.SERIES_A
+    assert view.funding_amount_usd == 2_000_000.0
+    assert view.customers == ["Empresa X"]
 
 
 @pytest.mark.anyio

@@ -384,13 +384,13 @@ Documentos complementares:
 docs/agents/modulo_agents_arquitetura.md
 -> arquitetura completa desejada para o modulo agents
 
-docs/agents/evidence_validation_agent_v1.md
--> plano do Evidence Validation Agent com LangGraph completo
+docs/agents/roadmap_agentes.md
+-> estado atual e proximas versoes do modulo agents
 ```
 
 Esta V8 implementa a primeira integracao funcional.
 
-O LangGraph completo e o proximo passo evolutivo.
+O LangGraph completo evoluiu nas versoes posteriores do modulo agents.
 
 ---
 

@@ -10,6 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from apps.api.src.database.relational.session import AsyncSessionFactory
+from apps.api.src.modules.ingestion.domain.enums import DocumentSourceType
 from apps.api.src.modules.ingestion.application.public.ingested_reader import (
     ChunkRecord,
     IngestedDocumentReader,
@@ -17,13 +18,13 @@ from apps.api.src.modules.ingestion.application.public.ingested_reader import (
 )
 
 _SUMMARY_QUERY = text("""
-    SELECT id, scraping_result_id, url, title, word_count, chunk_count
+    SELECT id, scraping_result_id, url, title, word_count, chunk_count, source_type
     FROM documents
     WHERE scraping_result_id = :scraping_result_id
 """)
 
 _CHUNKS_QUERY = text("""
-    SELECT c.id, c.document_id, c.text, d.url AS source_url
+    SELECT c.id, c.document_id, c.text, d.url AS source_url, d.source_type
     FROM chunks c
     JOIN documents d ON d.id = c.document_id
     WHERE c.document_id = :document_id
@@ -57,6 +58,7 @@ class PostgresIngestedDocumentReader(IngestedDocumentReader):
                 title=row.title,
                 word_count=row.word_count,
                 chunk_count=row.chunk_count,
+                source_type=DocumentSourceType(row.source_type),
             )
         finally:
             await session.close()
@@ -75,6 +77,7 @@ class PostgresIngestedDocumentReader(IngestedDocumentReader):
                     document_id=row.document_id,
                     text=row.text,
                     source_url=row.source_url,
+                    source_type=DocumentSourceType(row.source_type),
                 )
                 for row in result.fetchall()
             ]

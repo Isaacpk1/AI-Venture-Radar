@@ -14,3 +14,6 @@ class NvidiaTechnologyCategory(StrEnum):
     ACCELERATED_COMPUTING = "accelerated_computing"
     AI_PLATFORM = "ai_platform"
     HEALTHCARE_AI = "healthcare_ai"
+    STARTUP_PROGRAM = "startup_program"
+    ROBOTICS_SIMULATION = "robotics_simulation"
+    CYBERSECURITY = "cybersecurity"

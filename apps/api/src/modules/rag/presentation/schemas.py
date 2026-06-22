@@ -15,17 +15,20 @@ from apps.api.src.modules.rag.application.dto import (
 class SearchEvidenceRequest(BaseModel):
     query: str
     limit: int = Field(default=5, ge=1, le=20)
+    source_type: str | None = None
 
 
 class AnswerQuestionRequest(BaseModel):
     query: str
     limit: int = Field(default=5, ge=1, le=20)
+    source_type: str | None = None
 
 
 class EvidenceChunkResponse(BaseModel):
     chunk_id: UUID
     document_id: UUID
     source_url: str
+    source_type: str
     text: str
     score: float
 
@@ -35,6 +38,7 @@ class EvidenceChunkResponse(BaseModel):
             chunk_id=view.chunk_id,
             document_id=view.document_id,
             source_url=view.source_url,
+            source_type=view.source_type,
             text=view.text,
             score=view.score,
         )

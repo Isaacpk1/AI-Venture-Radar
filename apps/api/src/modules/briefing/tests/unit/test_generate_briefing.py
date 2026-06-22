@@ -1,0 +1,172 @@
+"""Testes do caso de uso GenerateBriefing."""
+
+from types import TracebackType
+from uuid import UUID, uuid4
+
+import pytest
+
+from apps.api.src.modules.briefing.application.dto import (
+    EvidenceSnapshot,
+    GenerateBriefingInput,
+    RecommendationSnapshot,
+    StartupProfileSnapshot,
+    StartupSnapshot,
+)
+from apps.api.src.modules.briefing.application.ports import (
+    RecommendationsSource,
+    StartupProfileSource,
+)
+from apps.api.src.modules.briefing.application.unit_of_work import (
+    BriefingsUnitOfWork,
+)
+from apps.api.src.modules.briefing.application.use_cases.generate_briefing import (
+    GenerateBriefing,
+)
+from apps.api.src.modules.briefing.domain.entities import Briefing
+from apps.api.src.modules.briefing.domain.exceptions import (
+    StartupProfileUnavailableError,
+)
+from apps.api.src.modules.briefing.domain.repositories import BriefingRepository
+
+STARTUP_SNAPSHOT = StartupSnapshot(
+    name="Acme AI",
+    sector="LLM customer service",
+    description="Plataforma de atendimento com LLM.",
+    country="BR",
+    website_url="https://acme.example.com",
+)
+
+
+class FakeProfileSource(StartupProfileSource):
+    def __init__(self, profile: StartupProfileSnapshot | None) -> None:
+        self._profile = profile
+
+    async def get_profile(self, startup_id: UUID) -> StartupProfileSnapshot:
+        if self._profile is None:
+            raise StartupProfileUnavailableError(f"Startup {startup_id} nao encontrada.")
+        return self._profile
+
+
+class FakeRecommendationsSource(RecommendationsSource):
+    def __init__(self, recommendations: list[RecommendationSnapshot]) -> None:
+        self._recommendations = recommendations
+
+    async def list_by_startup(self, startup_id: UUID) -> list[RecommendationSnapshot]:
+        return self._recommendations
+
+
+class FakeBriefingRepository(BriefingRepository):
+    def __init__(self) -> None:
+        self.items: dict[UUID, Briefing] = {}
+        self.deleted_for_startup: list[UUID] = []
+
+    async def save(self, briefing: Briefing) -> None:
+        self.items[briefing.id] = briefing
+
+    async def delete_by_startup_id(self, startup_id: UUID) -> None:
+        self.deleted_for_startup.append(startup_id)
+        self.items = {
+            briefing_id: briefing
+            for briefing_id, briefing in self.items.items()
+            if briefing.startup_id != startup_id
+        }
+
+    async def get_by_id(self, briefing_id: UUID) -> Briefing | None:
+        return self.items.get(briefing_id)
+
+    async def list_by_startup_id(self, startup_id: UUID) -> list[Briefing]:
+        return [b for b in self.items.values() if b.startup_id == startup_id]
+
+
+class FakeUoW(BriefingsUnitOfWork):
+    def __init__(self, repository: FakeBriefingRepository) -> None:
+        self.briefing_repository = repository
+        self.commits = 0
+
+    async def __aenter__(self) -> "FakeUoW":
+        return self
+
+    async def __aexit__(
+        self,
+        exception_type: type[BaseException] | None,
+        exception: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        pass
+
+    async def commit(self) -> None:
+        self.commits += 1
+
+    async def rollback(self) -> None:
+        pass
+
+
+@pytest.mark.anyio
+async def test_generate_briefing_persists_markdown_content() -> None:
+    startup_id = uuid4()
+    repository = FakeBriefingRepository()
+    uow = FakeUoW(repository)
+    profile_source = FakeProfileSource(
+        StartupProfileSnapshot(
+            startup=STARTUP_SNAPSHOT,
+            evidences=(
+                EvidenceSnapshot(
+                    title="Acme launches LLM chatbot",
+                    source_url="https://example.com/news",
+                    evidence_type="news",
+                    confidence_score=0.9,
+                ),
+            ),
+        )
+    )
+    recommendations_source = FakeRecommendationsSource(
+        [
+            RecommendationSnapshot(
+                technology_name="NVIDIA NIM",
+                category="model_serving",
+                score=0.8,
+                justification="Evidencias mencionam llm e inference.",
+            )
+        ]
+    )
+
+    use_case = GenerateBriefing(lambda: uow, profile_source, recommendations_source)
+    view = await use_case.execute(GenerateBriefingInput(startup_id=startup_id))
+
+    assert view.startup_id == startup_id
+    assert "Acme AI" in view.content
+    assert "NVIDIA NIM" in view.content
+    assert uow.commits == 1
+    assert len(repository.items) == 1
+
+
+@pytest.mark.anyio
+async def test_generate_briefing_replaces_previous_briefing() -> None:
+    startup_id = uuid4()
+    repository = FakeBriefingRepository()
+    await repository.save(Briefing(startup_id=startup_id, content="briefing antigo"))
+    uow = FakeUoW(repository)
+    profile_source = FakeProfileSource(
+        StartupProfileSnapshot(startup=STARTUP_SNAPSHOT, evidences=())
+    )
+    recommendations_source = FakeRecommendationsSource([])
+
+    use_case = GenerateBriefing(lambda: uow, profile_source, recommendations_source)
+    await use_case.execute(GenerateBriefingInput(startup_id=startup_id))
+
+    assert startup_id in repository.deleted_for_startup
+    remaining_contents = [b.content for b in repository.items.values()]
+    assert "briefing antigo" not in remaining_contents
+
+
+@pytest.mark.anyio
+async def test_generate_briefing_propagates_unavailable_profile() -> None:
+    repository = FakeBriefingRepository()
+    uow = FakeUoW(repository)
+    profile_source = FakeProfileSource(None)
+    recommendations_source = FakeRecommendationsSource([])
+
+    use_case = GenerateBriefing(lambda: uow, profile_source, recommendations_source)
+
+    with pytest.raises(StartupProfileUnavailableError):
+        await use_case.execute(GenerateBriefingInput(startup_id=uuid4()))

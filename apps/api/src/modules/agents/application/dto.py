@@ -19,6 +19,8 @@ from apps.api.src.modules.agents.domain.enums import (
     AgentDecision,
     AgentRunStatus,
     AgentType,
+    ExtractedFundingStage,
+    StartupMaturityLevel,
 )
 
 
@@ -101,6 +103,59 @@ class SearchPlanResult:
 
     queries: list[SearchQuerySuggestion]
     reason: str
+
+
+@dataclass(frozen=True)
+class StartupClassificationInput:
+    """Contexto entregue ao Startup Classifier Agent.
+
+    Reune o perfil e as evidencias da startup, ja traduzidos pelo
+    adaptador de ``startups`` para o vocabulario de ``agents``.
+    """
+
+    name: str
+    sector: str | None
+    description: str | None
+    country: str | None
+    website_url: str | None
+    evidence_texts: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class StartupClassificationResult:
+    """Resultado final produzido pelo Startup Classifier Agent."""
+
+    level: StartupMaturityLevel
+    reason: str
+
+
+@dataclass(frozen=True)
+class ExtractionInput:
+    """Contexto entregue ao Extraction Agent.
+
+    Reune o perfil e as evidencias da startup, ja traduzidos pelo
+    adaptador de ``startups`` para o vocabulario de ``agents``.
+    """
+
+    name: str
+    sector: str | None
+    description: str | None
+    evidence_texts: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ExtractionResult:
+    """Dados estruturados extraidos pelo Extraction Agent.
+
+    Campos sao "melhor esforco": quando a evidencia nao menciona o dado,
+    o agente deve devolver lista vazia/``UNKNOWN``/``None``, nunca
+    inferir ou inventar.
+    """
+
+    founders: list[str]
+    funding_stage: ExtractedFundingStage
+    funding_amount_usd: float | None
+    customers: list[str]
 
 
 @dataclass(frozen=True)

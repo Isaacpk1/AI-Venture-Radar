@@ -5,6 +5,10 @@ from apps.api.src.modules.embeddings.application.ports import (
     ChunkSourceReader,
     EmbeddingTaskDispatcher,
 )
+from apps.api.src.modules.embeddings.application.public.embedding_job_submitter import (
+    DefaultEmbeddingJobSubmitter,
+    EmbeddingJobSubmitter,
+)
 from apps.api.src.modules.embeddings.application.public.embedding_service import (
     EmbeddingService,
 )
@@ -128,3 +132,12 @@ class EmbeddingsFactory:
     @staticmethod
     def create_get_embedding_job() -> GetEmbeddingJob:
         return GetEmbeddingJob(PostgresEmbeddingsUnitOfWork)
+
+    @staticmethod
+    def create_job_submitter() -> EmbeddingJobSubmitter:
+        """Cria o contrato publico para submeter/acompanhar jobs (Orchestration V2)."""
+
+        return DefaultEmbeddingJobSubmitter(
+            create_embedding_job=EmbeddingsFactory.create_create_embedding_job(),
+            get_embedding_job=EmbeddingsFactory.create_get_embedding_job(),
+        )

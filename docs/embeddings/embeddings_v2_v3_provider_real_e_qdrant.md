@@ -79,7 +79,13 @@ o mesmo contrato internamente para o proprio `upsert`.
 ```python
 class VectorRepository(ABC):
     async def upsert(self, record: ChunkEmbeddingRecord) -> None: ...
-    async def search(self, query_vector: tuple[float, ...], *, limit: int = 5) -> list[ChunkSearchResult]: ...
+    async def search(
+        self,
+        query_vector: tuple[float, ...],
+        *,
+        limit: int = 5,
+        source_type: str | None = None,
+    ) -> list[ChunkSearchResult]: ...
 ```
 
 `search()` recebe um vetor ja calculado, nao um texto — embedar a query e'
@@ -138,6 +144,16 @@ repository = EmbeddingsFactory.create_vector_repository()
 results = await repository.search(query_vector, limit=5)
 # [ChunkSearchResult(chunk_id=..., document_id=..., source_url=..., score=...), ...]
 ```
+
+Extensao para NVIDIA Knowledge V2:
+
+```txt
+ChunkEmbeddingRecord.source_type
+payload Qdrant: source_type
+VectorRepository.search(..., source_type="nvidia_knowledge")
+```
+
+O default continua `startup_evidence`, preservando o comportamento antigo.
 
 ## 4. Validacao
 

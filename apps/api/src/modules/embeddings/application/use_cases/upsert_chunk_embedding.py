@@ -39,6 +39,7 @@ class UpsertChunkEmbedding:
                 chunk_id=view.chunk_id,
                 document_id=upsert_input.document_id,
                 source_url=upsert_input.source_url,
+                source_type=upsert_input.source_type,
                 values=view.values,
                 dimension=view.dimension,
                 model_name=view.model_name,

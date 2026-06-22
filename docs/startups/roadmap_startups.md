@@ -21,8 +21,8 @@ consolidar varias evidencias em uma representacao estruturada de startup
 | Versao | Status | Objetivo |
 |---|---|---|
 | Startups V1 | Implementado | Modelo relacional basico |
-| Startups V2 | Futuro | Consolidacao de evidencias |
-| Startups V3 | Futuro | Classificacao de maturidade em IA |
+| Startups V2 | Implementado (slice inicial) | Campos estruturados (founders/funding/customers) |
+| Startups V3 | Implementado (slice inicial) | Classificacao de maturidade em IA |
 | Startups V4 | Futuro | Auditoria e confianca |
 
 ---
@@ -58,25 +58,80 @@ Documento da entrega: `docs/startups/startups_v1_modelo_relacional.md`.
 
 ---
 
-## Startups V2 - Consolidacao de Evidencias
+## Startups V2 - Campos Estruturados (slice inicial)
 
-Entregaveis:
+Status:
 
-- deduplicar startups por nome/site;
-- associar multiplas fontes a mesma startup;
-- registrar origem de cada campo;
-- manter confianca por evidencia.
+```txt
+implementado (slice inicial — so os campos estruturados; deduplicacao e
+consolidacao multi-fonte ficaram fora, ver limites abaixo)
+```
+
+O brief original do case (secao 2) pede coleta de "empresa, produto,
+setor, **clientes**, **funding**, **founders** e tecnologias utilizadas".
+O `Startup` da V1 so tinha `name`, `website_url`, `description`,
+`sector`, `country` — nenhum campo estruturado para founders, funding ou
+clientes. Essa informacao, se coletada, ficava perdida em texto livre
+(ver `docs/diagnostico_case_original_e_novas_prioridades.md`, secao 6).
+
+Entregue:
+
+- enum `FundingStage` (`PRE_SEED/SEED/SERIES_A/SERIES_B/SERIES_C_PLUS/UNKNOWN`);
+- campos novos em `Startup`: `founders: tuple[str, ...]`, `funding_stage`,
+  `funding_amount_usd`, `customers: tuple[str, ...]`;
+- `Startup.update()` estendido para aceitar os 4 campos novos;
+- migration `f77998c46d08` (`ALTER TABLE startups`, 4 colunas — JSONB
+  para as listas, NOT NULL com default `[]`);
+- `PATCH /startups/{id}` aceita os campos novos.
+
+Esses campos sao o destino natural do futuro `Extraction Agent`
+(`agents` V8), agora desbloqueado.
+
+Fora do escopo desta entrega (registrado como limite conhecido):
+deduplicar startups por nome/site, associar multiplas fontes a mesma
+startup, registrar origem de cada campo, confianca por evidencia — isso
+continua pendente para uma V2.5/V4 futura se houver necessidade real.
+
+Documento da entrega: `docs/startups/startups_v2_campos_estruturados.md`.
 
 ---
 
 ## Startups V3 - Classificacao de Maturidade em IA
 
-Entregaveis:
+Status:
 
-- classificar setor;
-- classificar tipo de uso de IA;
-- estimar maturidade tecnica;
-- registrar justificativa com fontes.
+```txt
+implementado (slice inicial — ver "escopo desta entrega" no documento da
+entrega)
+```
+
+Esta versao e a contraparte, do lado de dados, do `Startup Classifier
+Agent` (`agents` V9). Fechou a lacuna identificada como mais critica do
+projeto em `docs/diagnostico_case_original_e_novas_prioridades.md` secao
+3: `recommendations` gerava recomendacoes sem nenhuma classificacao
+previa da startup.
+
+Entregue:
+
+- enum `AiMaturityLevel` (`AI_NATIVE` / `AI_ENABLED` / `NON_AI`);
+- 3 colunas novas em `startups` (`ai_maturity_level`,
+  `classification_reason`, `classified_at`) via `ALTER TABLE`, nao
+  entidade separada — classificacao e atributo 1:1 do `Startup`;
+- `Startup.classify(level, reason)` (metodo de dominio);
+- `StartupClassifierPort` (`application/ports.py`) + adapter
+  (`infrastructure/agent_adapters/agents_startup_classifier.py`) chamando
+  `agents` sincronamente;
+- `POST /startups/{id}/classify`;
+- testes unitarios e de persistencia PostgreSQL.
+
+Fora do escopo desta entrega (registrado como limite conhecido):
+"classificar tipo de uso de IA" e "estimar maturidade tecnica" como
+dimensoes distintas (a classificacao em 3 niveis cobre ambas de forma
+simplificada); `recommendations` ainda nao consulta
+`Startup.ai_maturity_level`; sem historico de classificacoes
+(reclassificar sobrescreve).
+
+Documento da entrega: `docs/startups/startups_v3_classificacao_maturidade.md`.
 
 ---
 

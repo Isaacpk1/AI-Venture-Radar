@@ -25,8 +25,8 @@ responder perguntas sobre startups com base em evidencias citaveis
 |---|---|---|
 | RAG V1 | Implementado | Busca semantica simples |
 | RAG V2 | Implementado | Resposta com citacoes |
-| RAG V3 | Futuro | Busca hibrida |
-| RAG V4 | Futuro | Reranking |
+| RAG V3 | Implementado | Busca hibrida (vetorial + lexical, RRF) |
+| RAG V4 | Implementado | Reranking (Cohere Rerank) |
 | RAG V5 | Futuro | Avaliacao de qualidade |
 
 ---
@@ -92,22 +92,56 @@ Documento da entrega: `docs/rag/rag_v2_resposta_com_citacoes.md`.
 
 ## RAG V3 - Busca Hibrida
 
-Entregaveis:
+Status:
 
-- combinar busca vetorial com filtros estruturados;
-- filtrar por startup, fonte, data e tipo de evidencia;
-- usar PostgreSQL junto com Qdrant.
+```txt
+implementado
+```
+
+**Nota sobre o nome:** "busca hibrida" aqui significa fusao
+vetorial+lexical (Qdrant + PostgreSQL full-text search via RRF) — o que
+o brief original do case pede (secao 5.3). Filtros estruturados
+(startup/fonte/data/tipo de evidencia) sao uma melhoria diferente
+("busca filtrada"), ainda nao implementada, e podem entrar numa V3.5
+futura se houver necessidade.
+
+Entregue:
+
+- busca lexical via PostgreSQL full-text search nativo (`to_tsvector`/
+  `websearch_to_tsquery`/`ts_rank`, indice GIN de expressao) — nao BM25
+  via lib Python, para nao carregar chunks em memoria;
+- fusao de ranking vetorial + lexical via Reciprocal Rank Fusion (RRF),
+  `domain/policies.py::fuse_rankings()`;
+- pool de candidatos maior que o limite final antes de fundir/rerankar;
+- `LexicalSearchRepository` (contrato interno) +
+  `PostgresLexicalSearchRepository` (SQL textual, sem importar internals
+  de `ingestion`);
+- migration `8d84cba84a02` (indice GIN).
+
+Documento da entrega: `docs/rag/rag_v3_busca_hibrida.md`.
 
 ---
 
 ## RAG V4 - Reranking
 
-Entregaveis:
+Status:
 
-- reranker para ordenar evidencias;
-- remocao de chunks redundantes;
-- limite de tokens por contexto;
-- explicacao de por que cada fonte entrou.
+```txt
+implementado
+```
+
+Entregue:
+
+- `CohereReranker` — usa **Cohere Rerank**, conforme o brief recomenda
+  (secao 5.3); `COHERE_API_KEY` (ja em `Settings` desde o inicio do
+  projeto) finalmente em uso;
+- degradacao graciosa: sem API key, busca segue sem reranking (ordem da
+  fusao RRF); falha em runtime do Cohere tambem degrada, nunca quebra a
+  busca;
+- reranking aplicado dentro de `SearchEvidence.search()` — beneficia
+  `/rag/search` e `/rag/answer` ao mesmo tempo.
+
+Documento da entrega: `docs/rag/rag_v4_reranking.md`.
 
 ---
 

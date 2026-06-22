@@ -26,6 +26,14 @@ class AgentPlanningError(AgentError):
     """O agente nao conseguiu gerar um plano de busca valido."""
 
 
+class AgentClassificationError(AgentError):
+    """O agente nao conseguiu classificar a maturidade de IA da startup."""
+
+
+class AgentExtractionError(AgentError):
+    """O agente nao conseguiu extrair dados estruturados das evidencias."""
+
+
 class AgentTaskDispatchError(AgentError):
     """O job de agente nao foi publicado na fila."""
 

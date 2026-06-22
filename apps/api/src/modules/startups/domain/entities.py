@@ -4,7 +4,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from apps.api.src.modules.startups.domain.enums import StartupEvidenceType
+from apps.api.src.modules.startups.domain.enums import (
+    AiMaturityLevel,
+    FundingStage,
+    StartupEvidenceType,
+)
 from apps.api.src.modules.startups.domain.exceptions import InvalidStartupDataError
 
 
@@ -19,6 +23,10 @@ def _normalize_optional(value: str | None) -> str | None:
     return normalized or None
 
 
+def _normalize_str_list(values: list[str] | tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(item.strip() for item in values if item.strip())
+
+
 @dataclass
 class Startup:
     """Representacao relacional basica de uma startup."""
@@ -28,6 +36,15 @@ class Startup:
     description: str | None = None
     sector: str | None = None
     country: str | None = None
+
+    ai_maturity_level: AiMaturityLevel | None = None
+    classification_reason: str | None = None
+    classified_at: datetime | None = None
+
+    founders: tuple[str, ...] = ()
+    funding_stage: FundingStage | None = None
+    funding_amount_usd: float | None = None
+    customers: tuple[str, ...] = ()
 
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utc_now)
@@ -39,8 +56,12 @@ class Startup:
         self.description = _normalize_optional(self.description)
         self.sector = _normalize_optional(self.sector)
         self.country = _normalize_optional(self.country)
+        self.founders = _normalize_str_list(self.founders)
+        self.customers = _normalize_str_list(self.customers)
         if not self.name:
             raise InvalidStartupDataError("Startup precisa ter nome.")
+        if self.funding_amount_usd is not None and self.funding_amount_usd < 0:
+            raise InvalidStartupDataError("funding_amount_usd nao pode ser negativo.")
 
     def update(
         self,
@@ -50,6 +71,10 @@ class Startup:
         description: str | None = None,
         sector: str | None = None,
         country: str | None = None,
+        founders: list[str] | tuple[str, ...] | None = None,
+        funding_stage: FundingStage | None = None,
+        funding_amount_usd: float | None = None,
+        customers: list[str] | tuple[str, ...] | None = None,
     ) -> None:
         if name is not None:
             normalized_name = name.strip()
@@ -64,7 +89,30 @@ class Startup:
             self.sector = _normalize_optional(sector)
         if country is not None:
             self.country = _normalize_optional(country)
+        if founders is not None:
+            self.founders = _normalize_str_list(founders)
+        if funding_stage is not None:
+            self.funding_stage = funding_stage
+        if funding_amount_usd is not None:
+            if funding_amount_usd < 0:
+                raise InvalidStartupDataError(
+                    "funding_amount_usd nao pode ser negativo."
+                )
+            self.funding_amount_usd = funding_amount_usd
+        if customers is not None:
+            self.customers = _normalize_str_list(customers)
         self.updated_at = utc_now()
+
+    def classify(self, level: AiMaturityLevel, reason: str) -> None:
+        """Registra a classificacao de maturidade de IA produzida pelo agente."""
+
+        normalized_reason = reason.strip()
+        if not normalized_reason:
+            raise InvalidStartupDataError("Classificacao precisa ter justificativa.")
+
+        self.ai_maturity_level = level
+        self.classification_reason = normalized_reason
+        self.classified_at = utc_now()
 
 
 @dataclass

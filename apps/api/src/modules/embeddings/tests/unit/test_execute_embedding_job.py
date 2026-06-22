@@ -83,7 +83,11 @@ class FakeVectorRepository(VectorRepository):
         self.records[record.chunk_id] = record
 
     async def search(
-        self, query_vector: tuple[float, ...], *, limit: int = 5
+        self,
+        query_vector: tuple[float, ...],
+        *,
+        limit: int = 5,
+        source_type: str | None = None,
     ) -> list[ChunkSearchResult]:
         return []
 

@@ -13,40 +13,60 @@ Implemented:
 
 ```txt
 Scraping V8
-Agents V7
+Agents V9 (+ Startup Classifier Agent, Extraction Agent V8)
 Ingestion V1 + ingestion_worker
 Embeddings V5 + embedding_worker
-Startups V1
-RAG V2
+Startups V2 + V3 (slices iniciais: campos estruturados + classificacao de maturidade em IA)
+RAG V4 (busca hibrida + reranking)
 NVIDIA Knowledge V1
+NVIDIA Knowledge V2 foundation (`source_type`)
+Recommendations V1
+Briefing V1
+Orchestration V1
 ```
+
+MVP macro backlog (`docs/roadmap_proximos_passos.md`) is complete, and the
+top case-brief gap (Startup Classifier, see diagnostic doc) is closed too:
+scraping -> ingestion -> embeddings -> startups -> rag -> recommendations ->
+briefing -> orchestration all implemented, plus Agents V9 + Startups V3
+(AI-native/AI-enabled/Non-AI classification).
 
 Pending:
 
 ```txt
-Recommendations V1
-Briefing V1
-Orchestration / analysis job end-to-end
 Frontend
 Auth
 Production observability
+Orchestration V2 - raw URL entry point (scraping/ingestion/embeddings polling)
 ```
 
 Recent unit validation:
 
 ```txt
-297 passed
+377 passed (13 integration failures, all pre-existing: no local
+Postgres/Redis/Qdrant in this environment)
 ```
 
 Next recommended implementation:
 
 ```txt
-Recommendations V1 - deterministic recommendation rules
+Diagnostic priorities 1-3 done, plus Startups V2 and Extraction Agent
+(V8) delivered ahead of schedule. Agreed sequence now in progress (see
+docs/diagnostico_case_original_e_novas_prioridades.md section 8 and
+docs/agents/roadmap_agentes.md): NVIDIA Knowledge V2 foundation is done
+via `documents.source_type`, Qdrant payload `source_type`, and optional
+RAG filters. Next is real NVIDIA doc source registration/ingestion via
+scraping/ingestion/embeddings, then NVIDIA RAG Agent (V10) ->
+Recommendation Agent (V11) -> Briefing Agent (V12). wiring
+Startup.ai_maturity_level into recommendations' scoring is a smaller
+separate follow-up, not done yet. Frontend and integration hardening
+remain open and can run in parallel.
 ```
 
 Relevant docs:
 
 ```txt
+docs/diagnostico_case_original_e_novas_prioridades.md
 docs/estado_atual_do_projeto.md
 docs/roadmap_proximos_passos.md
 docs/proximos_passos_mvp.md
@@ -286,13 +306,35 @@ Testes: 130 (unit + integration)
 | V5 | Entregue | Worker executa grafo correto por `agent_type` com output real |
 | V6 | Entregue | Checkpoint LangGraph no PostgreSQL + `waiting_human_review` + `ResumeAgentJob` |
 | V7 | Entregue | Presentation layer (GET + POST /resume) + interrupt() real em node |
-| V8 | Futuro | Extraction Agent |
-| V9 | Futuro | Startup Classifier Agent |
+| V8 | Entregue | Extraction Agent |
+| V9 | Entregue | Startup Classifier Agent |
 | V10 | Futuro | NVIDIA Knowledge Agent |
 | V11 | Futuro | Recommendation Agent |
 | V12 | Futuro | Briefing Agent |
 
-**Versao atual: V7**
+**Versao atual: V9** (V8 entregue depois, fora de ordem — desbloqueado pelo Startups V2)
+
+O que a V8 entregou (entregue depois da V9, desbloqueado pelo Startups V2):
+- `AgentType.EXTRACTION` + `ExtractedFundingStage` (enum, vocabulario interno, mesmos valores de `startups.FundingStage`)
+- `ExtractionGraph` — copia estrutural de `StartupClassificationGraph` (3 nodes, sem interrupt); implementa o contrato publico novo `ExtractionService` (`application/public/extractor.py`)
+- `LangChainGeminiExtractor` (`infrastructure/llm/`) — copia estrutural de `LangChainGeminiStartupClassifier`; prompt instrui explicitamente a nunca inferir/inventar (anti-alucinacao tratada via prompt + schema Pydantic permissivo, nao via validacao extra de codigo)
+- `AgentType.EXTRACTION` wired em `ExecuteAgentJob`/`ResumeAgentJob`, mesmo padrao do Startup Classifier (consumidor real chama sincronamente via adapter, nao pela fila)
+- `AgentsFactory.create_extraction_service()`
+- Testes: 67 unit (+5 desta entrega: 2 grafo, 2 execute_agent_job, 1 resume_agent_job)
+
+Documento da entrega: `docs/agents/agents_v8_extraction_agent.md`.
+Contraparte de dados: `docs/startups/startups_v2_campos_estruturados.md` (Startups V2).
+
+O que a V9 entregou:
+- `AgentType.STARTUP_CLASSIFIER` + `StartupMaturityLevel` (enum, vocabulario interno, mesmos valores de `startups.AiMaturityLevel`)
+- `StartupClassificationGraph` — copia estrutural de `SearchPlanningGraph` (3 nodes, sem interrupt); implementa o contrato publico novo `StartupClassifierService` (`application/public/startup_classifier.py`)
+- `LangChainGeminiStartupClassifier` (`infrastructure/llm/`) — copia estrutural de `LangChainGeminiEvidenceJudge`
+- `AgentType.STARTUP_CLASSIFIER` wired em `ExecuteAgentJob`/`ResumeAgentJob` (consistencia interna — todo agent_type tem um branch), mas o consumidor real (`startups`) chama o servico sincronamente via adapter, nao pela fila `agent_runs`
+- `AgentsFactory.create_startup_classification_service()`
+- Testes: 62 unit (+5 desta entrega: 2 grafo, 2 execute_agent_job, 1 resume_agent_job)
+
+Documento da entrega: `docs/agents/agents_v9_startup_classifier.md`.
+Contraparte de dados: `docs/startups/startups_v3_classificacao_maturidade.md` (Startups V3).
 
 O que a V6 entregou:
 - `PostgresCheckpointer` em `infrastructure/checkpoints/` wraps `AsyncPostgresSaver` (lazy init)
@@ -410,7 +452,43 @@ Testes: 56 unit + 2 integracao (exigem Postgres e Qdrant reais rodando)
 
 | Versao | Status | O que foi entregue |
 |---|---|---|
-| V1 | Futuro | Modelo relacional de startups e evidencias |
+| V1 | Entregue | Modelo relacional basico (`Startup`, `StartupEvidence`) |
+| V2 | Entregue (slice inicial) | Campos estruturados (founders/funding/customers) |
+| V3 | Entregue (slice inicial) | Classificacao de maturidade em IA |
+| V4 | Futuro | Auditoria e confianca |
+
+**Versao atual: V3 (slice inicial)**
+
+O que a V1 entregou: ver `docs/startups/startups_v1_modelo_relacional.md`.
+
+Extensao feita durante a entrega do Recommendations V1 (continua V1):
+primeiro contrato publico do modulo, `StartupProfileReader`
+(`application/public/`), implementado por `GetStartupProfile`.
+
+O que a V2 entregou (slice inicial — so campos estruturados, sem
+deduplicacao/consolidacao multi-fonte, ver limites no documento da
+entrega):
+- Enum `FundingStage` (`PRE_SEED/SEED/SERIES_A/SERIES_B/SERIES_C_PLUS/UNKNOWN`)
+- `Startup` ganha `founders`/`customers` (`tuple[str, ...]`, JSONB NOT NULL default `[]`) e `funding_stage`/`funding_amount_usd` (nullable)
+- `Startup.update()` estendido com os 4 campos; valida `funding_amount_usd` negativo
+- Migration `f77998c46d08`
+- Destino de dados para o futuro Extraction Agent (`agents` V8), agora desbloqueado
+- Testes: 24 unit + 1 integracao (+5 unit desta entrega)
+
+Documento da entrega: `docs/startups/startups_v2_campos_estruturados.md`.
+
+O que a V3 entregou (slice inicial — nao cobre os 4 itens do roadmap
+original, ver limites na secao do documento da entrega):
+- `AiMaturityLevel` (enum: `AI_NATIVE`/`AI_ENABLED`/`NON_AI`), mesmos valores de `agents.StartupMaturityLevel`
+- 3 colunas novas em `startups` (`ai_maturity_level`, `classification_reason`, `classified_at`) via `ALTER TABLE` — atributo 1:1 do `Startup`, nao entidade separada
+- `Startup.classify(level, reason)` — metodo de dominio
+- `StartupClassifierPort` (`application/ports.py`, primeiro arquivo de ports deste modulo) + adapter `AgentsStartupClassifier` (`infrastructure/agent_adapters/`) chamando `agents` sincronamente (mesmo padrao de `AgentsSemanticInvestigator` em `scraping`)
+- `ClassifyStartup` (use case) — recebe `classifier: StartupClassifierPort | None`; levanta `StartupClassificationUnavailableError` (503) so no uso, quando `agents` nao tem `GEMINI_API_KEY`
+- `POST /startups/{id}/classify`
+- Migration `3ca1a725713e`
+- Testes: 21 unit + 1 integracao (+5 unit desta entrega: 2 entidade, 3 caso de uso)
+
+Documento da entrega: `docs/startups/startups_v3_classificacao_maturidade.md`.
 
 ---
 
@@ -418,7 +496,57 @@ Testes: 56 unit + 2 integracao (exigem Postgres e Qdrant reais rodando)
 
 | Versao | Status | O que foi entregue |
 |---|---|---|
-| V1 | Futuro | Busca hibrida + reranking + resposta com citacoes |
+| V1 | Entregue | Busca semantica simples |
+| V2 | Entregue | Resposta com citacoes |
+| V3 | Entregue | Busca hibrida (vetorial + lexical, RRF) |
+| V4 | Entregue | Reranking (Cohere Rerank) |
+| V5 | Futuro | Avaliacao de qualidade |
+
+**Versao atual: V4**
+
+O que V3 entregou:
+- Busca lexical via PostgreSQL full-text search nativo (`to_tsvector('simple', text)` + `websearch_to_tsquery` + `ts_rank`), nao BM25 via lib Python — evita carregar chunks em memoria
+- `domain/policies.py::fuse_rankings()` — Reciprocal Rank Fusion (RRF, k=60), funcao pura (primeiro domain deste modulo alem de exceptions.py)
+- `PostgresLexicalSearchRepository` — SQL textual contra `chunks` (de `ingestion`), mesmo padrao de `PostgresScrapingResultReader`
+- Pool de candidatos `max(limit*4, 20)` antes de fundir/rerankar
+- Migration `8d84cba84a02`: indice GIN de expressao em `chunks`
+- Mudanca de comportamento: `EvidenceChunkView.score` agora e o score RRF, nao mais o cosine score puro do Qdrant
+
+O que V4 entregou:
+- `CohereReranker` (`infrastructure/reranking/`) — `cohere.AsyncClient.rerank()`, `COHERE_API_KEY` (ja existia em `Settings`, nunca usada) finalmente em uso
+- Degradacao graciosa (diferente do padrao Gemini/503): sem API key ou com falha em runtime do Cohere, busca segue sem reranking em vez de falhar
+- Reranking aplicado dentro de `SearchEvidence.search()` — beneficia `/rag/search` e `/rag/answer`
+- Dependencia nova: `cohere>=5.0,<6`
+- Testes: 16 unit (+9 desta entrega: 5 `fuse_rankings`, 4 `search_evidence`) + 1 integracao nova
+
+Documentos: `docs/rag/rag_v3_busca_hibrida.md`, `docs/rag/rag_v4_reranking.md`.
+
+---
+
+### NVIDIA Knowledge module
+
+| Versao | Status | O que foi entregue |
+|---|---|---|
+| V1 | Entregue | Catalogo inicial de tecnologias (10 itens) |
+| V2 | Futuro | Ingestao de fontes oficiais (pipeline real, nao catalogo estatico) |
+| V3 | Futuro | Metadados tecnicos |
+| V4 | Futuro | Busca por caso de uso |
+
+**Versao atual: V1**
+
+O que a V1 entregou: `NvidiaTechnology`, catalogo estatico em
+`catalog_data.py`, contrato publico `NvidiaTechnologyCatalog`, rotas
+`GET /nvidia-knowledge/technologies` e `GET /nvidia-knowledge/technologies/{slug}`.
+Ver `docs/nvidia_knowledge/nvidia_knowledge_v1_catalogo_inicial.md`.
+
+Extensao feita apos o diagnostico do case original (continua V1, nao e
+nova versao — catalogo e dado estatico em codigo, sem migration):
+- 8 tecnologias/programas adicionados (`NVIDIA Inception`, `NeMo Guardrails`, `NVIDIA Clara`, `cuDF`, `cuML`, `NVIDIA Omniverse`, `NVIDIA Isaac`, `NVIDIA Morpheus`) — catalogo cobre os 16 itens do brief original (secao 5.4)
+- 3 categorias novas em `NvidiaTechnologyCategory`: `STARTUP_PROGRAM`, `ROBOTICS_SIMULATION`, `CYBERSECURITY`
+- `NVIDIA Inception` (o programa de startups que o projeto existe para alimentar) agora e recuperavel pelo catalogo — antes nao tinha nenhuma entrada
+- Testes: 7 unit (+2 desta extensao)
+
+Documento: `docs/nvidia_knowledge/roadmap_nvidia_knowledge.md` (secao "Extensao do catalogo V1").
 
 ---
 
@@ -426,7 +554,120 @@ Testes: 56 unit + 2 integracao (exigem Postgres e Qdrant reais rodando)
 
 | Versao | Status | O que foi entregue |
 |---|---|---|
-| V1 | Futuro | Cruzamento perfil da startup x catalogo NVIDIA |
+| V1 | Entregue | Regras deterministicas: cruzamento perfil da startup x catalogo NVIDIA |
+| V2 | Futuro | Recomendacao com RAG |
+| V3 | Futuro | Agent Recommendation |
+| V4 | Futuro | Ranking e confianca |
+| V5 | Futuro | Feedback humano |
+
+**Versao atual: V1**
+
+O que a V1 entregou:
+- `Recommendation` (`domain/entities.py`) — tecnologia recomendada, score (0-1), justificativa, `matched_keywords` e `evidence_ids` para rastreabilidade
+- `domain/policies.py::match_technologies()` — funcao pura: cruza setor/descricao/evidencias da startup com `keywords` de cada tecnologia do catalogo NVIDIA, score = keywords batidas / total; entra na recomendacao com `score >= 0.25` e pelo menos 1 keyword. Sem LLM, sem agente.
+- Contrato publico novo em `startups` (nao existia nenhum desde a V1 do modulo): `StartupProfileReader` (`startups/application/public/`), implementado por `GetStartupProfile` direto (mesmo padrao de `ListNvidiaTechnologies(NvidiaTechnologyCatalog)` em `nvidia_knowledge`) — `startups` continua V1, isto e extensao de superficie publica
+- `recommendations/application/ports.py` (`StartupProfileSource`, `NvidiaCatalogSource`) + adapters (`infrastructure/startups_adapters/`, `infrastructure/nvidia_adapters/`) — `RecommendationsFactory` importa `StartupsFactory` e `NvidiaKnowledgeFactory` direto, mesmo padrao de `scraping_factory.py` importando `AgentsFactory`
+- `GenerateRecommendations` — substitui (`delete_by_startup_id` + `save`) o lote anterior da mesma startup a cada chamada; V1 nao versiona geracoes
+- Sem worker/fila: motor de regras so le Postgres + catalogo estatico em codigo, sem I/O externo lento que justifique fila assincrona (mesma categoria de `nvidia_knowledge`, que tambem nao tem worker)
+- Migration `f90193dc1578`: tabela `recommendations`
+- Presentation: `POST /recommendations`, `GET /recommendations/{id}`, `GET /recommendations?startup_id=`
+
+Tabelas: `recommendations`
+Testes: 15 unit + 1 integracao (startups ganhou +2 unit do `GetStartupProfile`)
+
+Documento da entrega: `docs/recommendations/recommendations_v1_regras_deterministicas.md`.
+
+Extensao feita durante a entrega do Briefing V1 (modulo `recommendations` continua V1, isto nao e uma nova versao):
+- Novo contrato publico `RecommendationsReader` (`application/public/recommendations_reader.py`) com `list_by_startup_id()`
+- `ListRecommendations` passou a implementar o contrato direto (mesmo padrao de `ListNvidiaTechnologies(NvidiaTechnologyCatalog)`); `execute()` agora delega para `list_by_startup_id()`
+- `RecommendationsFactory.create_recommendations_reader()`
+
+Extensao feita durante a entrega do Orchestration V1 (continua V1):
+- Novo contrato publico `RecommendationGenerator` (`application/public/recommendation_generator.py`) com `generate(startup_id)`
+- `GenerateRecommendations` passou a implementar o contrato direto; `execute()` agora delega para `generate()`
+- `RecommendationsFactory.create_recommendation_generator()`
+
+---
+
+### Briefing module
+
+| Versao | Status | O que foi entregue |
+|---|---|---|
+| V1 | Entregue | Template executivo em Markdown: resumo, evidencias, recomendacoes, riscos e proximas acoes |
+| V2 | Futuro | Briefing gerado por agente |
+| V3 | Futuro | Exportacao PDF/HTML |
+| V4 | Futuro | Revisao humana |
+| V5 | Futuro | Ranking de oportunidades |
+
+**Versao atual: V1**
+
+O que a V1 entregou:
+- `Briefing` (`domain/entities.py`) — `startup_id`, `content` (Markdown), `generated_at`
+- `domain/policies.py` — tres funcoes puras: `assess_risks()` (zero evidencia, evidencia com `confidence_score < 0.5`, zero recomendacao, melhor recomendacao com `score < 0.5`), `suggest_next_actions()` (agenda conversa sobre a melhor tecnologia, ou pede mais evidencias), `build_briefing_markdown()` (monta as 5 secoes). Sem LLM, sem agente.
+- Contrato publico novo em `recommendations` (ver secao do modulo recommendations): `RecommendationsReader.list_by_startup_id()`
+- `briefing/application/ports.py` (`StartupProfileSource`, `RecommendationsSource`) + adapters (`infrastructure/startups_adapters/`, `infrastructure/recommendations_adapters/`) — `BriefingFactory` importa `StartupsFactory` e `RecommendationsFactory` direto, 5a instancia confirmada do mesmo padrao de wiring cross-modulo desta base
+- `GenerateBriefing` — substitui (`delete_by_startup_id` + `save`) o briefing anterior da mesma startup a cada chamada; V1 nao versiona geracoes
+- Sem worker/fila: mesma categoria de `nvidia_knowledge`/`recommendations`, so monta uma string a partir de dados ja persistidos
+- Migration `782e2cbdbfab`: tabela `briefings`
+- Presentation: `POST /briefings`, `GET /briefings/{id}`, `GET /briefings?startup_id=`
+
+Tabelas: `briefings`
+Testes: 13 unit + 1 integracao (recommendations ganhou +2 unit do `RecommendationsReader`)
+
+Documento da entrega: `docs/briefing/briefing_v1_template_executivo.md`.
+
+Extensao feita durante a entrega do Orchestration V1 (continua V1):
+- Novo contrato publico `BriefingGenerator` (`application/public/briefing_generator.py`) com `generate(startup_id)`
+- `GenerateBriefing` passou a implementar o contrato direto; `execute()` agora delega para `generate()`
+- `BriefingFactory.create_briefing_generator()`
+
+---
+
+### Orchestration module
+
+| Versao | Status | O que foi entregue |
+|---|---|---|
+| V1 | Entregue | analysis_jobs a partir de startup_id existente (recommendations -> briefing) |
+| V2 | Futuro | Entrada por URL bruta (inclui scraping/ingestion/embeddings) |
+| V3 | Futuro | Retomada de jobs falhados (retry por etapa) |
+| V4 | Futuro | Notificacoes de conclusao |
+
+**Versao atual: V1**
+
+Decisao de escopo confirmada com o usuario: V1 assume que scraping,
+ingestion, embeddings e evidencias da startup ja foram feitos manualmente
+(fluxo atual). Entrada e um `startup_id` existente — orquestrar a partir de
+uma URL bruta exigiria um worker novo so para fazer polling de 3 pipelines
+assincronas alheias, sem necessidade imediata (fica como Orchestration V2).
+
+O que a V1 entregou:
+- `AnalysisJob` (`domain/entities.py`) — ciclo de vida `pending -> running
+  -> completed|failed` (`start()`/`complete()`/`fail()`), mesmo padrao de
+  `AgentRun`; e um log de execucoes (nao substitui o anterior, diferente de
+  `Recommendation`/`Briefing`)
+- Contratos publicos novos em `recommendations`
+  (`RecommendationGenerator.generate()`) e `briefing`
+  (`BriefingGenerator.generate()`) — ver secoes desses modulos
+- `orchestration/application/ports.py` (`RecommendationsPort.generate() ->
+  int`, `BriefingPort.generate() -> UUID`) — vocabulario simplificado, so o
+  que `ExecuteAnalysisJob` precisa para `AnalysisJob.complete()`
+- `ExecuteAnalysisJob` — encadeia `RecommendationsPort.generate()` depois
+  `BriefingPort.generate()`; sucesso -> `complete(recommendation_count,
+  briefing_id)`; excecao -> `fail(reason)` + persiste + relanca (HTTP mapeia
+  para 404 quando a startup nao existe)
+- `OrchestrationFactory` importa `RecommendationsFactory` e
+  `BriefingFactory` direto — 7a e 8a instancia confirmada do mesmo padrao de
+  wiring cross-modulo desta base
+- Sem worker/fila: as duas etapas encadeadas ja sao sincronas
+- Migration `2e85accbd38f`: tabela `analysis_jobs`
+- Presentation: `POST /analysis/jobs`, `GET /analysis/jobs/{id}`,
+  `GET /analysis/jobs?startup_id=`
+
+Tabelas: `analysis_jobs`
+Testes: 9 unit + 1 integracao (recommendations e briefing ganharam +2 unit
+cada do `RecommendationGenerator`/`BriefingGenerator`)
+
+Documento da entrega: `docs/orchestration/orchestration_v1_analysis_jobs.md`.
 
 ---
 
@@ -443,8 +684,16 @@ Testes: 56 unit + 2 integracao (exigem Postgres e Qdrant reais rodando)
 | `9e1f3b5c8a2d` | 2026-06-16 | Cria tabelas de checkpoint LangGraph (V6) |
 | `3f8d1e2a9c7b` | 2026-06-16 | Cria tabelas de ingestion (ingestion_jobs, documents, chunks) |
 | `b7e2c4f8a1d3` | 2026-06-21 | Cria tabelas de embeddings (embedding_jobs, embedding_job_chunks) |
+| `c19a4e5f6b20` | 2026-06-21 | Cria tabelas de startups (startups, startup_evidences) |
+| `f90193dc1578` | 2026-06-21 | Cria tabela de recommendations |
+| `782e2cbdbfab` | 2026-06-21 | Cria tabela de briefings |
+| `2e85accbd38f` | 2026-06-21 | Cria tabela de analysis_jobs |
+| `3ca1a725713e` | 2026-06-22 | Adiciona campos de classificacao de IA em startups |
+| `8d84cba84a02` | 2026-06-22 | Cria indice GIN de full-text search em chunks (RAG V3) |
+| `f77998c46d08` | 2026-06-22 | Adiciona campos estruturados em startups (founders/funding/customers) |
+| `1d3e7f9a2b4c` | 2026-06-22 | Adiciona `source_type` em documents para separar startup_evidence/nvidia_knowledge |
 
-**Head atual: `b7e2c4f8a1d3`**
+**Head atual: `1d3e7f9a2b4c`**
 
 ### Tabelas existentes
 
@@ -459,10 +708,15 @@ checkpoint_blobs        conteudo de cada canal por versao
 checkpoint_writes       escritas pendentes ate proximo checkpoint
 checkpoint_migrations   versao das migrations internas do LangGraph
 ingestion_jobs          status do job de ingestion (1-para-1 com scraping_result)
-documents               documento limpo e normalizado (clean_text + word_count + chunk_count)
+documents               documento limpo e normalizado (clean_text + word_count + chunk_count + source_type)
 chunks                  fragmentos de texto prontos para embedding
 embedding_jobs          status agregado do job de embeddings (1-para-1 com document)
 embedding_job_chunks    status por chunk dentro de um embedding_job (attempt_count, error_message)
+startups                empresa identificada (nome, setor, descricao, website, classificacao de maturidade de IA, founders, funding, customers)
+startup_evidences       evidencia aprovada associada a uma startup (FK scraping_results)
+recommendations         tecnologia NVIDIA recomendada por startup (score, justificativa, matched_keywords, evidence_ids)
+briefings               briefing executivo em Markdown por startup (substitui o anterior a cada geracao)
+analysis_jobs           historico de execucoes recommendations->briefing por startup (status, recommendation_count, briefing_id, error_message)
 ```
 
 ---
@@ -472,10 +726,16 @@ embedding_job_chunks    status por chunk dentro de um embedding_job (attempt_cou
 | Modulo | Testes | Ultima verificacao |
 |---|---|---|
 | scraping | 130 | 2026-06-16 |
-| agents | 57 unit | 2026-06-16 |
+| agents | 67 unit + 1 integracao | 2026-06-22 |
 | ingestion | 33 unit + 1 integracao | 2026-06-21 |
 | embeddings | 56 unit + 2 integracao | 2026-06-21 |
-| **Total** | **280** | **2026-06-21** |
+| startups | 27 unit + 1 integracao | 2026-06-22 |
+| rag | 16 unit + 1 integracao | 2026-06-22 |
+| nvidia_knowledge | 7 unit | 2026-06-22 |
+| recommendations | 19 unit + 1 integracao | 2026-06-21 |
+| briefing | 15 unit + 1 integracao | 2026-06-21 |
+| orchestration | 9 unit + 1 integracao | 2026-06-21 |
+| **Total** | **377 passed / 13 failed (integracao, sem Postgres/Redis/Qdrant locais)** | **2026-06-22** |
 
 Comando para verificar:
 ```bash
@@ -669,7 +929,7 @@ pytest -k "test_acceptance_policy_rejects_captcha" -v
 # Run DB migrations
 alembic upgrade head
 
-# Current migration head: 7c9f2a1b4d6e (agent_run tables)
+# Current migration head: 1d3e7f9a2b4c (documents.source_type)
 ```
 
 ---
@@ -686,7 +946,7 @@ REDIS_URL
 FIRECRAWL_API_KEY
 LLM_API_KEY          ← Gemini API key
 GEMINI_EMBEDDING_MODEL   ← modelo de embedding (embeddings V2), default models/text-embedding-004
-COHERE_API_KEY
+COHERE_API_KEY       ← reranking RAG V4 (Cohere Rerank); opcional, sem ela busca segue sem reranking
 ENVIRONMENT
 LOG_LEVEL
 ```
@@ -715,7 +975,7 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Area | Document |
 |---|---|
 | Global architecture | `docs/arquitetura_global_monolito_modular_workers.md` |
-| Full pipeline logic | `docs/logica_do_sistema.md` |
+| Current state | `docs/estado_atual_do_projeto.md` |
 | Architectural validation | `docs/validacao_arquitetural_modulos_workers.md` |
 | Module message contracts | `docs/validacao_mensagens_interacoes_modulos.md` |
 | Roadmap | `docs/roadmap_proximos_passos.md` |
@@ -726,10 +986,26 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Agents roadmap | `docs/agents/roadmap_agentes.md` |
 | Agents V5 | `docs/agents/agents_v5_executar_grafos_pelo_agent_run.md` |
 | Agents V6 | `docs/agents/agents_v6_checkpoint_postgres.md` |
-| Agents V7 (current) | `docs/agents/agents_v7_human_in_the_loop.md` |
+| Agents V7 | `docs/agents/agents_v7_human_in_the_loop.md` |
+| Agents V8 (current) | `docs/agents/agents_v8_extraction_agent.md` |
+| Agents V9 (current) | `docs/agents/agents_v9_startup_classifier.md` |
 | Embeddings V1 | `docs/embeddings/embeddings_v1_contratos_e_fake.md` |
 | Embeddings V2+V3 | `docs/embeddings/embeddings_v2_v3_provider_real_e_qdrant.md` |
 | Embeddings V4 | `docs/embeddings/embeddings_v4_worker_em_lote.md` |
 | Embeddings V5 (current) | `docs/embeddings/embeddings_v5_metricas_reembedding.md` |
+| RAG V3 (current) | `docs/rag/rag_v3_busca_hibrida.md` |
+| RAG V4 (current) | `docs/rag/rag_v4_reranking.md` |
 | RAG roadmap | `docs/rag/roadmap_rag.md` |
+| Startups V2 (current) | `docs/startups/startups_v2_campos_estruturados.md` |
+| Startups V3 (current) | `docs/startups/startups_v3_classificacao_maturidade.md` |
+| Startups roadmap | `docs/startups/roadmap_startups.md` |
+| NVIDIA Knowledge roadmap | `docs/nvidia_knowledge/roadmap_nvidia_knowledge.md` |
+| NVIDIA Knowledge V2 foundation | `docs/nvidia_knowledge/nvidia_knowledge_v2_foundation_source_type.md` |
+| Recommendations V1 (current) | `docs/recommendations/recommendations_v1_regras_deterministicas.md` |
+| Recommendations roadmap | `docs/recommendations/roadmap_recommendations.md` |
+| Briefing V1 (current) | `docs/briefing/briefing_v1_template_executivo.md` |
+| Briefing roadmap | `docs/briefing/roadmap_briefing.md` |
+| Orchestration V1 (current) | `docs/orchestration/orchestration_v1_analysis_jobs.md` |
+| Orchestration roadmap | `docs/orchestration/roadmap_orchestration.md` |
+| Diagnostico vs. case original + prioridades | `docs/diagnostico_case_original_e_novas_prioridades.md` |
 | Estado atual do projeto | `docs/estado_atual_do_projeto.md` |

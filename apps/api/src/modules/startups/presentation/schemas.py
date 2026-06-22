@@ -9,7 +9,7 @@ from apps.api.src.modules.startups.application.dto import (
     StartupEvidenceView,
     StartupView,
 )
-from apps.api.src.modules.startups.domain.enums import StartupEvidenceType
+from apps.api.src.modules.startups.domain.enums import FundingStage, StartupEvidenceType
 
 
 class CreateStartupRequest(BaseModel):
@@ -26,6 +26,10 @@ class UpdateStartupRequest(BaseModel):
     description: str | None = None
     sector: str | None = None
     country: str | None = None
+    founders: list[str] | None = None
+    funding_stage: FundingStage | None = None
+    funding_amount_usd: float | None = None
+    customers: list[str] | None = None
 
 
 class AddStartupEvidenceRequest(BaseModel):
@@ -44,6 +48,13 @@ class StartupResponse(BaseModel):
     description: str | None
     sector: str | None
     country: str | None
+    ai_maturity_level: str | None
+    classification_reason: str | None
+    classified_at: datetime | None
+    founders: list[str]
+    funding_stage: str | None
+    funding_amount_usd: float | None
+    customers: list[str]
     created_at: datetime
     updated_at: datetime
 
@@ -56,6 +67,19 @@ class StartupResponse(BaseModel):
             description=view.description,
             sector=view.sector,
             country=view.country,
+            ai_maturity_level=(
+                view.ai_maturity_level.value
+                if view.ai_maturity_level is not None
+                else None
+            ),
+            classification_reason=view.classification_reason,
+            classified_at=view.classified_at,
+            founders=view.founders,
+            funding_stage=(
+                view.funding_stage.value if view.funding_stage is not None else None
+            ),
+            funding_amount_usd=view.funding_amount_usd,
+            customers=view.customers,
             created_at=view.created_at,
             updated_at=view.updated_at,
         )

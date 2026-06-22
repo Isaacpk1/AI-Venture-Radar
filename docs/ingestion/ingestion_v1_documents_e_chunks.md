@@ -39,6 +39,7 @@ title
 clean_text
 word_count
 chunk_count
+source_type: startup_evidence | nvidia_knowledge
 created_at
 ```
 
@@ -142,6 +143,18 @@ documents
 chunks
 ```
 
+Extensao para NVIDIA Knowledge V2:
+
+```txt
+documents.source_type
+default: startup_evidence
+valor para documentacao NVIDIA: nvidia_knowledge
+```
+
+Essa extensao permite que o mesmo pipeline de ingestion seja reaproveitado para
+evidencias de startups e documentacao tecnica NVIDIA, sem misturar os dois
+corpus nas consultas RAG.
+
 ## 9. Validacao
 
 Testes unitarios existentes:
@@ -173,6 +186,7 @@ sem deduplicacao de documentos
 sem versionamento de limpeza/chunking
 sem hash de document/chunk
 sem reprocessamento automatico
+sem registro dedicado de fontes NVIDIA ainda
 ```
 
 Esses pontos ficam para Ingestion V2, V3 e V5.

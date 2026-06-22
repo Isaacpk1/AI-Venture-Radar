@@ -36,6 +36,43 @@ class AgentType(StrEnum):
 
     EVIDENCE_VALIDATION = "evidence_validation"
     SEARCH_PLANNING = "search_planning"
+    STARTUP_CLASSIFIER = "startup_classifier"
+    EXTRACTION = "extraction"
+
+
+class StartupMaturityLevel(StrEnum):
+    """Classificacao de maturidade de IA que o Startup Classifier produz.
+
+    Vocabulario INTERNO do modulo agents. O modulo startups tem o seu
+    proprio enum equivalente (``AiMaturityLevel``, em
+    ``startups/domain/enums.py``), com os mesmos valores de string. A
+    traducao e responsabilidade do adaptador
+    (``startups/infrastructure/agent_adapters/agents_startup_classifier.py``),
+    mesmo padrao de ``AgentDecision``/``AgentInvestigationDecision``.
+    """
+
+    AI_NATIVE = "ai_native"
+    AI_ENABLED = "ai_enabled"
+    NON_AI = "non_ai"
+
+
+class ExtractedFundingStage(StrEnum):
+    """Estagio de funding que o Extraction Agent pode identificar.
+
+    Vocabulario INTERNO do modulo agents. O modulo startups tem o seu
+    proprio enum equivalente (``FundingStage``, em
+    ``startups/domain/enums.py``), com os mesmos valores de string. A
+    traducao e responsabilidade do adaptador
+    (``startups/infrastructure/agent_adapters/agents_extractor.py``),
+    mesmo padrao de ``AgentDecision``/``AgentInvestigationDecision``.
+    """
+
+    PRE_SEED = "pre_seed"
+    SEED = "seed"
+    SERIES_A = "series_a"
+    SERIES_B = "series_b"
+    SERIES_C_PLUS = "series_c_plus"
+    UNKNOWN = "unknown"
 
 
 class AgentRunStatus(StrEnum):

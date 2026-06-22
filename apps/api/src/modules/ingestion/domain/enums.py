@@ -8,3 +8,8 @@ class IngestionJobStatus(str, Enum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class DocumentSourceType(str, Enum):
+    STARTUP_EVIDENCE = "startup_evidence"
+    NVIDIA_KNOWLEDGE = "nvidia_knowledge"

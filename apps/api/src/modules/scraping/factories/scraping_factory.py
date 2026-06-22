@@ -27,6 +27,10 @@ from apps.api.src.modules.scraping.application.use_cases.get_scraping_job import
 from apps.api.src.modules.scraping.application.use_cases.get_scraping_result import (
     GetScrapingResult,
 )
+from apps.api.src.modules.scraping.application.public.job_submitter import (
+    DefaultScrapingJobSubmitter,
+    ScrapingJobSubmitter,
+)
 from apps.api.src.modules.scraping.domain.policies import (
     ContentAcceptancePolicy,
     FallbackPolicy,
@@ -181,3 +185,12 @@ class ScrapingFactory:
         """Cria o caso de uso de consulta do conteudo aprovado."""
 
         return GetScrapingResult(unit_of_work_factory=cls.create_unit_of_work)
+
+    @classmethod
+    def create_job_submitter(cls) -> ScrapingJobSubmitter:
+        """Cria o contrato publico para submeter/acompanhar jobs (Orchestration V2)."""
+
+        return DefaultScrapingJobSubmitter(
+            create_scraping_job=cls.create_create_scraping_job(),
+            get_scraping_job=cls.create_get_scraping_job(),
+        )

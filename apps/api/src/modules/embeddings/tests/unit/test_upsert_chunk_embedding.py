@@ -31,7 +31,11 @@ class FakeVectorRepository(VectorRepository):
         self.records[record.chunk_id] = record
 
     async def search(
-        self, query_vector: tuple[float, ...], *, limit: int = 5
+        self,
+        query_vector: tuple[float, ...],
+        *,
+        limit: int = 5,
+        source_type: str | None = None,
     ) -> list[ChunkSearchResult]:
         return []
 
@@ -53,6 +57,7 @@ async def test_execute_generates_and_persists_embedding() -> None:
             chunk_id=chunk_id,
             document_id=document_id,
             source_url="https://startup.example.com",
+            source_type="nvidia_knowledge",
             text="a NVIDIA recomenda NIM para servir LLMs",
         )
     )
@@ -60,4 +65,5 @@ async def test_execute_generates_and_persists_embedding() -> None:
     record = vector_repository.records[chunk_id]
     assert record.document_id == document_id
     assert record.source_url == "https://startup.example.com"
+    assert record.source_type == "nvidia_knowledge"
     assert len(record.values) == record.dimension

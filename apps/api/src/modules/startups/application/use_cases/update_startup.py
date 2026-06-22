@@ -35,6 +35,10 @@ class UpdateStartup:
                 description=startup_input.description,
                 sector=startup_input.sector,
                 country=startup_input.country,
+                founders=startup_input.founders,
+                funding_stage=startup_input.funding_stage,
+                funding_amount_usd=startup_input.funding_amount_usd,
+                customers=startup_input.customers,
             )
             await uow.startup_repository.save(startup)
             await uow.commit()

@@ -1,6 +1,7 @@
 """Mapper entre Document e DocumentModel."""
 
 from apps.api.src.modules.ingestion.domain.entities import Document
+from apps.api.src.modules.ingestion.domain.enums import DocumentSourceType
 from apps.api.src.modules.ingestion.infrastructure.database.models.document_model import (
     DocumentModel,
 )
@@ -19,6 +20,7 @@ class DocumentMapper:
             clean_text=entity.clean_text,
             word_count=entity.word_count,
             chunk_count=entity.chunk_count,
+            source_type=entity.source_type.value,
             created_at=entity.created_at,
         )
 
@@ -33,6 +35,7 @@ class DocumentMapper:
             clean_text=model.clean_text,
             word_count=model.word_count,
             chunk_count=model.chunk_count,
+            source_type=DocumentSourceType(model.source_type),
             created_at=model.created_at,
         )
 
@@ -45,3 +48,4 @@ class DocumentMapper:
         model.clean_text = entity.clean_text
         model.word_count = entity.word_count
         model.chunk_count = entity.chunk_count
+        model.source_type = entity.source_type.value

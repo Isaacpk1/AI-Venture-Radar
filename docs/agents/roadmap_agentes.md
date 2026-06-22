@@ -20,8 +20,8 @@ docs/validacao_arquitetural_modulos_workers.md
 | Agents V5 | Implementado | `docs/agents/agents_v5_executar_grafos_pelo_agent_run.md` |
 | Agents V6 | Implementado | `docs/agents/agents_v6_checkpoint_postgres.md` |
 | Agents V7 | Implementado | `docs/agents/agents_v7_human_in_the_loop.md` |
-| Agents V8 | Futuro | Extraction Agent |
-| Agents V9 | Futuro | Startup Classifier Agent |
+| Agents V8 | Implementado | `docs/agents/agents_v8_extraction_agent.md` |
+| Agents V9 | Implementado | `docs/agents/agents_v9_startup_classifier.md` |
 | Agents V10 | Futuro | NVIDIA Knowledge Agent |
 | Agents V11 | Futuro | Recommendation Agent |
 | Agents V12 | Futuro | Briefing Agent |
@@ -67,25 +67,108 @@ checkpoint PostgreSQL implementado na V6
 human-in-the-loop via API implementado na V7
 ```
 
-### Extraction Agent
+### Extraction Agent (Agents V8)
 
-Extrai dados estruturados das evidencias aceitas.
+Status:
 
-### Startup Classifier Agent
+```txt
+implementado
+```
 
-Classifica startups por setor, tipo de IA, maturidade e aderencia tecnica.
+Extrai dados estruturados (founders, funding, customers) das evidencias
+de uma startup. Desbloqueado pelo Startups V2 (campos de destino).
 
-### NVIDIA Knowledge Agent
+Entregue:
+
+- `ExtractionGraph` (3 nodes, copia estrutural de
+  `StartupClassificationGraph`, sem interrupt nesta versao);
+- `LangChainGeminiExtractor` (copia estrutural de
+  `LangChainGeminiStartupClassifier`); prompt instrui explicitamente a
+  nunca inferir/inventar — devolver vazio/`unknown`/null quando a
+  evidencia nao menciona o dado (regra 9 do CLAUDE.md: saida do LLM
+  validada via Pydantic, nunca confiada diretamente);
+- contrato publico `ExtractionService` (`application/public/extractor.py`);
+- `AgentType.EXTRACTION` wired em `ExecuteAgentJob`/`ResumeAgentJob`;
+- consumido sincronamente por `startups` via adapter proprio
+  (`AgentsExtractor`), mesmo padrao do Startup Classifier — `POST
+  /startups/{id}/extract`.
+
+Documento da entrega: `docs/agents/agents_v8_extraction_agent.md`.
+Contraparte de dados: `docs/startups/startups_v2_campos_estruturados.md`.
+
+### Startup Classifier Agent (Agents V9)
+
+Status:
+
+```txt
+implementado
+```
+
+Classifica a maturidade de IA da startup (AI-native/AI-enabled/Non-AI)
+com justificativa, a partir do perfil e evidencias. Fechou a lacuna mais
+critica do diagnostico (`docs/diagnostico_case_original_e_novas_prioridades.md`,
+secao 3).
+
+Entregue:
+
+- `StartupClassificationGraph` (3 nodes, copia estrutural de
+  `SearchPlanningGraph`, sem interrupt nesta versao);
+- `LangChainGeminiStartupClassifier` (copia estrutural de
+  `LangChainGeminiEvidenceJudge`);
+- contrato publico `StartupClassifierService`
+  (`application/public/startup_classifier.py`);
+- `AgentType.STARTUP_CLASSIFIER` wired em `ExecuteAgentJob`/`ResumeAgentJob`;
+- consumido sincronamente por `startups` via adapter proprio (nao usa a
+  fila `agent_runs` nesta entrega — ver doc da entrega para o porque).
+
+Documento da entrega: `docs/agents/agents_v9_startup_classifier.md`.
+Contraparte de dados: `docs/startups/startups_v3_classificacao_maturidade.md`.
+
+### NVIDIA Knowledge Agent (Agents V10)
 
 Consulta a base RAG de conhecimento NVIDIA.
 
-### Recommendation Agent
+Objetivo:
 
-Recomenda tecnologias NVIDIA para uma startup com justificativa e evidencias.
+```txt
+pergunta/perfil da startup -> trechos relevantes da base NVIDIA, com
+citacoes, para alimentar Recommendation e Briefing Agent
+```
 
-### Briefing Agent
+Pre-requisitos:
 
-Gera uma analise final clara para negocio.
+```txt
+RAG V3 (busca hibrida vetorial+lexical) e V4 (reranking) - ENTREGUE
+NVIDIA Knowledge V1 com catalogo completo (18 tecnologias) - ENTREGUE
+NVIDIA Knowledge V2 (ingestao real de documentacao NVIDIA via
+  scraping/ingestion/embeddings) - PENDENTE, proximo passo. Sem isso o
+  agente so teria o catalogo estatico para consultar, nao uma base RAG
+  real (ver docs/nvidia_knowledge/roadmap_nvidia_knowledge.md)
+```
+
+### Recommendation Agent (Agents V11 = Recommendations V3)
+
+Recomenda tecnologias NVIDIA para uma startup com justificativa e
+evidencias. Mesma entrega que `recommendations` V3 ("Agent
+Recommendation") — ver `docs/recommendations/roadmap_recommendations.md`.
+
+Decisao de design: orquestrar `RecommendationGenerator`
+(`recommendations/application/public/`, ja existe desde Orchestration V1)
+como tool, acionando LLM so quando o score determinístico cair numa banda
+ambigua ou para enriquecer a justificativa de negocio — mesmo padrao de
+escalonamento que `scraping` ja usa para chamar `agents` (`AGENT_REVIEW`).
+Nao reescreve `match_technologies()`; usa o resultado dele como insumo.
+
+### Briefing Agent (Agents V12 = Briefing V2)
+
+Gera uma analise final clara para negocio. Mesma entrega que `briefing` V2
+("Agente de Briefing") — ver `docs/briefing/roadmap_briefing.md`.
+
+Decisao de design: orquestrar `BriefingGenerator`
+(`briefing/application/public/`, ja existe desde Orchestration V1) como
+tool, usando LLM so para reescrever a prosa executiva (linguagem de
+negocio), preservando as citacoes/rastreabilidade que o template
+determinístico ja garante.
 
 ## Regra Principal
 
@@ -97,7 +180,21 @@ O padrao correto e:
 agent -> contratos publicos -> services/use cases/tools -> resultado estruturado
 ```
 
-O proximo passo de produto nao e criar outro agente imediatamente. Com `RAG V2`
-e `NVIDIA Knowledge V1` implementados, o mais importante agora e criar
-`Recommendations V1`, para que agentes futuros tenham uma recomendacao tecnica
-rastreavel para chamar por contrato publico.
+## Estado atual e proximo passo (atualizado)
+
+Com `Startup Classifier Agent (V9)` e agora `Extraction Agent (V8)`
+implementados, o Entregavel 2 do case ("sistema multiagente") avancou
+para 4/8 agentes reais — ainda faltam 4 dos 8 agentes do brief como
+agentes LangGraph (ver diagnostico, secao 8). Ordem combinada com o
+usuario para fechar essa lacuna:
+
+```txt
+1. Startup Classifier Agent (V9) - ENTREGUE
+2. Extraction Agent (V8) - ENTREGUE
+3. NVIDIA Knowledge V2 (ingestao real de docs NVIDIA via
+   scraping/ingestion/embeddings) - proximo passo, pre-requisito do
+   NVIDIA Knowledge Agent
+4. NVIDIA Knowledge Agent (V10) - depende de #3
+5. Recommendation Agent (V11) e Briefing Agent (V12) - tool-calling sobre
+   os contratos publicos que ja existem
+```

@@ -7,6 +7,10 @@ from apps.api.src.modules.ingestion.application.ports import (
 from apps.api.src.modules.ingestion.application.public.ingested_reader import (
     IngestedDocumentReader,
 )
+from apps.api.src.modules.ingestion.application.public.ingestion_job_submitter import (
+    DefaultIngestionJobSubmitter,
+    IngestionJobSubmitter,
+)
 from apps.api.src.modules.ingestion.application.text_cleaner import TextCleaner
 from apps.api.src.modules.ingestion.application.text_chunker import TextChunker
 from apps.api.src.modules.ingestion.application.use_cases.create_ingestion_job import (
@@ -78,3 +82,12 @@ class IngestionFactory:
     @staticmethod
     def create_ingested_document_reader() -> IngestedDocumentReader:
         return PostgresIngestedDocumentReader()
+
+    @staticmethod
+    def create_job_submitter() -> IngestionJobSubmitter:
+        """Cria o contrato publico para submeter/acompanhar jobs (Orchestration V2)."""
+
+        return DefaultIngestionJobSubmitter(
+            create_ingestion_job=IngestionFactory.create_create_ingestion_job(),
+            get_ingestion_job=IngestionFactory.create_get_ingestion_job(),
+        )

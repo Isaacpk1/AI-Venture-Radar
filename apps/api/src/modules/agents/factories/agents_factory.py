@@ -8,11 +8,17 @@ publico ``EvidenceValidationService`` atraves desta factory.
 
 from apps.api.src.config.settings import get_settings
 from apps.api.src.modules.agents.application.ports import AgentTaskDispatcher
+from apps.api.src.modules.agents.application.public.extractor import (
+    ExtractionService,
+)
 from apps.api.src.modules.agents.application.public.semantic_investigator import (
     EvidenceValidationService,
 )
 from apps.api.src.modules.agents.application.public.search_planner import (
     SearchPlanningService,
+)
+from apps.api.src.modules.agents.application.public.startup_classifier import (
+    StartupClassifierService,
 )
 from apps.api.src.modules.agents.application.use_cases.create_agent_run import (
     CreateAgentRun,
@@ -29,14 +35,24 @@ from apps.api.src.modules.agents.application.use_cases.resume_agent_job import (
 from apps.api.src.modules.agents.graphs.evidence_validation.graph import (
     EvidenceValidationGraph,
 )
+from apps.api.src.modules.agents.graphs.extraction.graph import ExtractionGraph
 from apps.api.src.modules.agents.graphs.search_planning.graph import (
     SearchPlanningGraph,
+)
+from apps.api.src.modules.agents.graphs.startup_classification.graph import (
+    StartupClassificationGraph,
 )
 from apps.api.src.modules.agents.infrastructure.llm.langchain_gemini_evidence_judge import (
     LangChainGeminiEvidenceJudge,
 )
+from apps.api.src.modules.agents.infrastructure.llm.langchain_gemini_extractor import (
+    LangChainGeminiExtractor,
+)
 from apps.api.src.modules.agents.infrastructure.llm.langchain_gemini_search_planner import (
     LangChainGeminiSearchPlanner,
+)
+from apps.api.src.modules.agents.infrastructure.llm.langchain_gemini_startup_classifier import (
+    LangChainGeminiStartupClassifier,
 )
 from apps.api.src.modules.agents.infrastructure.checkpoints.postgres_checkpointer import (
     PostgresCheckpointer,
@@ -123,6 +139,52 @@ class AgentsFactory:
         return SearchPlanningGraph(planner=planner, checkpointer=checkpointer)
 
     @staticmethod
+    def create_startup_classification_service(
+        checkpointer: PostgresCheckpointer | None = None,
+    ) -> StartupClassifierService | None:
+        """Cria o servico publico do Startup Classifier Agent (V9).
+
+        Mesma regra dos demais agentes: sem chave Gemini configurada,
+        devolve ``None`` para evitar custo acidental.
+        """
+
+        settings = get_settings()
+
+        if not settings.gemini_api_key:
+            return None
+
+        classifier = LangChainGeminiStartupClassifier(
+            api_key=settings.gemini_api_key,
+            model=settings.gemini_model,
+        )
+
+        return StartupClassificationGraph(
+            classifier=classifier, checkpointer=checkpointer
+        )
+
+    @staticmethod
+    def create_extraction_service(
+        checkpointer: PostgresCheckpointer | None = None,
+    ) -> ExtractionService | None:
+        """Cria o servico publico do Extraction Agent (V8).
+
+        Mesma regra dos demais agentes: sem chave Gemini configurada,
+        devolve ``None`` para evitar custo acidental.
+        """
+
+        settings = get_settings()
+
+        if not settings.gemini_api_key:
+            return None
+
+        extractor = LangChainGeminiExtractor(
+            api_key=settings.gemini_api_key,
+            model=settings.gemini_model,
+        )
+
+        return ExtractionGraph(extractor=extractor, checkpointer=checkpointer)
+
+    @staticmethod
     def create_agent_task_dispatcher() -> AgentTaskDispatcher:
         """Cria dispatcher para publicar execucoes na fila ``agents``."""
 
@@ -148,6 +210,10 @@ class AgentsFactory:
             search_planning_service=AgentsFactory.create_search_planning_service(
                 checkpointer
             ),
+            startup_classification_service=AgentsFactory.create_startup_classification_service(
+                checkpointer
+            ),
+            extraction_service=AgentsFactory.create_extraction_service(checkpointer),
         )
 
     @staticmethod
@@ -163,6 +229,10 @@ class AgentsFactory:
             search_planning_service=AgentsFactory.create_search_planning_service(
                 checkpointer
             ),
+            startup_classification_service=AgentsFactory.create_startup_classification_service(
+                checkpointer
+            ),
+            extraction_service=AgentsFactory.create_extraction_service(checkpointer),
         )
 
     @staticmethod

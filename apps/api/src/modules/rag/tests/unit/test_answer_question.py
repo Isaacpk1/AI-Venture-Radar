@@ -73,12 +73,22 @@ async def test_answer_question_retrieves_evidence_and_generates_answer() -> None
     generator = FakeAnswerGenerator()
     use_case = AnswerQuestion(search_evidence=retriever, answer_generator=generator)
 
-    view = await use_case.execute(AnswerQuestionInput(query="  Qual a tracao?  ", limit=3))
+    view = await use_case.execute(
+        AnswerQuestionInput(
+            query="  Qual a tracao?  ",
+            limit=3,
+            source_type="startup_evidence",
+        )
+    )
 
     assert view.answer.startswith("A startup tem tracao")
     assert view.citations[0].chunk_id == evidence.chunk_id
     assert view.evidences == [evidence]
-    assert retriever.last_input == SearchEvidenceInput(query="  Qual a tracao?  ", limit=3)
+    assert retriever.last_input == SearchEvidenceInput(
+        query="  Qual a tracao?  ",
+        limit=3,
+        source_type="startup_evidence",
+    )
     assert generator.last_input == GenerateRagAnswerInput(
         query="Qual a tracao?",
         evidences=[evidence],

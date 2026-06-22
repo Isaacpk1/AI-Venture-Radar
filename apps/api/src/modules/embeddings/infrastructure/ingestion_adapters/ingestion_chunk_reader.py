@@ -28,6 +28,7 @@ class IngestionChunkReader(ChunkSourceReader):
                 chunk_id=record.id,
                 text=record.text,
                 source_url=record.source_url,
+                source_type=record.source_type.value,
             )
             for record in records
         ]

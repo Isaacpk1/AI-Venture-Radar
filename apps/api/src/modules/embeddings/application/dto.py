@@ -27,6 +27,7 @@ class UpsertChunkEmbeddingInput:
     document_id: UUID
     source_url: str
     text: str
+    source_type: str = "startup_evidence"
 
 
 @dataclass
@@ -37,6 +38,7 @@ class ChunkEmbeddingRecord:
     values: tuple[float, ...]
     dimension: int
     model_name: str
+    source_type: str = "startup_evidence"
 
 
 @dataclass
@@ -45,6 +47,7 @@ class ChunkSearchResult:
     document_id: UUID
     source_url: str
     score: float
+    source_type: str = "startup_evidence"
 
 
 @dataclass
@@ -52,6 +55,7 @@ class ChunkSourceItem:
     chunk_id: UUID
     text: str
     source_url: str
+    source_type: str = "startup_evidence"
 
 
 @dataclass

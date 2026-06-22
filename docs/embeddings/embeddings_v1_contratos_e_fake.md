@@ -224,9 +224,10 @@ sem leitura do modulo ingestion
       mas sem implementacao porque nada o usa ainda)
 ```
 
-## 6. Proximo passo
+## 6. Proximo passo historico
 
-Decisao pendente entre dois caminhos (ver `CLAUDE.md`):
+Este trecho registrava a decisao logo apos a V1. Os dois caminhos abaixo ja
+foram entregues no estado atual do projeto.
 
 ```txt
 Embeddings V2/V3

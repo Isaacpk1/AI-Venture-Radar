@@ -9,11 +9,19 @@ from uuid import UUID
 from apps.api.src.modules.agents.application.dto import (
     EvidenceValidationInput,
     EvidenceValidationResult,
+    ExtractionInput,
+    ExtractionResult,
     SearchPlanInput,
     SearchPlanResult,
     SearchQuerySuggestion,
+    StartupClassificationInput,
+    StartupClassificationResult,
 )
-from apps.api.src.modules.agents.domain.enums import AgentDecision
+from apps.api.src.modules.agents.domain.enums import (
+    AgentDecision,
+    ExtractedFundingStage,
+    StartupMaturityLevel,
+)
 
 
 def _optional_uuid(value: object) -> UUID | None:
@@ -118,6 +126,98 @@ def search_plan_result_from_payload(payload: dict[str, object]) -> SearchPlanRes
             if isinstance(item, dict)
         ],
         reason=str(payload["reason"]),
+    )
+
+
+def startup_classification_input_from_payload(
+    payload: dict[str, object],
+) -> StartupClassificationInput:
+    """Reconstrói ``StartupClassificationInput`` a partir do JSON persistido."""
+
+    return StartupClassificationInput(
+        name=str(payload["name"]),
+        sector=(
+            str(payload["sector"]) if payload.get("sector") is not None else None
+        ),
+        description=(
+            str(payload["description"])
+            if payload.get("description") is not None
+            else None
+        ),
+        country=(
+            str(payload["country"]) if payload.get("country") is not None else None
+        ),
+        website_url=(
+            str(payload["website_url"])
+            if payload.get("website_url") is not None
+            else None
+        ),
+        evidence_texts=[str(text) for text in payload.get("evidence_texts", [])],
+    )
+
+
+def startup_classification_result_to_payload(
+    result: StartupClassificationResult,
+) -> dict[str, object]:
+    """Serializa resultado de classificacao de startup para JSON."""
+
+    return {
+        "level": result.level.value,
+        "reason": result.reason,
+    }
+
+
+def startup_classification_result_from_payload(
+    payload: dict[str, object],
+) -> StartupClassificationResult:
+    """Reconstrói resultado de classificacao quando necessario em testes."""
+
+    return StartupClassificationResult(
+        level=StartupMaturityLevel(str(payload["level"])),
+        reason=str(payload["reason"]),
+    )
+
+
+def extraction_input_from_payload(payload: dict[str, object]) -> ExtractionInput:
+    """Reconstrói ``ExtractionInput`` a partir do JSON persistido."""
+
+    return ExtractionInput(
+        name=str(payload["name"]),
+        sector=(
+            str(payload["sector"]) if payload.get("sector") is not None else None
+        ),
+        description=(
+            str(payload["description"])
+            if payload.get("description") is not None
+            else None
+        ),
+        evidence_texts=[str(text) for text in payload.get("evidence_texts", [])],
+    )
+
+
+def extraction_result_to_payload(result: ExtractionResult) -> dict[str, object]:
+    """Serializa resultado de extracao para JSON."""
+
+    return {
+        "founders": list(result.founders),
+        "funding_stage": result.funding_stage.value,
+        "funding_amount_usd": result.funding_amount_usd,
+        "customers": list(result.customers),
+    }
+
+
+def extraction_result_from_payload(payload: dict[str, object]) -> ExtractionResult:
+    """Reconstrói resultado de extracao quando necessario em testes."""
+
+    return ExtractionResult(
+        founders=[str(name) for name in payload.get("founders", [])],
+        funding_stage=ExtractedFundingStage(str(payload["funding_stage"])),
+        funding_amount_usd=(
+            float(payload["funding_amount_usd"])
+            if payload.get("funding_amount_usd") is not None
+            else None
+        ),
+        customers=[str(name) for name in payload.get("customers", [])],
     )
 
 

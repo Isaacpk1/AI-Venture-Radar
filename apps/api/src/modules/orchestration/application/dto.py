@@ -1,0 +1,49 @@
+"""DTOs do modulo orchestration."""
+
+from dataclasses import dataclass
+from datetime import datetime
+from uuid import UUID
+
+from apps.api.src.modules.orchestration.domain.enums import (
+    AnalysisJobStatus,
+    UrlIngestionJobStatus,
+)
+
+
+@dataclass(frozen=True)
+class CreateAnalysisJobInput:
+    startup_id: UUID
+
+
+@dataclass(frozen=True)
+class AnalysisJobView:
+    id: UUID
+    startup_id: UUID
+    status: AnalysisJobStatus
+    recommendation_count: int | None
+    briefing_id: UUID | None
+    error_message: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+@dataclass(frozen=True)
+class CreateUrlIngestionJobInput:
+    url: str
+
+
+@dataclass(frozen=True)
+class UrlIngestionJobView:
+    id: UUID
+    url: str
+    status: UrlIngestionJobStatus
+    scraping_job_id: UUID | None
+    scraping_result_id: UUID | None
+    ingestion_job_id: UUID | None
+    document_id: UUID | None
+    embedding_job_id: UUID | None
+    error_message: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None

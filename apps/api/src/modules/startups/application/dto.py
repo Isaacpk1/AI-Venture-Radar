@@ -4,7 +4,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from apps.api.src.modules.startups.domain.enums import StartupEvidenceType
+from apps.api.src.modules.startups.domain.enums import (
+    AiMaturityLevel,
+    FundingStage,
+    StartupEvidenceType,
+)
 
 
 @dataclass
@@ -24,6 +28,10 @@ class UpdateStartupInput:
     description: str | None = None
     sector: str | None = None
     country: str | None = None
+    founders: list[str] | None = None
+    funding_stage: FundingStage | None = None
+    funding_amount_usd: float | None = None
+    customers: list[str] | None = None
 
 
 @dataclass
@@ -38,6 +46,16 @@ class AddStartupEvidenceInput:
 
 
 @dataclass
+class ClassifyStartupInput:
+    startup_id: UUID
+
+
+@dataclass
+class ExtractStartupProfileInput:
+    startup_id: UUID
+
+
+@dataclass
 class StartupView:
     id: UUID
     name: str
@@ -45,6 +63,13 @@ class StartupView:
     description: str | None
     sector: str | None
     country: str | None
+    ai_maturity_level: AiMaturityLevel | None
+    classification_reason: str | None
+    classified_at: datetime | None
+    founders: list[str]
+    funding_stage: FundingStage | None
+    funding_amount_usd: float | None
+    customers: list[str]
     created_at: datetime
     updated_at: datetime
 
@@ -60,3 +85,11 @@ class StartupEvidenceView:
     confidence_score: float | None
     notes: str | None
     created_at: datetime
+
+
+@dataclass
+class StartupProfileView:
+    """Perfil completo de uma startup para consumo de outros modulos."""
+
+    startup: StartupView
+    evidences: list[StartupEvidenceView]

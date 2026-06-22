@@ -7,6 +7,7 @@ import pytest
 from apps.api.src.modules.embeddings.infrastructure.ingestion_adapters.ingestion_chunk_reader import (
     IngestionChunkReader,
 )
+from apps.api.src.modules.ingestion.domain.enums import DocumentSourceType
 from apps.api.src.modules.ingestion.application.public.ingested_reader import (
     ChunkRecord,
     IngestedDocumentReader,
@@ -33,6 +34,7 @@ async def test_maps_chunk_records_to_chunk_source_items() -> None:
         document_id=document_id,
         text="texto do chunk",
         source_url="https://startup.example.com",
+        source_type=DocumentSourceType.NVIDIA_KNOWLEDGE,
     )
     reader = IngestionChunkReader(
         FakeIngestedDocumentReader(chunks=[chunk_record])
@@ -44,6 +46,7 @@ async def test_maps_chunk_records_to_chunk_source_items() -> None:
     assert items[0].chunk_id == chunk_record.id
     assert items[0].text == "texto do chunk"
     assert items[0].source_url == "https://startup.example.com"
+    assert items[0].source_type == "nvidia_knowledge"
 
 
 @pytest.mark.anyio

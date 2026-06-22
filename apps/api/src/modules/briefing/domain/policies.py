@@ -1,0 +1,138 @@
+"""Regras deterministicas de avaliacao e montagem do briefing executivo.
+
+Riscos e proximas acoes sao inferidos por regra de codigo, nao por LLM — o
+mesmo principio aplicado em ``recommendations/domain/policies.py``. Uma
+versao futura com agente (Briefing V2) pode substituir/complementar isto,
+nao esta.
+"""
+
+from dataclasses import dataclass
+
+LOW_CONFIDENCE_THRESHOLD = 0.5
+LOW_SCORE_THRESHOLD = 0.5
+
+
+@dataclass(frozen=True)
+class StartupSummary:
+    name: str
+    sector: str | None
+    description: str | None
+    country: str | None
+    website_url: str | None
+
+
+@dataclass(frozen=True)
+class EvidenceItem:
+    title: str | None
+    source_url: str
+    evidence_type: str
+    confidence_score: float | None
+
+
+@dataclass(frozen=True)
+class RecommendationItem:
+    technology_name: str
+    category: str
+    score: float
+    justification: str
+
+
+def assess_risks(
+    evidences: list[EvidenceItem],
+    recommendations: list[RecommendationItem],
+) -> list[str]:
+    """Aponta lacunas no perfil/recomendacoes que o leitor deveria saber."""
+
+    risks: list[str] = []
+
+    if not evidences:
+        risks.append(
+            "Nenhuma evidencia aprovada associada a esta startup; perfil "
+            "pouco fundamentado."
+        )
+    elif any(
+        evidence.confidence_score is not None
+        and evidence.confidence_score < LOW_CONFIDENCE_THRESHOLD
+        for evidence in evidences
+    ):
+        risks.append(
+            "Pelo menos uma evidencia tem confiabilidade baixa "
+            f"(confidence_score < {LOW_CONFIDENCE_THRESHOLD})."
+        )
+
+    if not recommendations:
+        risks.append(
+            "Nenhuma tecnologia NVIDIA com aderencia clara identificada com "
+            "as evidencias atuais."
+        )
+    elif recommendations[0].score < LOW_SCORE_THRESHOLD:
+        risks.append(
+            "Aderencia da melhor recomendacao ainda e moderada "
+            f"(score {recommendations[0].score})."
+        )
+
+    return risks
+
+
+def suggest_next_actions(recommendations: list[RecommendationItem]) -> list[str]:
+    """Sugere a proxima acao concreta com base na melhor recomendacao."""
+
+    if not recommendations:
+        return [
+            "Coletar evidencias adicionais sobre o uso de IA da startup "
+            "para habilitar recomendacoes."
+        ]
+
+    top = recommendations[0]
+    return [f"Agendar conversa tecnica sobre {top.technology_name} ({top.category})."]
+
+
+def build_briefing_markdown(
+    *,
+    startup: StartupSummary,
+    evidences: list[EvidenceItem],
+    recommendations: list[RecommendationItem],
+    risks: list[str],
+    next_actions: list[str],
+) -> str:
+    """Monta o briefing executivo em Markdown a partir de dados estruturados."""
+
+    lines = [f"# Briefing Executivo — {startup.name}", "", "## Resumo"]
+
+    summary_parts = [part for part in (startup.sector, startup.country) if part]
+    if summary_parts:
+        lines.append(" | ".join(summary_parts))
+    if startup.description:
+        lines.append(startup.description)
+    if startup.website_url:
+        lines.append(f"Site: {startup.website_url}")
+
+    lines += ["", "## Evidencias Principais"]
+    if evidences:
+        for evidence in evidences:
+            label = evidence.title or evidence.source_url
+            lines.append(f"- [{label}]({evidence.source_url}) — {evidence.evidence_type}")
+    else:
+        lines.append("- Nenhuma evidencia aprovada registrada.")
+
+    lines += ["", "## Recomendacoes NVIDIA"]
+    if recommendations:
+        for recommendation in recommendations:
+            lines.append(
+                f"- **{recommendation.technology_name}** "
+                f"({recommendation.category}, score {recommendation.score}) — "
+                f"{recommendation.justification}"
+            )
+    else:
+        lines.append("- Nenhuma recomendacao gerada ainda.")
+
+    lines += ["", "## Riscos"]
+    if risks:
+        lines += [f"- {risk}" for risk in risks]
+    else:
+        lines.append("- Nenhum risco identificado.")
+
+    lines += ["", "## Proximas Acoes"]
+    lines += [f"- {action}" for action in next_actions]
+
+    return "\n".join(lines).strip() + "\n"

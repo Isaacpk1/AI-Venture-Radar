@@ -8,6 +8,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from uuid import UUID
 
+from apps.api.src.modules.ingestion.domain.enums import DocumentSourceType
+
 
 @dataclass
 class IngestedDocumentSummary:
@@ -17,6 +19,7 @@ class IngestedDocumentSummary:
     title: str | None
     word_count: int
     chunk_count: int
+    source_type: DocumentSourceType = DocumentSourceType.STARTUP_EVIDENCE
 
 
 @dataclass
@@ -27,6 +30,7 @@ class ChunkRecord:
     document_id: UUID
     text: str
     source_url: str
+    source_type: DocumentSourceType = DocumentSourceType.STARTUP_EVIDENCE
 
 
 class IngestedDocumentReader(ABC):

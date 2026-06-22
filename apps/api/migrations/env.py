@@ -53,6 +53,15 @@ from apps.api.src.modules.startups.infrastructure.database.models import (  # no
     startup_evidence_model,
     startup_model,
 )
+from apps.api.src.modules.recommendations.infrastructure.database.models import (  # noqa: F401
+    recommendation_model,
+)
+from apps.api.src.modules.briefing.infrastructure.database.models import (  # noqa: F401
+    briefing_model,
+)
+from apps.api.src.modules.orchestration.infrastructure.database.models import (  # noqa: F401
+    analysis_job_model,
+)
 
 # Objeto de configuração do Alembic, vindo do alembic.ini.
 config = context.config

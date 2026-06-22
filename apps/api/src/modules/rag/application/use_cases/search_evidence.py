@@ -1,4 +1,4 @@
-"""Caso de uso para buscar evidencias semanticamente."""
+"""Caso de uso para buscar evidencias com busca hibrida + reranking."""
 
 from uuid import uuid4
 
@@ -18,23 +18,39 @@ from apps.api.src.modules.rag.application.dto import (
     SearchEvidenceInput,
     SearchEvidenceView,
 )
+from apps.api.src.modules.rag.application.ports import LexicalSearchRepository, Reranker
 from apps.api.src.modules.rag.application.public.retriever import Retriever
 from apps.api.src.modules.rag.domain.exceptions import EmptyRagQueryError
+from apps.api.src.modules.rag.domain.policies import RankedChunk, fuse_rankings
+
+MIN_CANDIDATE_POOL = 20
+CANDIDATE_POOL_MULTIPLIER = 4
 
 
 class SearchEvidence(Retriever):
-    """Busca chunks relevantes usando embedding da pergunta + Qdrant."""
+    """Busca hibrida (vetorial + lexical) com fusao RRF e reranking opcional.
+
+    Fluxo (RAG V3 + V4): busca um pool de candidatos vetoriais (Qdrant) e
+    lexicais (Postgres full-text) maior que o limite final -> funde via
+    RRF (`domain/policies.py::fuse_rankings`) -> carrega o texto completo
+    dos chunks fundidos via `ingestion` -> reranking (Cohere) se
+    configurado, senao corta para o limite direto.
+    """
 
     def __init__(
         self,
         *,
         generate_embedding: GenerateChunkEmbedding,
         vector_repository: VectorRepository,
+        lexical_repository: LexicalSearchRepository,
         ingested_document_reader: IngestedDocumentReader,
+        reranker: Reranker | None = None,
     ) -> None:
         self._generate_embedding = generate_embedding
         self._vector_repository = vector_repository
+        self._lexical_repository = lexical_repository
         self._ingested_document_reader = ingested_document_reader
+        self._reranker = reranker
 
     async def search(self, search_input: SearchEvidenceInput) -> SearchEvidenceView:
         query = search_input.query.strip()
@@ -42,41 +58,74 @@ class SearchEvidence(Retriever):
             raise EmptyRagQueryError("Consulta RAG nao pode ser vazia.")
 
         limit = max(1, search_input.limit)
+        candidate_limit = max(limit * CANDIDATE_POOL_MULTIPLIER, MIN_CANDIDATE_POOL)
+
         embedding = await self._generate_embedding.execute(
             GenerateChunkEmbeddingInput(chunk_id=uuid4(), text=query)
         )
         vector_results = await self._vector_repository.search(
             embedding.values,
-            limit=limit,
+            limit=candidate_limit,
+            source_type=search_input.source_type,
+        )
+        lexical_results = await self._lexical_repository.search(
+            query,
+            limit=candidate_limit,
+            source_type=search_input.source_type,
         )
 
+        fused = fuse_rankings(
+            ranked_lists=[
+                [
+                    RankedChunk(chunk_id=item.chunk_id, document_id=item.document_id)
+                    for item in vector_results
+                ],
+                [
+                    RankedChunk(chunk_id=item.chunk_id, document_id=item.document_id)
+                    for item in lexical_results
+                ],
+            ],
+            limit=candidate_limit,
+        )
+
+        source_urls = {item.chunk_id: item.source_url for item in vector_results}
         chunks_by_document: dict = {}
         evidence_chunks: list[EvidenceChunkView] = []
 
-        for result in vector_results:
-            if result.document_id not in chunks_by_document:
-                chunks_by_document[result.document_id] = {
+        for item in fused:
+            if item.document_id not in chunks_by_document:
+                chunks_by_document[item.document_id] = {
                     chunk.id: chunk
                     for chunk in await self._ingested_document_reader.list_chunks_by_document_id(
-                        result.document_id
+                        item.document_id
                     )
                 }
 
-            chunk: ChunkRecord | None = chunks_by_document[result.document_id].get(
-                result.chunk_id
+            chunk: ChunkRecord | None = chunks_by_document[item.document_id].get(
+                item.chunk_id
             )
             if chunk is None:
+                # Chunk "stale" (presente no indice vetorial/lexical mas
+                # ja removido da ingestion).
                 continue
 
             evidence_chunks.append(
                 EvidenceChunkView(
-                    chunk_id=result.chunk_id,
-                    document_id=result.document_id,
-                    source_url=result.source_url or chunk.source_url,
+                    chunk_id=item.chunk_id,
+                    document_id=item.document_id,
+                    source_url=source_urls.get(item.chunk_id) or chunk.source_url,
+                    source_type=chunk.source_type.value,
                     text=chunk.text,
-                    score=result.score,
+                    score=item.score,
                 )
             )
+
+        if self._reranker is not None:
+            evidence_chunks = await self._reranker.rerank(
+                query, evidence_chunks, top_n=limit
+            )
+        else:
+            evidence_chunks = evidence_chunks[:limit]
 
         return SearchEvidenceView(query=query, results=evidence_chunks)
 

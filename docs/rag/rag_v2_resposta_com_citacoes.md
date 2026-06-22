@@ -127,5 +127,5 @@ locais ativos.
 ## 9. Proximo Passo
 
 ```txt
-Recommendations V1 - regras deterministicas iniciais
+RAG V3/V4 - ja implementados; ver rag_v3_busca_hibrida.md e rag_v4_reranking.md
 ```

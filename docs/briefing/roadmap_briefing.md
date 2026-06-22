@@ -19,7 +19,7 @@ startup + evidencias + recomendacoes -> briefing executivo
 
 | Versao | Status | Objetivo |
 |---|---|---|
-| Briefing V1 | Futuro | Template executivo em Markdown |
+| Briefing V1 | Implementado | Template executivo em Markdown |
 | Briefing V2 | Futuro | Briefing gerado por agente |
 | Briefing V3 | Futuro | Exportacao PDF/HTML |
 | Briefing V4 | Futuro | Revisao humana |
@@ -32,17 +32,22 @@ startup + evidencias + recomendacoes -> briefing executivo
 Status:
 
 ```txt
-pendente; deve vir depois de Recommendations V1
+implementado
 ```
 
 Entregaveis:
 
-- estrutura padrao do relatorio;
-- resumo da startup;
-- evidencias principais;
-- recomendacoes NVIDIA;
-- riscos e proximas acoes;
-- saida em Markdown.
+- entidade `Briefing`;
+- regras deterministicas (`domain/policies.py`) para riscos e proximas
+  acoes a partir de evidencias e recomendacoes;
+- estrutura padrao do relatorio (Resumo, Evidencias Principais,
+  Recomendacoes NVIDIA, Riscos, Proximas Acoes);
+- contrato publico novo em `recommendations` (`RecommendationsReader`) para
+  leitura cross-module;
+- `POST /briefings`, `GET /briefings/{id}`, `GET /briefings?startup_id=`;
+- saida em Markdown;
+- testes unitarios das regras e do caso de uso, teste de persistencia
+  PostgreSQL.
 
 Criterio de pronto:
 
@@ -50,9 +55,29 @@ Criterio de pronto:
 o sistema gera um briefing legivel a partir de dados estruturados
 ```
 
+Documento da entrega: `docs/briefing/briefing_v1_template_executivo.md`.
+
 ---
 
-## Briefing V2 - Agente de Briefing
+## Briefing V2 - Agente de Briefing (= Agents V12)
+
+Mesma entrega que `agents` V12 ("Briefing Agent") — ver
+`docs/agents/roadmap_agentes.md`. Registrado nos dois lugares pela mesma
+razao de Recommendations V3/Agents V11: e ao mesmo tempo uma versao deste
+modulo e um agente novo do modulo `agents`.
+
+Decisao de design: o grafo LangGraph orquestra `BriefingGenerator`
+(`application/public/briefing_generator.py`, contrato publico que ja
+existe desde Orchestration V1) como tool — nao reescreve
+`build_briefing_markdown()` (`domain/policies.py`). LLM entra so para
+reescrever a prosa executiva (linguagem de negocio), preservando as
+citacoes/evidencias que o template determinístico ja garante.
+
+Pre-requisito recomendado: `Recommendation Agent` (Recommendations V3 /
+Agents V11) — um briefing fundamentado em recomendacoes mais ricas
+(prioridade, complexidade, proxima acao, justificativa de negocio — ver
+Recommendations V4) produz um documento mais util do que orquestrar so em
+cima da V1.
 
 Entregaveis:
 

@@ -83,3 +83,35 @@ async def test_catalog_raises_when_technology_does_not_exist() -> None:
 
     with pytest.raises(NvidiaTechnologyNotFoundError):
         await catalog.get_technology("missing")
+
+
+@pytest.mark.anyio
+async def test_catalog_includes_nvidia_inception_program() -> None:
+    """NVIDIA Inception e o programa que o projeto existe para alimentar -
+    ver docs/diagnostico_case_original_e_novas_prioridades.md secao 5."""
+
+    catalog = ListNvidiaTechnologies(StaticNvidiaTechnologyRepository())
+
+    technology = await catalog.get_technology("nvidia-inception")
+
+    assert technology.category == NvidiaTechnologyCategory.STARTUP_PROGRAM
+    assert technology.official_url.startswith("https://")
+
+
+@pytest.mark.anyio
+async def test_catalog_includes_all_brief_items_added_this_round() -> None:
+    catalog = ListNvidiaTechnologies(StaticNvidiaTechnologyRepository())
+
+    technologies = await catalog.list_technologies(ListNvidiaTechnologiesInput())
+    slugs = {technology.slug for technology in technologies}
+
+    assert slugs >= {
+        "nvidia-inception",
+        "nemo-guardrails",
+        "nvidia-clara",
+        "cudf",
+        "cuml",
+        "nvidia-omniverse",
+        "nvidia-isaac",
+        "nvidia-morpheus",
+    }

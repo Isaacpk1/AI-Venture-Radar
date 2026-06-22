@@ -6,11 +6,15 @@ from fastapi import APIRouter, HTTPException, status
 
 from apps.api.src.modules.startups.application.dto import (
     AddStartupEvidenceInput,
+    ClassifyStartupInput,
     CreateStartupInput,
+    ExtractStartupProfileInput,
     UpdateStartupInput,
 )
 from apps.api.src.modules.startups.domain.exceptions import (
     InvalidStartupDataError,
+    StartupClassificationUnavailableError,
+    StartupExtractionUnavailableError,
     StartupNotFoundError,
 )
 from apps.api.src.modules.startups.factories.startups_factory import StartupsFactory
@@ -77,12 +81,46 @@ async def update_startup(
                 description=body.description,
                 sector=body.sector,
                 country=body.country,
+                founders=body.founders,
+                funding_stage=body.funding_stage,
+                funding_amount_usd=body.funding_amount_usd,
+                customers=body.customers,
             )
         )
     except StartupNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except InvalidStartupDataError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+    return StartupResponse.from_view(view)
+
+
+@router.post("/{startup_id}/classify", response_model=StartupResponse)
+async def classify_startup(startup_id: UUID) -> StartupResponse:
+    """Classifica a maturidade de IA da startup via Startup Classifier Agent."""
+
+    use_case = StartupsFactory.create_classify_startup()
+    try:
+        view = await use_case.execute(ClassifyStartupInput(startup_id=startup_id))
+    except StartupNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except StartupClassificationUnavailableError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    return StartupResponse.from_view(view)
+
+
+@router.post("/{startup_id}/extract", response_model=StartupResponse)
+async def extract_startup_profile(startup_id: UUID) -> StartupResponse:
+    """Extrai founders/funding/customers da startup via Extraction Agent."""
+
+    use_case = StartupsFactory.create_extract_startup_profile()
+    try:
+        view = await use_case.execute(
+            ExtractStartupProfileInput(startup_id=startup_id)
+        )
+    except StartupNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except StartupExtractionUnavailableError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
     return StartupResponse.from_view(view)
 
 

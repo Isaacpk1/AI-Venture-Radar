@@ -38,7 +38,11 @@ async def search_evidence(body: SearchEvidenceRequest) -> SearchEvidenceResponse
     use_case = RagFactory.create_search_evidence()
     try:
         view = await use_case.execute(
-            SearchEvidenceInput(query=body.query, limit=body.limit)
+            SearchEvidenceInput(
+                query=body.query,
+                limit=body.limit,
+                source_type=body.source_type,
+            )
         )
     except (EmptyRagQueryError, EmptyChunkTextError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -58,7 +62,11 @@ async def answer_question(body: AnswerQuestionRequest) -> RagAnswerResponse:
     use_case = RagFactory.create_answer_question()
     try:
         view = await use_case.execute(
-            AnswerQuestionInput(query=body.query, limit=body.limit)
+            AnswerQuestionInput(
+                query=body.query,
+                limit=body.limit,
+                source_type=body.source_type,
+            )
         )
     except (EmptyRagQueryError, EmptyChunkTextError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error

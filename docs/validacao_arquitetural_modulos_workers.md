@@ -1,200 +1,103 @@
 # Validacao Arquitetural - Modulos e Workers
 
-Este documento valida se o estado atual do sistema esta de acordo com a regra
-arquitetural principal:
-
-```txt
-modulos sabem como fazer
-workers executam trabalho pesado
-filas carregam apenas identificadores
-estado fica em PostgreSQL/Qdrant
-```
-
-Validacao atualizada em 21/06/2026.
+Validacao atualizada em 22/06/2026.
 
 ---
 
-## 1. Regra Arquitetural
-
-O padrao esperado e:
+## Regra
 
 ```txt
-API
--> cria ou consulta jobs
--> publica mensagem pequena na fila quando a operacao e longa
--> worker consome a mensagem
--> worker chama o modulo responsavel
--> modulo executa regra, persistencia e integracoes
-```
-
-O worker nao deve conter regra de negocio. Ele deve receber identificadores,
-converter tipos serializaveis e chamar factories/casos de uso.
-
----
-
-## 2. Modulos Implementados
-
-Hoje existem sete modulos implementados:
-
-```txt
-apps/api/src/modules/scraping
-apps/api/src/modules/agents
-apps/api/src/modules/ingestion
-apps/api/src/modules/embeddings
-apps/api/src/modules/startups
-apps/api/src/modules/rag
-apps/api/src/modules/nvidia_knowledge
-```
-
-### Scraping
-
-Status: de acordo.
-
-Possui domain, application, infrastructure, presentation, factories e testes. O
-trabalho pesado e executado por `workers/scraper_worker`, que chama:
-
-```txt
-ScrapingFactory.create_execute_scraping_job()
-```
-
-### Agents
-
-Status: de acordo.
-
-Implementado ate Agents V7:
-
-```txt
-agent_runs / agent_steps
-worker por run_id
-EvidenceValidationGraph
-SearchPlanningGraph
-checkpoint PostgreSQL para LangGraph
-human-in-the-loop via GET/POST /agents/runs
-```
-
-O worker `workers/agent_worker` chama:
-
-```txt
-AgentsFactory.create_execute_agent_job()
-```
-
-### Ingestion
-
-Status: de acordo.
-
-Transforma `scraping_results` aprovados em `documents` e `chunks`. O worker
-`workers/ingestion_worker` consome `job_id` da fila `ingestion` e chama:
-
-```txt
-IngestionFactory.create_execute_ingestion_job()
-```
-
-### Embeddings
-
-Status: de acordo.
-
-Gera embeddings para chunks da ingestion, persiste vetores no Qdrant e registra
-jobs/chunks no PostgreSQL. O worker `workers/embedding_worker` consome `job_id`
-da fila `embeddings` e chama:
-
-```txt
-EmbeddingsFactory.create_execute_embedding_job()
-```
-
-### Startups
-
-Status: de acordo.
-
-Operacao relacional sincrona. Nao precisa de worker em V1. Expõe CRUD basico de
-startup e associacao/listagem de evidencias aprovadas.
-
-### RAG
-
-Status: de acordo.
-
-Operacao sincrona em V2. Usa contratos publicos dos modulos `embeddings` e
-`ingestion` para buscar evidencias semanticamente, e adapter Gemini interno ao
-modulo `rag` para gerar resposta citada:
-
-```txt
-GenerateChunkEmbedding
-VectorRepository.search()
-IngestedDocumentReader.list_chunks_by_document_id()
-RagAnswerGenerator
-POST /rag/search
-POST /rag/answer
-```
-
-### NVIDIA Knowledge
-
-Status: de acordo.
-
-Operacao sincrona em V1. Expoe catalogo estatico versionado em codigo e contrato
-publico para recommendations e agents futuros:
-
-```txt
-NvidiaTechnologyCatalog
-StaticNvidiaTechnologyRepository
-GET /nvidia-knowledge/technologies
-GET /nvidia-knowledge/technologies/{slug}
+API cria/consulta estado
+workers recebem somente IDs
+modulos concentram regra de negocio
+contratos publicos conectam modulos
+PostgreSQL/Qdrant guardam estado real
+fila nao vira banco
 ```
 
 ---
 
-## 3. Workers Existentes
+## Modulos Implementados
 
 ```txt
-workers/scraper_worker      -> fila scraping   -> job_id
-workers/agent_worker        -> fila agents     -> run_id
-workers/ingestion_worker    -> fila ingestion  -> job_id
-workers/embedding_worker    -> fila embeddings -> job_id
+scraping
+agents
+ingestion
+embeddings
+startups
+rag
+nvidia_knowledge
+recommendations
+briefing
+orchestration
 ```
 
-Todos seguem a regra: mensagem pequena, worker sem regra de negocio, modulo
-responsavel executando o caso de uso.
+Todos seguem a estrutura modular esperada:
+
+```txt
+domain/
+application/
+infrastructure/
+factories/
+presentation/
+tests/
+```
+
+Excecao intencional: `nvidia_knowledge` V1 nao tem banco nem worker porque e
+catalogo estatico em codigo.
 
 ---
 
-## 4. Infraestrutura Compartilhada
+## Workers
 
-O broker Dramatiq mora em:
+| Worker | Fila | Mensagem |
+|---|---|---|
+| scraper_worker | scraping | job_id |
+| agent_worker | agents | run_id |
+| ingestion_worker | ingestion | job_id |
+| embedding_worker | embeddings | job_id |
 
-```txt
-apps/api/src/shared/queue/dramatiq_broker.py
-```
-
-Isso evita que um modulo importe infraestrutura interna de outro modulo.
-
----
-
-## 5. Validacao por Testes
-
-Comando executado recentemente:
-
-```txt
-.\venv\Scripts\python.exe -m pytest apps\api\src\modules\startups\tests\unit apps\api\src\modules\embeddings\tests\unit apps\api\src\modules\ingestion\tests\unit apps\api\src\modules\agents\tests\unit apps\api\src\modules\scraping\tests\unit
-```
-
-Resultado:
-
-```txt
-297 passed
-```
-
-Testes de integracao existem, mas dependem de Postgres/Redis/Qdrant locais com
-migrations aplicadas.
+Nao existe worker para `recommendations`, `briefing`, `nvidia_knowledge` ou
+`orchestration` V1 porque as operacoes atuais sao sincronas e pequenas.
 
 ---
 
-## 6. Pontos Ainda Pendentes
+## Cross-Module Permitido
 
-Arquiteturalmente, o sistema esta coerente. O que ainda falta e produto:
+Padroes confirmados no codigo:
 
 ```txt
-Recommendations V1
-Briefing V1
-Orchestrator / analysis job end-to-end
+scraping -> agents/public
+embeddings -> ingestion/public
+rag -> embeddings/public + ingestion/public
+recommendations -> startups/public + nvidia_knowledge/public
+briefing -> startups/public + recommendations/public
+orchestration -> recommendations/public + briefing/public
+startups -> agents/public para extract/classify
 ```
 
-O proximo passo recomendado e `Recommendations V1`, porque RAG V2 ja responde
-com citacoes e NVIDIA Knowledge V1 ja fornece uma base tecnica inicial.
+Factories podem compor dependencias concretas entre modulos; application/domain
+nao devem importar detalhes internos de outro modulo.
+
+---
+
+## Pontos De Atencao
+
+```txt
+NVIDIA Knowledge V2 precisa decidir escopo de RAG para conteudo NVIDIA
+Orchestration V2 precisa juntar fluxo desde URL bruta
+Agents V10-V12 devem usar contratos publicos como tools
+```
+
+---
+
+## Testes
+
+Estado registrado:
+
+```txt
+377 passed
+13 integration failures por falta de infra local
+```
+
+Antes de qualquer release, rodar integracao com Postgres/Redis/Qdrant ativos.

@@ -15,3 +15,11 @@ class StartupEvidenceNotFoundError(StartupError):
 
 class InvalidStartupDataError(StartupError):
     """Dados invalidos para criar ou atualizar startup."""
+
+
+class StartupClassificationUnavailableError(StartupError):
+    """O servico de classificacao de IA nao esta configurado (ex: sem GEMINI_API_KEY)."""
+
+
+class StartupExtractionUnavailableError(StartupError):
+    """O servico de extracao nao esta configurado (ex: sem GEMINI_API_KEY)."""

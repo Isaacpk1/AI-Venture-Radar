@@ -5,7 +5,11 @@ from uuid import uuid4
 import pytest
 
 from apps.api.src.modules.startups.domain.entities import Startup, StartupEvidence
-from apps.api.src.modules.startups.domain.enums import StartupEvidenceType
+from apps.api.src.modules.startups.domain.enums import (
+    AiMaturityLevel,
+    FundingStage,
+    StartupEvidenceType,
+)
 from apps.api.src.modules.startups.domain.exceptions import InvalidStartupDataError
 
 
@@ -37,6 +41,58 @@ def test_update_changes_fields_and_timestamp() -> None:
     assert startup.name == "New"
     assert startup.description == "nova descricao"
     assert startup.updated_at >= previous_updated_at
+
+
+def test_classify_sets_level_reason_and_timestamp() -> None:
+    startup = Startup(name="Acme AI")
+
+    startup.classify(AiMaturityLevel.AI_NATIVE, "  Modelos proprios no core.  ")
+
+    assert startup.ai_maturity_level is AiMaturityLevel.AI_NATIVE
+    assert startup.classification_reason == "Modelos proprios no core."
+    assert startup.classified_at is not None
+
+
+def test_classify_requires_reason() -> None:
+    startup = Startup(name="Acme AI")
+
+    with pytest.raises(InvalidStartupDataError):
+        startup.classify(AiMaturityLevel.NON_AI, "   ")
+
+
+def test_update_sets_structured_fields() -> None:
+    startup = Startup(name="Acme AI")
+
+    startup.update(
+        founders=["  Ana Silva  ", "Bruno Costa", ""],
+        funding_stage=FundingStage.SEED,
+        funding_amount_usd=500_000.0,
+        customers=["Empresa X", "  Empresa Y  "],
+    )
+
+    assert startup.founders == ("Ana Silva", "Bruno Costa")
+    assert startup.funding_stage is FundingStage.SEED
+    assert startup.funding_amount_usd == 500_000.0
+    assert startup.customers == ("Empresa X", "Empresa Y")
+
+
+def test_update_rejects_negative_funding_amount() -> None:
+    startup = Startup(name="Acme AI")
+
+    with pytest.raises(InvalidStartupDataError):
+        startup.update(funding_amount_usd=-1.0)
+
+
+def test_startup_rejects_negative_funding_amount_on_creation() -> None:
+    with pytest.raises(InvalidStartupDataError):
+        Startup(name="Acme AI", funding_amount_usd=-1.0)
+
+
+def test_startup_defaults_founders_and_customers_to_empty_tuple() -> None:
+    startup = Startup(name="Acme AI")
+
+    assert startup.founders == ()
+    assert startup.customers == ()
 
 
 def test_evidence_requires_source_url() -> None:

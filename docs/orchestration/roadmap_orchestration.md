@@ -1,0 +1,102 @@
+# Roadmap do Modulo Orchestration
+
+O modulo `orchestration` encadeia os modulos de conteudo em um unico
+endpoint, registrando o resultado agregado de cada execucao como um
+`AnalysisJob`.
+
+Ele nao faz scraping, nao gera embeddings e nao decide regras de negocio de
+nenhum outro modulo. Ele so chama, na ordem certa, o que outros modulos ja
+expoem publicamente.
+
+---
+
+## Objetivo do Modulo
+
+```txt
+startup_id -> dispara recommendations -> dispara briefing -> AnalysisJob
+```
+
+---
+
+## Versoes Planejadas
+
+| Versao | Status | Objetivo |
+|---|---|---|
+| Orchestration V1 | Implementado | analysis_jobs a partir de startup_id existente |
+| Orchestration V2 | Futuro | Entrada por URL bruta (inclui scraping/ingestion/embeddings) |
+| Orchestration V3 | Futuro | Retomada de jobs falhados (retry por etapa) |
+| Orchestration V4 | Futuro | Notificacoes de conclusao |
+
+---
+
+## Orchestration V1 - analysis_jobs a partir de startup_id
+
+Status:
+
+```txt
+implementado
+```
+
+Decisao de escopo (confirmada com o usuario, ver
+`docs/orchestration/orchestration_v1_analysis_jobs.md`):
+
+```txt
+V1 assume que scraping, ingestion, embeddings e evidencias da startup ja
+foram feitos manualmente. Entrada e um startup_id existente, nao uma URL
+bruta - isso evitaria reabrir o design das tres pipelines assincronas que
+ja existem (scraping/ingestion/embeddings) so para fazer polling de status.
+```
+
+Entregaveis:
+
+- entidade `AnalysisJob` com ciclo de vida `pending -> running ->
+  completed|failed`;
+- contratos publicos novos em `recommendations`
+  (`RecommendationGenerator`) e `briefing` (`BriefingGenerator`) para
+  disparar geracao via chamada cross-modulo;
+- `ExecuteAnalysisJob` — encadeia `RecommendationGenerator.generate()` e
+  `BriefingGenerator.generate()`, registra sucesso/falha;
+- `POST /analysis/jobs`, `GET /analysis/jobs/{id}`,
+  `GET /analysis/jobs?startup_id=`;
+- testes unitarios das transicoes e do caso de uso, teste de persistencia
+  PostgreSQL.
+
+Criterio de pronto:
+
+```txt
+uma startup com evidencias e perfil ja coletados recebe, com uma unica
+chamada, recomendacoes geradas e um briefing executivo, com o resultado
+agregado rastreavel em analysis_jobs
+```
+
+Documento da entrega: `docs/orchestration/orchestration_v1_analysis_jobs.md`.
+
+---
+
+## Orchestration V2 - Entrada por URL Bruta
+
+Entregaveis:
+
+- criar/disparar `scraping_job` a partir da URL;
+- aguardar conclusao das pipelines assincronas (scraping -> ingestion ->
+  embeddings) antes de seguir para startups/recommendations/briefing;
+- criar ou associar a `Startup` correspondente.
+
+---
+
+## Orchestration V3 - Retomada de Jobs Falhados
+
+Entregaveis:
+
+- identificar em qual etapa um `AnalysisJob` falhou;
+- permitir retomar so a partir da etapa que falhou, sem refazer o que ja
+  funcionou.
+
+---
+
+## Orchestration V4 - Notificacoes
+
+Entregaveis:
+
+- notificar quando um `AnalysisJob` terminar (webhook ou e-mail);
+- relatorio de execucoes em lote.

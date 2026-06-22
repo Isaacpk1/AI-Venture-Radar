@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from .enums import IngestionJobStatus
+from .enums import DocumentSourceType, IngestionJobStatus
 from .exceptions import InvalidIngestionJobTransitionError
 
 
@@ -73,6 +73,7 @@ class Document:
     clean_text: str
     word_count: int
     chunk_count: int
+    source_type: DocumentSourceType = DocumentSourceType.STARTUP_EVIDENCE
 
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utc_now)

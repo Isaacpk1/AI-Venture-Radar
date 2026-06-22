@@ -5,14 +5,24 @@ from uuid import UUID
 from apps.api.src.modules.agents.application.agent_run_payloads import (
     evidence_validation_input_from_payload,
     evidence_validation_result_to_payload,
+    extraction_input_from_payload,
+    extraction_result_to_payload,
     search_plan_input_from_payload,
     search_plan_result_to_payload,
+    startup_classification_input_from_payload,
+    startup_classification_result_to_payload,
+)
+from apps.api.src.modules.agents.application.public.extractor import (
+    ExtractionService,
 )
 from apps.api.src.modules.agents.application.public.search_planner import (
     SearchPlanningService,
 )
 from apps.api.src.modules.agents.application.public.semantic_investigator import (
     EvidenceValidationService,
+)
+from apps.api.src.modules.agents.application.public.startup_classifier import (
+    StartupClassifierService,
 )
 from apps.api.src.modules.agents.application.unit_of_work import (
     AgentsUnitOfWorkFactory,
@@ -41,10 +51,14 @@ class ExecuteAgentJob:
         uow_factory: AgentsUnitOfWorkFactory,
         evidence_validation_service: EvidenceValidationService | None = None,
         search_planning_service: SearchPlanningService | None = None,
+        startup_classification_service: StartupClassifierService | None = None,
+        extraction_service: ExtractionService | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.evidence_validation_service = evidence_validation_service
         self.search_planning_service = search_planning_service
+        self.startup_classification_service = startup_classification_service
+        self.extraction_service = extraction_service
 
     async def execute(self, *, run_id: UUID) -> None:
         async with self.uow_factory() as uow:
@@ -106,6 +120,28 @@ class ExecuteAgentJob:
                 sp_input, thread_id=thread_id
             )
             return search_plan_result_to_payload(result)
+
+        if agent_type is AgentType.STARTUP_CLASSIFIER:
+            if self.startup_classification_service is None:
+                raise AgentServiceUnavailableError(
+                    "Startup classification service nao configurado (verifique GEMINI_API_KEY)."
+                )
+            sc_input = startup_classification_input_from_payload(input_payload)
+            result = await self.startup_classification_service.classify(
+                sc_input, thread_id=thread_id
+            )
+            return startup_classification_result_to_payload(result)
+
+        if agent_type is AgentType.EXTRACTION:
+            if self.extraction_service is None:
+                raise AgentServiceUnavailableError(
+                    "Extraction service nao configurado (verifique GEMINI_API_KEY)."
+                )
+            ex_input = extraction_input_from_payload(input_payload)
+            result = await self.extraction_service.extract(
+                ex_input, thread_id=thread_id
+            )
+            return extraction_result_to_payload(result)
 
         raise UnsupportedAgentJobError(
             f"Agent type '{agent_type}' ainda nao tem grafo configurado."

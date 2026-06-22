@@ -1,197 +1,126 @@
-# Proximos Passos Para Fechar o MVP
+# Proximos Passos Para Fechar o Produto
 
-Este documento organiza o que falta para transformar o projeto em uma primeira
-versao utilizavel de ponta a ponta.
+O MVP backend macro ja esta implementado. Este documento agora foca no que falta
+para aproximar o projeto do brief original completo.
 
 ---
 
-## 1. O Que Ja Existe
+## Ja Existe
 
 ```txt
 Scraping V8
-Agents V7
+Agents V9
 Ingestion V1
 Embeddings V5
-Startups V1
-RAG V2
-NVIDIA Knowledge V1
+Startups V3
+RAG V4
+NVIDIA Knowledge V1 expandido
+Recommendations V1
+Briefing V1
+Orchestration V1
 ```
 
-O sistema ja consegue:
+Fluxo backend disponivel:
 
 ```txt
-coletar URL publica
-validar qualidade da evidencia
-persistir scraping_results
-limpar e chunkar texto
-gerar embeddings em lote
-salvar vetores no Qdrant
-cadastrar startup
-associar evidencias a startup
-executar agentes com checkpoint e human-in-the-loop
-buscar evidencias semanticamente com POST /rag/search
-responder perguntas com citacoes via POST /rag/answer
-consultar catalogo NVIDIA via GET /nvidia-knowledge/technologies
+startup existente -> recommendations -> briefing -> analysis_job
 ```
 
-Validacao unitaria recente:
+Fluxo parcial por URL tambem existe em pecas:
 
 ```txt
-297 passed
+scraping -> ingestion -> embeddings -> startups/extract/classify
+```
+
+Mas ainda falta a orquestracao V2 juntar tudo desde uma URL bruta ate briefing.
+
+---
+
+## Lacunas Reais
+
+### 1. NVIDIA Knowledge V2
+
+```txt
+documentacao oficial NVIDIA -> scraping/ingestion -> chunks -> embeddings
+-> base RAG filtravel como conteudo NVIDIA
+```
+
+Decisao de escopo ja tomada e implementada:
+
+```txt
+documents.source_type
+Qdrant payload source_type
+filtro opcional source_type em /rag/search e /rag/answer
+```
+
+Valor default: `startup_evidence`. Conteudo NVIDIA devera usar
+`nvidia_knowledge`.
+
+Ainda falta registrar as URLs oficiais NVIDIA e criar o fluxo que ingere essas
+fontes com `source_type="nvidia_knowledge"`.
+
+### 2. Agentes Restantes Do Brief
+
+```txt
+Agents V10 - NVIDIA RAG Agent
+Agents V11 - Recommendation Agent
+Agents V12 - Briefing Agent
+```
+
+Eles devem orquestrar contratos publicos existentes, nao reimplementar regra de
+negocio dentro dos grafos.
+
+### 3. Recommendation Mais Rica
+
+Recommendations V1 e deterministica. Faltam:
+
+```txt
+uso de RAG NVIDIA
+uso de Startup.ai_maturity_level no scoring
+prioridade alto/medio/baixo
+complexidade de implementacao
+proxima acao para o time NVIDIA
+justificativa de negocio separada da tecnica
+```
+
+### 4. Frontend
+
+Entregavel oficial ainda nao iniciado.
+
+Telas minimas:
+
+```txt
+submeter URL/startup
+acompanhar pipeline
+ver evidencias e classificacao
+ver recomendacoes
+ver briefing
+revisar/retomar casos com human-in-the-loop
+```
+
+### 5. Hardening
+
+```txt
+rodar integracao com Postgres/Redis/Qdrant reais
+auth/autorizacao
+observabilidade
+custos e limites de LLM
+limpeza de checkpoints
+deploy/dev setup reprodutivel
 ```
 
 ---
 
-## 2. Lacuna Principal
-
-O projeto ainda nao tem uma camada que transforme a base preparada em resposta
-ou decisao.
-
-Hoje existem pecas de pipeline:
+## Ordem Recomendada
 
 ```txt
-POST /scraping/jobs
-POST /ingestion/jobs
-POST /embeddings/jobs
-POST /startups
-POST /startups/{id}/evidences
+1. Atualizar/validar docs centrais - feito nesta limpeza
+2. NVIDIA Knowledge V2 fundacao source_type - feito
+3. NVIDIA Knowledge V2 registro/ingestao de fontes oficiais
+4. NVIDIA RAG Agent
+5. Recommendation Agent + enriquecimento de recommendations
+6. Briefing Agent
+7. Orchestration V2 por URL bruta
+8. Frontend
+9. Hardening de producao
 ```
-
-Mas ainda nao existe:
-
-```txt
-POST /rag/search
-POST /rag/answer
-POST /recommendations
-POST /briefings
-POST /analysis/jobs
-```
-
----
-
-## 3. Proxima Entrega: Recommendations V1
-
-Objetivo:
-
-```txt
-startup + evidencias + catalogo NVIDIA -> recomendacoes rastreaveis
-```
-
-Entregaveis recomendados:
-
-```txt
-entidade Recommendation
-regras deterministicas por setor/caso de uso
-consulta ao catalogo NVIDIA
-score inicial de aderencia
-justificativa simples e rastreavel
-testes unitarios das regras
-```
-
-Criterio de pronto:
-
-```txt
-uma startup com perfil estruturado recebe recomendacoes iniciais com tecnologia,
-score e justificativa
-```
-
----
-
-## 4. Depois do RAG V2
-
-### RAG V2 - Resposta com Citacoes
-
-```txt
-implementado
-POST /rag/answer
-resposta estruturada com citacoes por chunk/source_url
-```
-
-### NVIDIA Knowledge V1
-
-```txt
-implementado
-catalogo inicial de tecnologias NVIDIA
-casos de uso
-fontes oficiais
-metadados basicos
-```
-
-### Recommendations V1
-
-```txt
-Recommendation
-regras deterministicas por setor/caso de uso
-score simples
-justificativa rastreavel
-```
-
-### Briefing V1
-
-```txt
-template Markdown
-resumo da startup
-evidencias principais
-recomendacoes
-riscos
-proximas acoes
-```
-
-### Orchestration V1
-
-```txt
-analysis_jobs
-endpoint unico para rodar pipeline
-estado agregado do fluxo
-ligacao entre scraping, ingestion, embeddings, startups, rag e briefing
-```
-
----
-
-## 5. Ordem Recomendada
-
-```txt
-1. Recommendations V1 - regras deterministicas
-2. Briefing V1 - Markdown executivo
-3. Orchestration V1 - pipeline end-to-end
-4. NVIDIA Knowledge V2 - ingestao de fontes oficiais
-5. Hardening de integracao/observabilidade
-```
-
-Motivo: cada passo usa o anterior. Recommendations e briefing precisam de RAG
-e conhecimento NVIDIA para terem justificativa real.
-
----
-
-## 6. Riscos Tecnicos
-
-```txt
-integracoes dependem de Postgres/Redis/Qdrant locais
-GEMINI_API_KEY precisa estar configurada para provider real
-sem autenticacao nas rotas
-sem frontend
-sem endpoint unico de orquestracao
-sem limpeza automatica de checkpoints antigos
-sem custo real de tokens/LLM
-```
-
----
-
-## 7. Definicao de MVP
-
-MVP minimo:
-
-```txt
-entrada: URL ou startup
-saida: briefing Markdown com fontes e recomendacoes NVIDIA iniciais
-```
-
-Fluxo necessario:
-
-```txt
-scraping -> ingestion -> embeddings -> RAG -> recommendations -> briefing
-```
-
-O projeto ja tem scraping, ingestion, embeddings, startups basico e busca
-semantica com resposta citada, alem de catalogo NVIDIA inicial. A proxima etapa
-e recommendations.

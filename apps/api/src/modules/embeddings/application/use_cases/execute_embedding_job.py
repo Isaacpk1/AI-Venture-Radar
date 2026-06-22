@@ -94,6 +94,7 @@ class ExecuteEmbeddingJob:
                         chunk_id=chunk.chunk_id,
                         document_id=job.document_id,
                         source_url=chunk.source_url,
+                        source_type=chunk.source_type,
                         text=chunk.text,
                     )
                 )

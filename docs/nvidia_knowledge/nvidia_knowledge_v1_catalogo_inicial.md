@@ -52,20 +52,31 @@ GET /nvidia-knowledge/technologies?query=llm
 GET /nvidia-knowledge/technologies/{slug}
 ```
 
-## 5. Catalogo Inicial
+## 5. Catalogo Atual
 
 ```txt
+NVIDIA Inception
 NVIDIA NIM
 NVIDIA NeMo
+NeMo Guardrails
 NVIDIA Triton Inference Server
 TensorRT-LLM
 NVIDIA TensorRT
 RAPIDS
+cuDF
+cuML
 NVIDIA Riva
 NVIDIA CUDA
 NVIDIA AI Enterprise
 MONAI
+NVIDIA Clara
+NVIDIA Omniverse
+NVIDIA Isaac
+NVIDIA Morpheus
 ```
+
+O catalogo cobre os itens do brief original e inclui entradas extras
+relacionadas quando elas ajudam o motor de recomendacao.
 
 ## 6. Limites da V1
 
@@ -87,5 +98,5 @@ test_nvidia_knowledge_catalog.py
 ## 8. Proximo Passo
 
 ```txt
-Recommendations V1 - regras deterministicas iniciais
+NVIDIA Knowledge V2 - ingestao de documentacao oficial NVIDIA
 ```

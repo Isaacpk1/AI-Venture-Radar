@@ -25,6 +25,10 @@ class VectorRepository(ABC):
 
     @abstractmethod
     async def search(
-        self, query_vector: tuple[float, ...], *, limit: int = 5
+        self,
+        query_vector: tuple[float, ...],
+        *,
+        limit: int = 5,
+        source_type: str | None = None,
     ) -> list[ChunkSearchResult]:
         """Busca os chunks mais proximos do vetor de consulta informado."""

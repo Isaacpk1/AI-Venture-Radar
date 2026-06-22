@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.src.database.relational.session import engine
 from apps.api.src.modules.startups.domain.entities import Startup, StartupEvidence
-from apps.api.src.modules.startups.domain.enums import StartupEvidenceType
+from apps.api.src.modules.startups.domain.enums import (
+    AiMaturityLevel,
+    FundingStage,
+    StartupEvidenceType,
+)
 from apps.api.src.modules.startups.infrastructure.database.repositories.postgres_startup_evidence_repository import (
     PostgresStartupEvidenceRepository,
 )
@@ -83,10 +87,45 @@ async def test_postgres_startup_repositories_persist_startup_and_evidence() -> N
             assert restored_startup is not None
             assert restored_startup.name == "Startup Example"
             assert restored_startup.sector == "AI Infra"
+            assert restored_startup.ai_maturity_level is None
+            assert restored_startup.classified_at is None
+            assert restored_startup.founders == ()
+            assert restored_startup.customers == ()
+            assert restored_startup.funding_stage is None
 
             assert len(restored_evidences) == 1
             assert restored_evidences[0].evidence_type is StartupEvidenceType.WEBSITE
             assert restored_evidences[0].confidence_score == 0.95
+
+            restored_startup.classify(
+                AiMaturityLevel.AI_NATIVE, "Modelo proprio no core do produto."
+            )
+            await startup_repo.save(restored_startup)
+            await session.flush()
+
+            reclassified = await startup_repo.get_by_id(startup.id)
+            assert reclassified is not None
+            assert reclassified.ai_maturity_level is AiMaturityLevel.AI_NATIVE
+            assert reclassified.classification_reason == (
+                "Modelo proprio no core do produto."
+            )
+            assert reclassified.classified_at is not None
+
+            reclassified.update(
+                founders=["Ana Silva"],
+                funding_stage=FundingStage.SEED,
+                funding_amount_usd=500_000.0,
+                customers=["Empresa X"],
+            )
+            await startup_repo.save(reclassified)
+            await session.flush()
+
+            enriched = await startup_repo.get_by_id(startup.id)
+            assert enriched is not None
+            assert enriched.founders == ("Ana Silva",)
+            assert enriched.funding_stage is FundingStage.SEED
+            assert enriched.funding_amount_usd == 500_000.0
+            assert enriched.customers == ("Empresa X",)
         finally:
             await session.close()
             await transaction.rollback()

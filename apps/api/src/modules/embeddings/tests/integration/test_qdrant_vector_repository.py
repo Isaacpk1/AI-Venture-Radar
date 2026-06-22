@@ -32,16 +32,30 @@ async def test_upsert_and_search_round_trip() -> None:
                 values=values,
                 dimension=len(values),
                 model_name="fake-test",
+                source_type="nvidia_knowledge",
             )
         )
 
         results = await repository.search(values, limit=5)
+        filtered_results = await repository.search(
+            values,
+            limit=5,
+            source_type="nvidia_knowledge",
+        )
+        unrelated_results = await repository.search(
+            values,
+            limit=5,
+            source_type="startup_evidence",
+        )
 
         assert any(result.chunk_id == chunk_id for result in results)
         match = next(result for result in results if result.chunk_id == chunk_id)
         assert match.document_id == document_id
         assert match.source_url == "https://startup.example.com"
+        assert match.source_type == "nvidia_knowledge"
         assert match.score > 0.99
+        assert any(result.chunk_id == chunk_id for result in filtered_results)
+        assert all(result.chunk_id != chunk_id for result in unrelated_results)
     finally:
         await repository._client.delete_collection(collection_name)
         await repository._client.close()

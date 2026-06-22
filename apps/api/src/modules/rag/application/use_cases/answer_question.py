@@ -37,7 +37,11 @@ class AnswerQuestion:
             )
 
         search_view = await self._search_evidence.search(
-            SearchEvidenceInput(query=answer_input.query, limit=answer_input.limit)
+            SearchEvidenceInput(
+                query=answer_input.query,
+                limit=answer_input.limit,
+                source_type=answer_input.source_type,
+            )
         )
         if not search_view.results:
             raise RagEvidenceNotFoundError(

@@ -243,4 +243,195 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         ),
         official_url="https://docs.nvidia.com/clara/monai/",
     ),
+    NvidiaTechnology(
+        slug="nvidia-inception",
+        name="NVIDIA Inception",
+        category=NvidiaTechnologyCategory.STARTUP_PROGRAM,
+        description=(
+            "Programa gratuito da NVIDIA para startups, com beneficios em "
+            "credits de cloud/GPU, suporte tecnico, acesso a comunidade de "
+            "investidores e co-marketing para acelerar empresas que "
+            "constroem produtos de IA."
+        ),
+        use_cases=(
+            "acessar credits de cloud e GPU para startups",
+            "conectar com investidores e parceiros de go-to-market",
+            "obter suporte tecnico e mentoria da NVIDIA",
+            "participar de comunidade de startups de IA",
+        ),
+        keywords=(
+            "startup",
+            "inception",
+            "credits",
+            "mentoria",
+            "comunidade",
+            "investidores",
+            "go-to-market",
+        ),
+        official_url="https://www.nvidia.com/en-us/startups/",
+    ),
+    NvidiaTechnology(
+        slug="nemo-guardrails",
+        name="NeMo Guardrails",
+        category=NvidiaTechnologyCategory.MODEL_TRAINING,
+        description=(
+            "Toolkit open-source para adicionar guardrails programaveis a "
+            "assistentes e agentes conversacionais baseados em LLM, "
+            "controlando topicos, seguranca e comportamento."
+        ),
+        use_cases=(
+            "controlar topicos permitidos em assistentes de IA",
+            "prevenir respostas inseguras ou fora de escopo",
+            "adicionar guardrails de seguranca a agentes LLM",
+        ),
+        keywords=(
+            "guardrails",
+            "safety",
+            "llm",
+            "agent",
+            "conversational ai",
+            "governance",
+        ),
+        official_url="https://github.com/NVIDIA/NeMo-Guardrails",
+    ),
+    NvidiaTechnology(
+        slug="nvidia-clara",
+        name="NVIDIA Clara",
+        category=NvidiaTechnologyCategory.HEALTHCARE_AI,
+        description=(
+            "Plataforma de IA para healthcare e life sciences, com "
+            "ferramentas para imagem medica, genomica e descoberta de "
+            "farmacos aceleradas por GPU."
+        ),
+        use_cases=(
+            "acelerar pesquisa em genomica e descoberta de farmacos",
+            "construir aplicacoes de imagem medica",
+            "padronizar infraestrutura de IA para healthcare",
+        ),
+        keywords=(
+            "healthcare",
+            "life sciences",
+            "genomics",
+            "medical imaging",
+            "clara",
+            "drug discovery",
+        ),
+        official_url="https://www.nvidia.com/en-us/clara/",
+    ),
+    NvidiaTechnology(
+        slug="cudf",
+        name="cuDF",
+        category=NvidiaTechnologyCategory.DATA_SCIENCE,
+        description=(
+            "Biblioteca GPU-accelerated para manipulacao de dataframes com "
+            "API compativel com pandas, parte do ecossistema RAPIDS."
+        ),
+        use_cases=(
+            "acelerar processamento de dataframes em GPU",
+            "migrar pipelines pandas para GPU sem reescrever logica",
+            "reduzir tempo de ETL em grandes volumes tabulares",
+        ),
+        keywords=(
+            "dataframe",
+            "pandas",
+            "gpu",
+            "rapids",
+            "etl",
+            "data science",
+        ),
+        official_url="https://docs.rapids.ai/api/cudf/stable/",
+    ),
+    NvidiaTechnology(
+        slug="cuml",
+        name="cuML",
+        category=NvidiaTechnologyCategory.DATA_SCIENCE,
+        description=(
+            "Biblioteca de machine learning acelerada por GPU com API "
+            "compativel com scikit-learn, parte do ecossistema RAPIDS."
+        ),
+        use_cases=(
+            "treinar modelos de machine learning classico em GPU",
+            "migrar pipelines scikit-learn para GPU",
+            "acelerar clustering, regressao e classificacao em grandes datasets",
+        ),
+        keywords=(
+            "machine learning",
+            "scikit-learn",
+            "gpu",
+            "rapids",
+            "clustering",
+            "classification",
+        ),
+        official_url="https://docs.rapids.ai/api/cuml/stable/",
+    ),
+    NvidiaTechnology(
+        slug="nvidia-omniverse",
+        name="NVIDIA Omniverse",
+        category=NvidiaTechnologyCategory.ROBOTICS_SIMULATION,
+        description=(
+            "Plataforma de simulacao e colaboracao em 3D baseada em "
+            "OpenUSD, usada para construir digital twins e mundos virtuais "
+            "fisicamente precisos."
+        ),
+        use_cases=(
+            "criar digital twins de fabricas e ambientes industriais",
+            "simular cenarios fisicos para treinar robos e veiculos autonomos",
+            "colaborar em pipelines 3D entre ferramentas diferentes",
+        ),
+        keywords=(
+            "simulation",
+            "3d",
+            "digital twin",
+            "omniverse",
+            "openusd",
+            "virtual world",
+        ),
+        official_url="https://www.nvidia.com/en-us/omniverse/",
+    ),
+    NvidiaTechnology(
+        slug="nvidia-isaac",
+        name="NVIDIA Isaac",
+        category=NvidiaTechnologyCategory.ROBOTICS_SIMULATION,
+        description=(
+            "Plataforma para desenvolvimento de robotica com simulacao, "
+            "percepcao e navegacao aceleradas por GPU."
+        ),
+        use_cases=(
+            "simular e treinar robos antes de implantar no mundo real",
+            "acelerar percepcao e navegacao de robos autonomos",
+            "construir pipelines de robotica com IA",
+        ),
+        keywords=(
+            "robotics",
+            "isaac",
+            "simulation",
+            "autonomy",
+            "navigation",
+            "perception",
+        ),
+        official_url="https://developer.nvidia.com/isaac",
+    ),
+    NvidiaTechnology(
+        slug="nvidia-morpheus",
+        name="NVIDIA Morpheus",
+        category=NvidiaTechnologyCategory.CYBERSECURITY,
+        description=(
+            "Framework de IA acelerada por GPU para deteccao de ameacas, "
+            "analise de seguranca e resposta a incidentes em tempo real."
+        ),
+        use_cases=(
+            "detectar anomalias e ameacas de seguranca em tempo real",
+            "acelerar analise de logs e trafico de rede com IA",
+            "automatizar resposta a incidentes de ciberseguranca",
+        ),
+        keywords=(
+            "cybersecurity",
+            "morpheus",
+            "threat detection",
+            "anomaly detection",
+            "security",
+            "incident response",
+        ),
+        official_url="https://developer.nvidia.com/morpheus-cybersecurity",
+    ),
 )

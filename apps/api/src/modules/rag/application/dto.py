@@ -8,6 +8,7 @@ from uuid import UUID
 class SearchEvidenceInput:
     query: str
     limit: int = 5
+    source_type: str | None = None
 
 
 @dataclass
@@ -17,12 +18,22 @@ class EvidenceChunkView:
     source_url: str
     text: str
     score: float
+    source_type: str = "startup_evidence"
 
 
 @dataclass
 class SearchEvidenceView:
     query: str
     results: list[EvidenceChunkView]
+
+
+@dataclass
+class LexicalSearchResult:
+    """Resultado da busca lexical (Postgres full-text search)."""
+
+    chunk_id: UUID
+    document_id: UUID
+    score: float
 
 
 @dataclass
@@ -51,3 +62,4 @@ class RagAnswerView:
 class AnswerQuestionInput:
     query: str
     limit: int = 5
+    source_type: str | None = None

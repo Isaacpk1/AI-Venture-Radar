@@ -40,6 +40,13 @@ def to_startup_view(startup: Startup) -> StartupView:
         description=startup.description,
         sector=startup.sector,
         country=startup.country,
+        ai_maturity_level=startup.ai_maturity_level,
+        classification_reason=startup.classification_reason,
+        classified_at=startup.classified_at,
+        founders=list(startup.founders),
+        funding_stage=startup.funding_stage,
+        funding_amount_usd=startup.funding_amount_usd,
+        customers=list(startup.customers),
         created_at=startup.created_at,
         updated_at=startup.updated_at,
     )

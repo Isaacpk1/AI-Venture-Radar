@@ -3,7 +3,8 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, Text
+from sqlalchemy import DateTime, Float, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -22,6 +23,17 @@ class StartupModel(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     sector: Mapped[str | None] = mapped_column(Text, nullable=True)
     country: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_maturity_level: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    classification_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    classified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    founders: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    funding_stage: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    funding_amount_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    customers: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

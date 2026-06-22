@@ -19,3 +19,7 @@ class RagEvidenceNotFoundError(RagError):
 
 class RagAnswerServiceUnavailableError(RagError):
     """Servico de resposta RAG nao configurado."""
+
+
+class RagRerankingError(RagError):
+    """O reranker falhou. Nao deve abortar a busca - so para log/diagnostico."""

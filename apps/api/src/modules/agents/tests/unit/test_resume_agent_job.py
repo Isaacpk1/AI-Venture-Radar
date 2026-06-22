@@ -273,3 +273,37 @@ async def test_resume_service_none_marks_run_failed() -> None:
     saved = runs[run.id]
     assert saved.status is AgentRunStatus.FAILED
     assert "AgentServiceUnavailableError" in (saved.error_message or "")
+
+
+@pytest.mark.anyio
+async def test_resume_startup_classification_service_none_marks_run_failed() -> None:
+    run = _make_waiting_run(AgentType.STARTUP_CLASSIFIER)
+    runs = {run.id: run}
+    steps = FakeStepRepository()
+
+    use_case = ResumeAgentJob(
+        uow_factory=make_uow_factory(runs, steps),
+        startup_classification_service=None,
+    )
+    await use_case.execute(run_id=run.id, resume_value="ok")
+
+    saved = runs[run.id]
+    assert saved.status is AgentRunStatus.FAILED
+    assert "AgentServiceUnavailableError" in (saved.error_message or "")
+
+
+@pytest.mark.anyio
+async def test_resume_extraction_service_none_marks_run_failed() -> None:
+    run = _make_waiting_run(AgentType.EXTRACTION)
+    runs = {run.id: run}
+    steps = FakeStepRepository()
+
+    use_case = ResumeAgentJob(
+        uow_factory=make_uow_factory(runs, steps),
+        extraction_service=None,
+    )
+    await use_case.execute(run_id=run.id, resume_value="ok")
+
+    saved = runs[run.id]
+    assert saved.status is AgentRunStatus.FAILED
+    assert "AgentServiceUnavailableError" in (saved.error_message or "")
