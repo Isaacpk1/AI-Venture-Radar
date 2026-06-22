@@ -17,6 +17,7 @@ class IngestionJob:
     """Representa o processo de transformar um scraping_result em documento limpo."""
 
     scraping_result_id: UUID
+    source_type: DocumentSourceType = DocumentSourceType.STARTUP_EVIDENCE
 
     id: UUID = field(default_factory=uuid4)
     status: IngestionJobStatus = IngestionJobStatus.PENDING

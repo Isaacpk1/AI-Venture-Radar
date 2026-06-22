@@ -25,7 +25,10 @@ class CreateIngestionJob:
         self._task_dispatcher = task_dispatcher
 
     async def execute(self, job_input: CreateIngestionJobInput) -> IngestionJobView:
-        job = IngestionJob(scraping_result_id=job_input.scraping_result_id)
+        job = IngestionJob(
+            scraping_result_id=job_input.scraping_result_id,
+            source_type=job_input.source_type,
+        )
 
         async with self._uow_factory() as uow:
             await uow.job_repository.save(job)
@@ -49,6 +52,7 @@ def _to_view(job: IngestionJob) -> IngestionJobView:
     return IngestionJobView(
         id=job.id,
         scraping_result_id=job.scraping_result_id,
+        source_type=job.source_type,
         status=job.status,
         document_id=job.document_id,
         error_message=job.error_message,

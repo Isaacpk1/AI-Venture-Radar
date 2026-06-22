@@ -31,12 +31,14 @@ class AnalysisJobView:
 @dataclass(frozen=True)
 class CreateUrlIngestionJobInput:
     url: str
+    source_type: str = "startup_evidence"
 
 
 @dataclass(frozen=True)
 class UrlIngestionJobView:
     id: UUID
     url: str
+    source_type: str
     status: UrlIngestionJobStatus
     scraping_job_id: UUID | None
     scraping_result_id: UUID | None

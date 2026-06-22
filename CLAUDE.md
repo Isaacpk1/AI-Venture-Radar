@@ -19,10 +19,10 @@ Embeddings V5 + embedding_worker
 Startups V2 + V3 (slices iniciais: campos estruturados + classificacao de maturidade em IA)
 RAG V4 (busca hibrida + reranking)
 NVIDIA Knowledge V1
-NVIDIA Knowledge V2 foundation (`source_type`)
+NVIDIA Knowledge V2 foundation (`source_type` + source registry + url ingestion jobs)
 Recommendations V1
 Briefing V1
-Orchestration V1
+Orchestration V1 + V2 partial URL ingestion jobs
 ```
 
 MVP macro backlog (`docs/roadmap_proximos_passos.md`) is complete, and the
@@ -37,14 +37,15 @@ Pending:
 Frontend
 Auth
 Production observability
-Orchestration V2 - raw URL entry point (scraping/ingestion/embeddings polling)
+Orchestration V2 - automatic worker/dispatcher for URL ingestion jobs and continuation to briefing
 ```
 
-Recent unit validation:
+Recent validation:
 
 ```txt
-377 passed (13 integration failures, all pre-existing: no local
-Postgres/Redis/Qdrant in this environment)
+405 passed, 1 warning
+Integration tests are skipped explicitly when local Postgres/Redis/Qdrant
+are not reachable; with infra active, they run normally.
 ```
 
 Next recommended implementation:
@@ -54,13 +55,16 @@ Diagnostic priorities 1-3 done, plus Startups V2 and Extraction Agent
 (V8) delivered ahead of schedule. Agreed sequence now in progress (see
 docs/diagnostico_case_original_e_novas_prioridades.md section 8 and
 docs/agents/roadmap_agentes.md): NVIDIA Knowledge V2 foundation is done
-via `documents.source_type`, Qdrant payload `source_type`, and optional
-RAG filters. Next is real NVIDIA doc source registration/ingestion via
-scraping/ingestion/embeddings, then NVIDIA RAG Agent (V10) ->
-Recommendation Agent (V11) -> Briefing Agent (V12). wiring
+via `documents.source_type`, Qdrant payload `source_type`, optional RAG
+filters, `GET /nvidia-knowledge/sources`, and
+`POST /nvidia-knowledge/ingestion/jobs` to create `url_ingestion_jobs`
+with `source_type="nvidia_knowledge"`. Orchestration V2 now has
+`url_ingestion_jobs` plus explicit advance through scraping -> ingestion ->
+embeddings. Next is the automatic worker/dispatcher for these jobs, then
+NVIDIA RAG Agent (V10) -> Recommendation Agent (V11) -> Briefing Agent (V12). wiring
 Startup.ai_maturity_level into recommendations' scoring is a smaller
-separate follow-up, not done yet. Frontend and integration hardening
-remain open and can run in parallel.
+separate follow-up, not done yet. Frontend and integration hardening remain
+open and can run in parallel.
 ```
 
 Relevant docs:
@@ -628,11 +632,11 @@ Extensao feita durante a entrega do Orchestration V1 (continua V1):
 | Versao | Status | O que foi entregue |
 |---|---|---|
 | V1 | Entregue | analysis_jobs a partir de startup_id existente (recommendations -> briefing) |
-| V2 | Futuro | Entrada por URL bruta (inclui scraping/ingestion/embeddings) |
+| V2 | Em andamento | Entrada por URL bruta (scraping/ingestion/embeddings) |
 | V3 | Futuro | Retomada de jobs falhados (retry por etapa) |
 | V4 | Futuro | Notificacoes de conclusao |
 
-**Versao atual: V1**
+**Versao atual: V1 + V2 parcial**
 
 Decisao de escopo confirmada com o usuario: V1 assume que scraping,
 ingestion, embeddings e evidencias da startup ja foram feitos manualmente
@@ -669,6 +673,18 @@ cada do `RecommendationGenerator`/`BriefingGenerator`)
 
 Documento da entrega: `docs/orchestration/orchestration_v1_analysis_jobs.md`.
 
+O que a V2 parcial entregou:
+- `UrlIngestionJob` com `source_type` e ciclo `pending -> scraping -> ingesting -> embedding -> completed|failed`
+- Migration `5b6c7d8e9f01`: tabela `url_ingestion_jobs`
+- `CreateUrlIngestionJob`, `GetUrlIngestionJob`, `AdvanceUrlIngestionJob`
+- Adapters para `ScrapingJobSubmitter`, `IngestionJobSubmitter` e `EmbeddingJobSubmitter`
+- Presentation: `POST /url-ingestion/jobs`, `GET /url-ingestion/jobs/{id}`,
+  `POST /url-ingestion/jobs/{id}/advance`
+- `POST /nvidia-knowledge/ingestion/jobs` cria `url_ingestion_jobs` com
+  `source_type="nvidia_knowledge"` para as fontes oficiais do registry
+
+Documento da entrega parcial: `docs/orchestration/orchestration_v2_url_ingestion_jobs.md`.
+
 ---
 
 ## Database state
@@ -692,8 +708,10 @@ Documento da entrega: `docs/orchestration/orchestration_v1_analysis_jobs.md`.
 | `8d84cba84a02` | 2026-06-22 | Cria indice GIN de full-text search em chunks (RAG V3) |
 | `f77998c46d08` | 2026-06-22 | Adiciona campos estruturados em startups (founders/funding/customers) |
 | `1d3e7f9a2b4c` | 2026-06-22 | Adiciona `source_type` em documents para separar startup_evidence/nvidia_knowledge |
+| `2a7c9b8d1e5f` | 2026-06-22 | Adiciona `source_type` em ingestion_jobs para preservar contexto ate o worker |
+| `5b6c7d8e9f01` | 2026-06-22 | Cria `url_ingestion_jobs` para Orchestration V2 |
 
-**Head atual: `1d3e7f9a2b4c`**
+**Head atual: `5b6c7d8e9f01`**
 
 ### Tabelas existentes
 
@@ -707,7 +725,7 @@ checkpoints             estado LangGraph por thread_id (= agent_run.id)
 checkpoint_blobs        conteudo de cada canal por versao
 checkpoint_writes       escritas pendentes ate proximo checkpoint
 checkpoint_migrations   versao das migrations internas do LangGraph
-ingestion_jobs          status do job de ingestion (1-para-1 com scraping_result)
+ingestion_jobs          status do job de ingestion (1-para-1 com scraping_result, source_type)
 documents               documento limpo e normalizado (clean_text + word_count + chunk_count + source_type)
 chunks                  fragmentos de texto prontos para embedding
 embedding_jobs          status agregado do job de embeddings (1-para-1 com document)
@@ -717,6 +735,7 @@ startup_evidences       evidencia aprovada associada a uma startup (FK scraping_
 recommendations         tecnologia NVIDIA recomendada por startup (score, justificativa, matched_keywords, evidence_ids)
 briefings               briefing executivo em Markdown por startup (substitui o anterior a cada geracao)
 analysis_jobs           historico de execucoes recommendations->briefing por startup (status, recommendation_count, briefing_id, error_message)
+url_ingestion_jobs      orquestracao URL -> scraping -> ingestion -> embeddings com source_type
 ```
 
 ---
@@ -731,11 +750,11 @@ analysis_jobs           historico de execucoes recommendations->briefing por sta
 | embeddings | 56 unit + 2 integracao | 2026-06-21 |
 | startups | 27 unit + 1 integracao | 2026-06-22 |
 | rag | 16 unit + 1 integracao | 2026-06-22 |
-| nvidia_knowledge | 7 unit | 2026-06-22 |
+| nvidia_knowledge | 15 unit | 2026-06-22 |
 | recommendations | 19 unit + 1 integracao | 2026-06-21 |
 | briefing | 15 unit + 1 integracao | 2026-06-21 |
-| orchestration | 9 unit + 1 integracao | 2026-06-21 |
-| **Total** | **377 passed / 13 failed (integracao, sem Postgres/Redis/Qdrant locais)** | **2026-06-22** |
+| orchestration | 11 unit + 1 integracao | 2026-06-22 |
+| **Total** | **405 passed (Postgres/Redis/Qdrant locais ativos)** | **2026-06-22** |
 
 Comando para verificar:
 ```bash
@@ -860,6 +879,7 @@ Queue message → full document or large payload
 
 ### Current inter-module calls
 - `scraping` → `agents/application/public/semantic_investigator.py` (via adapter in `scraping/infrastructure/agent_adapters/`)
+- `nvidia_knowledge` → `scraping/application/public/job_submitter.py` (via adapter in `nvidia_knowledge/infrastructure/scraping_adapters/`)
 - Both modules use `shared/queue/dramatiq_broker.py`
 
 ---
@@ -929,7 +949,7 @@ pytest -k "test_acceptance_policy_rejects_captcha" -v
 # Run DB migrations
 alembic upgrade head
 
-# Current migration head: 1d3e7f9a2b4c (documents.source_type)
+# Current migration head: 5b6c7d8e9f01 (url_ingestion_jobs)
 ```
 
 ---
@@ -1001,11 +1021,13 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Startups roadmap | `docs/startups/roadmap_startups.md` |
 | NVIDIA Knowledge roadmap | `docs/nvidia_knowledge/roadmap_nvidia_knowledge.md` |
 | NVIDIA Knowledge V2 foundation | `docs/nvidia_knowledge/nvidia_knowledge_v2_foundation_source_type.md` |
+| NVIDIA Knowledge V2 source registry | `docs/nvidia_knowledge/nvidia_knowledge_v2_source_registry.md` |
 | Recommendations V1 (current) | `docs/recommendations/recommendations_v1_regras_deterministicas.md` |
 | Recommendations roadmap | `docs/recommendations/roadmap_recommendations.md` |
 | Briefing V1 (current) | `docs/briefing/briefing_v1_template_executivo.md` |
 | Briefing roadmap | `docs/briefing/roadmap_briefing.md` |
 | Orchestration V1 (current) | `docs/orchestration/orchestration_v1_analysis_jobs.md` |
+| Orchestration V2 URL ingestion jobs | `docs/orchestration/orchestration_v2_url_ingestion_jobs.md` |
 | Orchestration roadmap | `docs/orchestration/roadmap_orchestration.md` |
 | Diagnostico vs. case original + prioridades | `docs/diagnostico_case_original_e_novas_prioridades.md` |
 | Estado atual do projeto | `docs/estado_atual_do_projeto.md` |

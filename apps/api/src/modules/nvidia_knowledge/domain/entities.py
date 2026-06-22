@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 
 from apps.api.src.modules.nvidia_knowledge.domain.enums import (
+    NvidiaKnowledgeSourcePriority,
+    NvidiaKnowledgeSourceType,
     NvidiaTechnologyCategory,
 )
 
@@ -65,6 +67,66 @@ class NvidiaTechnology:
                 self.description.lower(),
                 " ".join(self.use_cases).lower(),
                 " ".join(self.keywords),
+            ]
+        )
+        return normalized_query in searchable_text
+
+
+@dataclass(frozen=True)
+class NvidiaKnowledgeSource:
+    """Fonte planejada para ingestao da base NVIDIA Knowledge V2."""
+
+    slug: str
+    title: str
+    url: str
+    source_type: NvidiaKnowledgeSourceType
+    priority: NvidiaKnowledgeSourcePriority
+    technology_slug: str | None
+    description: str
+    tags: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "slug", _normalize_slug(self.slug))
+        object.__setattr__(self, "title", self.title.strip())
+        object.__setattr__(self, "url", self.url.strip())
+        object.__setattr__(
+            self,
+            "technology_slug",
+            _normalize_slug(self.technology_slug) if self.technology_slug else None,
+        )
+        object.__setattr__(self, "description", self.description.strip())
+        object.__setattr__(
+            self,
+            "tags",
+            tuple(item.strip().lower() for item in self.tags if item.strip()),
+        )
+
+        if not self.slug:
+            raise ValueError("Fonte NVIDIA precisa ter slug.")
+        if not self.title:
+            raise ValueError("Fonte NVIDIA precisa ter titulo.")
+        if not self.url.startswith("https://"):
+            raise ValueError("Fonte NVIDIA precisa ter URL HTTPS.")
+        if not self.description:
+            raise ValueError("Fonte NVIDIA precisa ter descricao.")
+        if not self.tags:
+            raise ValueError("Fonte NVIDIA precisa ter tags.")
+
+    def matches_query(self, query: str) -> bool:
+        normalized_query = query.strip().lower()
+        if not normalized_query:
+            return True
+
+        searchable_text = " ".join(
+            [
+                self.slug,
+                self.title.lower(),
+                self.url.lower(),
+                self.source_type.value,
+                self.priority.value,
+                self.technology_slug or "",
+                self.description.lower(),
+                " ".join(self.tags),
             ]
         )
         return normalized_query in searchable_text

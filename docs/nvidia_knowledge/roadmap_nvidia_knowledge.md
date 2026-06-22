@@ -111,30 +111,52 @@ Status:
 
 ```txt
 fundacao source_type entregue
-ingestao das fontes oficiais pendente
+source registry entregue
+submissao do registry para Orchestration V2 entregue
+worker automatico de advance pendente
 ```
 
 Fundacao entregue:
 
 - `documents.source_type` com default `startup_evidence`;
+- `ingestion_jobs.source_type` para o worker criar documentos NVIDIA sem
+  perder contexto apos o enfileiramento;
 - enum `DocumentSourceType` com `startup_evidence` e `nvidia_knowledge`;
 - propagacao ingestion reader -> embeddings -> payload Qdrant;
 - filtro opcional `source_type` em busca vetorial, busca lexical,
   `/rag/search` e `/rag/answer`;
-- migration `1d3e7f9a2b4c`.
+- migrations `1d3e7f9a2b4c` e `2a7c9b8d1e5f`.
+
+Registry de fontes entregue:
+
+- entidade `NvidiaKnowledgeSource`;
+- enums `NvidiaKnowledgeSourcePriority` e `NvidiaKnowledgeSourceType`;
+- reposititorio estatico `StaticNvidiaKnowledgeSourceRepository`;
+- contrato publico `NvidiaKnowledgeSourceRegistry`;
+- caso de uso `ListNvidiaKnowledgeSources`;
+- rota `GET /nvidia-knowledge/sources`;
+- rota `POST /nvidia-knowledge/ingestion/jobs`;
+- filtros por prioridade, tecnologia e busca textual;
+- submissao em lote filtravel das fontes oficiais para `url_ingestion_jobs`;
+- cobertura dos slugs atuais do catalogo NVIDIA;
+- fontes P0/P1/P2 para Inception, NIM, NeMo, Guardrails, Triton,
+  TensorRT/TensorRT-LLM, AI Enterprise, RAPIDS/cuDF/cuML, Riva, Isaac,
+  Omniverse, Clara/MONAI, Morpheus, CUDA e contexto AI-native do case.
 
 Entregaveis:
 
 - pipeline para documentos NVIDIA;
-- registro de URL oficial;
+- registro de URL oficial - entregue como source registry;
+- submit inicial para Orchestration V2 - entregue via
+  `POST /nvidia-knowledge/ingestion/jobs`;
 - versionamento de documento;
 - chunking de documentacao tecnica.
 
 Proximo passo:
 
 ```txt
-criar registro de fontes oficiais NVIDIA e acionar scraping/ingestion/embeddings
-com source_type="nvidia_knowledge"
+criar worker/dispatcher para avançar `url_ingestion_jobs` automaticamente ate
+embedding concluido
 ```
 
 ---

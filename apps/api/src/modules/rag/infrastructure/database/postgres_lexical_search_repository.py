@@ -13,7 +13,7 @@ a query abaixo precisa repetir a expressao identica para o planner usar o
 indice.
 """
 
-from sqlalchemy import text
+from sqlalchemy import String, bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from apps.api.src.database.relational.session import AsyncSessionFactory
@@ -29,7 +29,7 @@ _QUERY = text("""
       AND (:source_type IS NULL OR d.source_type = :source_type)
     ORDER BY rank DESC
     LIMIT :limit
-""")
+""").bindparams(bindparam("source_type", type_=String()))
 
 
 class PostgresLexicalSearchRepository(LexicalSearchRepository):

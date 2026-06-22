@@ -28,10 +28,10 @@ busca, extracao estruturada e classificacao de maturidade em IA.
 | embeddings | V5 | Gemini embeddings, Qdrant, worker, metricas |
 | startups | V3 | dados estruturados + classificacao AI-native/AI-enabled/Non-AI |
 | rag | V4 + filtro por `source_type` | busca vetorial + lexical/RRF + reranking Cohere + resposta citada |
-| nvidia_knowledge | V1 expandido + fundacao V2 | catalogo estatico cobre os itens do brief original; base de escopo para docs reais criada |
+| nvidia_knowledge | V1 expandido + V2 em andamento | catalogo cobre o brief; source_type, registry e submissao inicial para scraping criados |
 | recommendations | V1 | regras deterministicas por overlap de keywords |
 | briefing | V1 | briefing Markdown deterministico |
-| orchestration | V1 | analysis_jobs a partir de startup_id existente |
+| orchestration | V1 + V2 parcial | analysis_jobs; url_ingestion_jobs para scraping -> ingestion -> embeddings |
 
 ---
 
@@ -51,9 +51,12 @@ busca, extracao estruturada e classificacao de maturidade em IA.
 /rag/search
 /rag/answer
 /nvidia-knowledge/technologies
+/nvidia-knowledge/sources
+/nvidia-knowledge/ingestion/jobs
 /recommendations
 /briefings
 /analysis/jobs
+/url-ingestion/jobs
 ```
 
 ---
@@ -78,6 +81,8 @@ f90193dc1578  recommendations
 8d84cba84a02  indice FTS de chunks
 f77998c46d08  campos estruturados em startups
 1d3e7f9a2b4c  source_type em documents para separar evidencias de startups e conhecimento NVIDIA
+2a7c9b8d1e5f  source_type em ingestion_jobs para preservar tipo ate o worker
+5b6c7d8e9f01  url_ingestion_jobs para Orchestration V2
 ```
 
 Tabelas principais:
@@ -91,6 +96,7 @@ startups, startup_evidences
 recommendations
 briefings
 analysis_jobs
+url_ingestion_jobs
 ```
 
 ---
@@ -100,12 +106,13 @@ analysis_jobs
 Validacao registrada em `CLAUDE.md`:
 
 ```txt
-377 passed
-13 integration failures por falta de Postgres/Redis/Qdrant locais
+405 passed
+0 skipped com Postgres/Redis/Qdrant locais ativos
 ```
 
-As falhas de integracao sao ambientais nesta maquina, nao regressao conhecida
-de codigo.
+A suite total agora marca dependencias de integracao como `skip` explicito
+quando a infra local nao esta ativa. Com Postgres/Redis/Qdrant disponiveis,
+esses testes rodam normalmente.
 
 ---
 
@@ -116,14 +123,14 @@ Para o MVP backend macro: nada estrutural grande.
 Para aderencia total ao case original:
 
 ```txt
-NVIDIA Knowledge V2 - registrar e ingerir documentacao oficial real
+NVIDIA Knowledge V2 - completar encadeamento scraping -> ingestion -> embeddings para documentacao NVIDIA
 NVIDIA RAG Agent - Agents V10
 Recommendation Agent - Agents V11 / Recommendations V3
 Briefing Agent - Agents V12 / Briefing V2
 Frontend
 Diferencial do projeto escolhido e apresentado
 Auth, observabilidade e hardening de integracao
-Orchestration V2 - entrada por URL bruta e polling ate briefing
+Orchestration V2 - worker automatico e continuidade ate startup/briefing
 ```
 
 ---
@@ -131,9 +138,13 @@ Orchestration V2 - entrada por URL bruta e polling ate briefing
 ## Proximo Passo Recomendado
 
 ```txt
-NVIDIA Knowledge V2 - registro/ingestao de fontes oficiais
+NVIDIA Knowledge V2 - ingestao das fontes oficiais registradas
 ```
 
 Motivo: a fundacao de escopo ja existe (`documents.source_type`,
 payload `source_type` no Qdrant e filtro opcional em `/rag/search` e
-`/rag/answer`). Falta agora popular essa base com fontes oficiais NVIDIA.
+`/rag/answer`) e o registry de fontes tambem ja existe em
+`/nvidia-knowledge/sources`. A rota `POST /nvidia-knowledge/ingestion/jobs`
+ja cria `url_ingestion_jobs` com `source_type="nvidia_knowledge"`. Falta agora
+automatizar o advance desses jobs por worker/dispatcher e, depois, completar
+o restante da Orchestration V2 ate startup/recommendations/briefing.

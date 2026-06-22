@@ -74,6 +74,8 @@ recommendations -> startups/public + nvidia_knowledge/public
 briefing -> startups/public + recommendations/public
 orchestration -> recommendations/public + briefing/public
 startups -> agents/public para extract/classify
+nvidia_knowledge -> orchestration/application para criar url_ingestion_jobs
+orchestration -> scraping/public + ingestion/public + embeddings/public
 ```
 
 Factories podem compor dependencias concretas entre modulos; application/domain
@@ -84,7 +86,7 @@ nao devem importar detalhes internos de outro modulo.
 ## Pontos De Atencao
 
 ```txt
-NVIDIA Knowledge V2 precisa decidir escopo de RAG para conteudo NVIDIA
+NVIDIA Knowledge V2 ja tem escopo de RAG definido por source_type
 Orchestration V2 precisa juntar fluxo desde URL bruta
 Agents V10-V12 devem usar contratos publicos como tools
 ```
@@ -96,8 +98,10 @@ Agents V10-V12 devem usar contratos publicos como tools
 Estado registrado:
 
 ```txt
-377 passed
-13 integration failures por falta de infra local
+405 passed
+0 skipped com infra local ativa
 ```
 
-Antes de qualquer release, rodar integracao com Postgres/Redis/Qdrant ativos.
+A suite total pula integracoes dependentes de Postgres/Redis/Qdrant quando os
+servicos nao estao disponiveis. Antes de qualquer release, rodar novamente com
+a infra ativa para executar esses testes em vez de pula-los.

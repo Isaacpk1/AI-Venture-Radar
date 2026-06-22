@@ -15,7 +15,10 @@ from apps.api.src.modules.ingestion.application.use_cases.execute_ingestion_job 
     ExecuteIngestionJob,
 )
 from apps.api.src.modules.ingestion.domain.entities import Chunk, Document, IngestionJob
-from apps.api.src.modules.ingestion.domain.enums import IngestionJobStatus
+from apps.api.src.modules.ingestion.domain.enums import (
+    DocumentSourceType,
+    IngestionJobStatus,
+)
 from apps.api.src.modules.ingestion.domain.exceptions import IngestionJobNotFoundError
 from apps.api.src.modules.ingestion.domain.repositories import (
     ChunkRepository,
@@ -170,6 +173,21 @@ async def test_execute_creates_document() -> None:
     doc = doc_repo.saved[0]
     assert doc.url == "https://example.com"
     assert doc.ingestion_job_id == job.id
+    assert doc.source_type is DocumentSourceType.STARTUP_EVIDENCE
+
+
+@pytest.mark.anyio
+async def test_execute_propagates_source_type_to_document() -> None:
+    job = IngestionJob(
+        scraping_result_id=uuid4(),
+        source_type=DocumentSourceType.NVIDIA_KNOWLEDGE,
+    )
+    result_data = _make_result_data("Documentacao oficial NVIDIA NIM.")
+    use_case, _, doc_repo, _ = _make_use_case(job=job, result_data=result_data)
+
+    await use_case.execute(job_id=job.id)
+
+    assert doc_repo.saved[0].source_type is DocumentSourceType.NVIDIA_KNOWLEDGE
 
 
 @pytest.mark.anyio

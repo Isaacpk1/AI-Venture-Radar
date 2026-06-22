@@ -23,7 +23,7 @@ startup_id -> dispara recommendations -> dispara briefing -> AnalysisJob
 | Versao | Status | Objetivo |
 |---|---|---|
 | Orchestration V1 | Implementado | analysis_jobs a partir de startup_id existente |
-| Orchestration V2 | Futuro | Entrada por URL bruta (inclui scraping/ingestion/embeddings) |
+| Orchestration V2 | Em andamento | Entrada por URL bruta (scraping/ingestion/embeddings) |
 | Orchestration V3 | Futuro | Retomada de jobs falhados (retry por etapa) |
 | Orchestration V4 | Futuro | Notificacoes de conclusao |
 
@@ -77,10 +77,14 @@ Documento da entrega: `docs/orchestration/orchestration_v1_analysis_jobs.md`.
 
 Entregaveis:
 
-- criar/disparar `scraping_job` a partir da URL;
-- aguardar conclusao das pipelines assincronas (scraping -> ingestion ->
-  embeddings) antes de seguir para startups/recommendations/briefing;
+- criar/disparar `scraping_job` a partir da URL - entregue;
+- persistir `url_ingestion_jobs` com `source_type` - entregue;
+- avançar scraping -> ingestion -> embeddings por chamada explicita - entregue;
+- worker/dispatcher para reenfileirar advance ate estado terminal;
+- seguir para startups/recommendations/briefing;
 - criar ou associar a `Startup` correspondente.
+
+Documento da entrega parcial: `docs/orchestration/orchestration_v2_url_ingestion_jobs.md`.
 
 ---
 

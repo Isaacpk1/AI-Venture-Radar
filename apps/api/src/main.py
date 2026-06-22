@@ -26,6 +26,7 @@ from apps.api.src.modules.nvidia_knowledge.presentation.routes import (
 )
 from apps.api.src.modules.orchestration.presentation.routes import (
     router as orchestration_router,
+    url_ingestion_router,
 )
 from apps.api.src.modules.rag.presentation.routes import (
     router as rag_router,
@@ -91,3 +92,4 @@ app.include_router(nvidia_knowledge_router)
 app.include_router(recommendations_router)
 app.include_router(briefing_router)
 app.include_router(orchestration_router)
+app.include_router(url_ingestion_router)

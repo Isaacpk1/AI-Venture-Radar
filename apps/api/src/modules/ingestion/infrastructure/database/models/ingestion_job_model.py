@@ -24,6 +24,13 @@ class IngestionJobModel(Base):
         index=True,
     )
     status: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_type: Mapped[str] = mapped_column(
+        String(length=64),
+        nullable=False,
+        default="startup_evidence",
+        server_default="startup_evidence",
+        index=True,
+    )
     document_id: Mapped[UUID | None] = mapped_column(
         PostgresUUID(as_uuid=True),
         nullable=True,

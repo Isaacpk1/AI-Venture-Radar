@@ -4,18 +4,23 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from apps.api.src.modules.ingestion.domain.enums import IngestionJobStatus
+from apps.api.src.modules.ingestion.domain.enums import (
+    DocumentSourceType,
+    IngestionJobStatus,
+)
 
 
 @dataclass
 class CreateIngestionJobInput:
     scraping_result_id: UUID
+    source_type: DocumentSourceType = DocumentSourceType.STARTUP_EVIDENCE
 
 
 @dataclass
 class IngestionJobView:
     id: UUID
     scraping_result_id: UUID
+    source_type: DocumentSourceType
     status: IngestionJobStatus
     document_id: UUID | None
     error_message: str | None

@@ -20,6 +20,7 @@ para as etapas seguintes.
 ```txt
 id
 scraping_result_id
+source_type: startup_evidence | nvidia_knowledge
 status: pending | running | completed | failed
 document_id
 error_message
@@ -58,7 +59,7 @@ created_at
 ## 3. Fluxo
 
 ```txt
-POST /ingestion/jobs {"scraping_result_id": "..."}
+POST /ingestion/jobs {"scraping_result_id": "...", "source_type": "..."}
   -> cria IngestionJob PENDING
   -> publica job_id na fila "ingestion"
 
@@ -133,6 +134,7 @@ Migration:
 
 ```txt
 20260616_1800_3f8d1e2a9c7b_create_ingestion_tables.py
+20260622_1300_2a7c9b8d1e5f_add_source_type_to_ingestion_jobs.py
 ```
 
 Tabelas:
@@ -146,6 +148,7 @@ chunks
 Extensao para NVIDIA Knowledge V2:
 
 ```txt
+ingestion_jobs.source_type
 documents.source_type
 default: startup_evidence
 valor para documentacao NVIDIA: nvidia_knowledge
@@ -153,7 +156,9 @@ valor para documentacao NVIDIA: nvidia_knowledge
 
 Essa extensao permite que o mesmo pipeline de ingestion seja reaproveitado para
 evidencias de startups e documentacao tecnica NVIDIA, sem misturar os dois
-corpus nas consultas RAG.
+corpus nas consultas RAG. O `source_type` fica no job para que o worker consiga
+criar o `Document` correto depois que a mensagem assíncrona chega somente com
+`job_id`.
 
 ## 9. Validacao
 
@@ -176,7 +181,7 @@ test_postgres_ingested_document_reader.py
 Validacao recente do projeto:
 
 ```txt
-285 testes unitarios passando
+401 testes passando no projeto com Postgres/Redis/Qdrant locais ativos
 ```
 
 ## 10. Limites
@@ -186,7 +191,7 @@ sem deduplicacao de documentos
 sem versionamento de limpeza/chunking
 sem hash de document/chunk
 sem reprocessamento automatico
-sem registro dedicado de fontes NVIDIA ainda
+sem executor dedicado para as fontes NVIDIA ainda
 ```
 
 Esses pontos ficam para Ingestion V2, V3 e V5.

@@ -12,7 +12,10 @@ from apps.api.src.modules.ingestion.application.use_cases.create_ingestion_job i
     CreateIngestionJob,
 )
 from apps.api.src.modules.ingestion.domain.entities import Chunk, Document, IngestionJob
-from apps.api.src.modules.ingestion.domain.enums import IngestionJobStatus
+from apps.api.src.modules.ingestion.domain.enums import (
+    DocumentSourceType,
+    IngestionJobStatus,
+)
 from apps.api.src.modules.ingestion.domain.exceptions import IngestionTaskDispatchError
 from apps.api.src.modules.ingestion.domain.repositories import (
     ChunkRepository,
@@ -121,6 +124,25 @@ async def test_creates_job_with_pending_status() -> None:
     assert saved is not None
     assert saved.status is IngestionJobStatus.PENDING
     assert saved.scraping_result_id == result_id
+    assert saved.source_type is DocumentSourceType.STARTUP_EVIDENCE
+
+
+@pytest.mark.anyio
+async def test_creates_job_with_source_type() -> None:
+    use_case, job_repo, _ = _make_use_case()
+    result_id = uuid4()
+
+    view = await use_case.execute(
+        CreateIngestionJobInput(
+            scraping_result_id=result_id,
+            source_type=DocumentSourceType.NVIDIA_KNOWLEDGE,
+        )
+    )
+
+    saved = await job_repo.get_by_id(view.id)
+    assert saved is not None
+    assert saved.source_type is DocumentSourceType.NVIDIA_KNOWLEDGE
+    assert view.source_type is DocumentSourceType.NVIDIA_KNOWLEDGE
 
 
 @pytest.mark.anyio
@@ -152,5 +174,6 @@ async def test_returns_job_view_with_scraping_result_id() -> None:
     view = await use_case.execute(CreateIngestionJobInput(scraping_result_id=result_id))
 
     assert view.scraping_result_id == result_id
+    assert view.source_type is DocumentSourceType.STARTUP_EVIDENCE
     assert view.status is IngestionJobStatus.PENDING
     assert view.document_id is None

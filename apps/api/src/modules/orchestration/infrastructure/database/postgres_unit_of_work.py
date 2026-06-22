@@ -11,6 +11,9 @@ from apps.api.src.modules.orchestration.application.unit_of_work import (
 from apps.api.src.modules.orchestration.infrastructure.database.repositories.postgres_analysis_job_repository import (
     PostgresAnalysisJobRepository,
 )
+from apps.api.src.modules.orchestration.infrastructure.database.repositories.postgres_url_ingestion_job_repository import (
+    PostgresUrlIngestionJobRepository,
+)
 
 
 class PostgresAnalysisUnitOfWork(AnalysisUnitOfWork):
@@ -25,6 +28,9 @@ class PostgresAnalysisUnitOfWork(AnalysisUnitOfWork):
     async def __aenter__(self) -> "PostgresAnalysisUnitOfWork":
         self._session = self._session_factory()
         self.analysis_job_repository = PostgresAnalysisJobRepository(self._session)
+        self.url_ingestion_job_repository = PostgresUrlIngestionJobRepository(
+            self._session
+        )
         return self
 
     async def __aexit__(

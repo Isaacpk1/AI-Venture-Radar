@@ -56,7 +56,12 @@ class IngestionPort(ABC):
     """Contrato para submeter e acompanhar um job de ingestion (Orchestration V2)."""
 
     @abstractmethod
-    async def submit(self, scraping_result_id: UUID) -> UUID:
+    async def submit(
+        self,
+        scraping_result_id: UUID,
+        *,
+        source_type: str = "startup_evidence",
+    ) -> UUID:
         """Submete o scraping_result_id e devolve o ingestion_job_id."""
 
     @abstractmethod

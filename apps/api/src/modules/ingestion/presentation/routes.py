@@ -31,7 +31,10 @@ async def create_ingestion_job(
 
     use_case = IngestionFactory.create_create_ingestion_job()
     view = await use_case.execute(
-        CreateIngestionJobInput(scraping_result_id=body.scraping_result_id)
+        CreateIngestionJobInput(
+            scraping_result_id=body.scraping_result_id,
+            source_type=body.source_type,
+        )
     )
     return IngestionJobResponse.from_view(view)
 

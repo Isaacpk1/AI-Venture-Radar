@@ -66,6 +66,7 @@ class ExecuteIngestionJob:
                     clean_text=clean_text,
                     word_count=len(clean_text.split()) if clean_text else 0,
                     chunk_count=len(chunks_text),
+                    source_type=job.source_type,
                 )
 
                 chunks = [

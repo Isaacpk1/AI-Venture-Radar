@@ -16,7 +16,7 @@ modulos em V1.
 | Embeddings/Qdrant | Entregue |
 | Startups estruturado | Entregue em slice inicial |
 | RAG hibrido + reranking | Entregue |
-| Catalogo NVIDIA | Entregue em V1 estatico; fundacao V2 por `source_type` entregue |
+| Catalogo NVIDIA | Entregue em V1 estatico; V2 source_type + source registry + url_ingestion_jobs entregues |
 | Recommendations | Entregue em V1 deterministico |
 | Briefing | Entregue em V1 deterministico |
 | Orchestration | Entregue em V1 para startup existente |
@@ -36,11 +36,13 @@ scraping -> ingestion -> embeddings -> RAG
 ```
 
 Decisao de escopo entregue: `documents.source_type`, payload `source_type` no
-Qdrant e filtro opcional em RAG. O default continua `startup_evidence`; docs
-NVIDIA devem entrar como `nvidia_knowledge`.
+Qdrant e filtro opcional em RAG. Registry de fontes entregue em
+`GET /nvidia-knowledge/sources`; submissao para Orchestration V2 entregue em
+`POST /nvidia-knowledge/ingestion/jobs`. O default continua
+`startup_evidence`; docs NVIDIA devem entrar como `nvidia_knowledge`.
 
-Proximo passo desta entrega: registrar fontes oficiais NVIDIA e executar a
-ingestao usando esse tipo de fonte.
+Proximo passo desta entrega: criar worker/dispatcher para reenfileirar
+`url_ingestion_jobs` e chamar advance ate embedding concluido.
 
 ### Agents V10 - NVIDIA RAG Agent
 

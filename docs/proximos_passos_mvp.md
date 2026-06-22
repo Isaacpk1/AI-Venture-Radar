@@ -15,6 +15,7 @@ Embeddings V5
 Startups V3
 RAG V4
 NVIDIA Knowledge V1 expandido
+NVIDIA Knowledge V2 source registry + url_ingestion_jobs
 Recommendations V1
 Briefing V1
 Orchestration V1
@@ -56,8 +57,10 @@ filtro opcional source_type em /rag/search e /rag/answer
 Valor default: `startup_evidence`. Conteudo NVIDIA devera usar
 `nvidia_knowledge`.
 
-Ainda falta registrar as URLs oficiais NVIDIA e criar o fluxo que ingere essas
-fontes com `source_type="nvidia_knowledge"`.
+As URLs oficiais NVIDIA ja foram registradas em `/nvidia-knowledge/sources`.
+A rota `POST /nvidia-knowledge/ingestion/jobs` ja cria `url_ingestion_jobs`
+com `source_type="nvidia_knowledge"`. Ainda falta automatizar o advance desses
+jobs por worker/dispatcher ate embedding concluido.
 
 ### 2. Agentes Restantes Do Brief
 
@@ -116,11 +119,13 @@ deploy/dev setup reprodutivel
 ```txt
 1. Atualizar/validar docs centrais - feito nesta limpeza
 2. NVIDIA Knowledge V2 fundacao source_type - feito
-3. NVIDIA Knowledge V2 registro/ingestao de fontes oficiais
-4. NVIDIA RAG Agent
-5. Recommendation Agent + enriquecimento de recommendations
-6. Briefing Agent
-7. Orchestration V2 por URL bruta
-8. Frontend
-9. Hardening de producao
+3. NVIDIA Knowledge V2 source registry - feito
+4. NVIDIA Knowledge V2 submissao do registry para url_ingestion_jobs - feito
+5. Orchestration V2 worker/dispatcher para advance automatico
+6. NVIDIA RAG Agent
+7. Recommendation Agent + enriquecimento de recommendations
+8. Briefing Agent
+9. Orchestration V2 por URL bruta
+10. Frontend
+11. Hardening de producao
 ```

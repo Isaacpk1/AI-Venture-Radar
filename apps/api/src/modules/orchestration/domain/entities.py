@@ -80,6 +80,7 @@ class UrlIngestionJob:
     """
 
     url: str
+    source_type: str = "startup_evidence"
     id: UUID = field(default_factory=uuid4)
     status: UrlIngestionJobStatus = UrlIngestionJobStatus.PENDING
     scraping_job_id: UUID | None = None

@@ -35,7 +35,7 @@ CLAUDE.md
 | embeddings | Embeddings V5 + worker | `docs/embeddings/` |
 | startups | Startups V3 | `docs/startups/` |
 | rag | RAG V4 | `docs/rag/` |
-| nvidia_knowledge | NVIDIA Knowledge V1 expandido + fundacao V2 por `source_type` | `docs/nvidia_knowledge/` |
+| nvidia_knowledge | NVIDIA Knowledge V1 expandido + V2 source registry + url_ingestion_jobs | `docs/nvidia_knowledge/` |
 | recommendations | Recommendations V1 | `docs/recommendations/` |
 | briefing | Briefing V1 | `docs/briefing/` |
 | orchestration | Orchestration V1 | `docs/orchestration/` |
@@ -58,7 +58,7 @@ CLAUDE.md
 ## Proxima Ordem Recomendada
 
 ```txt
-1. NVIDIA Knowledge V2 - registrar/ingerir docs NVIDIA reais
+1. Orchestration V2 - worker/dispatcher para avançar URL ingestion jobs
 2. Agents V10 - NVIDIA RAG Agent
 3. Agents V11 / Recommendations V3 - Recommendation Agent
 4. Agents V12 / Briefing V2 - Briefing Agent

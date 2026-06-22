@@ -21,7 +21,8 @@ nvidia_knowledge
 
 - `DocumentSourceType` no dominio de ingestion;
 - `documents.source_type` com indice e default `startup_evidence`;
-- migration `1d3e7f9a2b4c`;
+- `ingestion_jobs.source_type` com indice e default `startup_evidence`;
+- migrations `1d3e7f9a2b4c` e `2a7c9b8d1e5f`;
 - `IngestedDocumentSummary` e `ChunkRecord` propagando `source_type`;
 - DTOs de embeddings carregando `source_type`;
 - payload `source_type` no Qdrant;
@@ -29,10 +30,11 @@ nvidia_knowledge
 - filtro opcional `source_type` na busca lexical via `documents.source_type`;
 - `SearchEvidenceInput` e `AnswerQuestionInput` aceitando `source_type`;
 - requests/responses de `/rag/search` e `/rag/answer` expondo o campo.
+- registry de fontes NVIDIA em `/nvidia-knowledge/sources`.
 
 ## Proximo Passo
 
-Criar o registro de fontes oficiais NVIDIA e executar:
+Executar ingestao das fontes registradas:
 
 ```txt
 fonte oficial -> scraping -> ingestion(source_type=nvidia_knowledge)

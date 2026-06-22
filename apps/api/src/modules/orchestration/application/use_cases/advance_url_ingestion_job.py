@@ -60,7 +60,10 @@ class AdvanceUrlIngestionJob:
                 raise UrlIngestionStillProcessingError("Scraping em andamento.")
 
             assert status.result_id is not None
-            ingestion_job_id = await self._ingestion_port.submit(status.result_id)
+            ingestion_job_id = await self._ingestion_port.submit(
+                status.result_id,
+                source_type=job.source_type,
+            )
             job.start_ingesting(
                 scraping_result_id=status.result_id,
                 ingestion_job_id=ingestion_job_id,

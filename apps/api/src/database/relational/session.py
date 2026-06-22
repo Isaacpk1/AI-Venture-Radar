@@ -10,6 +10,10 @@ from sqlalchemy.ext.asyncio import (
 
 from apps.api.src.config.settings import get_settings
 
+# Registra todos os models no Base.metadata antes de qualquer sessao real usar
+# repositories que possuam FKs entre modulos.
+from apps.api.src.database.relational import models as _models  # noqa: F401
+
 
 # O engine administra conexões com o PostgreSQL. Ele não representa uma conexão
 # única; internamente, mantém um pool reutilizado pelas operações da aplicação.

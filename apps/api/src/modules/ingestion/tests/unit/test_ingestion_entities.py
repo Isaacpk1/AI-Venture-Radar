@@ -5,7 +5,10 @@ from uuid import uuid4
 import pytest
 
 from apps.api.src.modules.ingestion.domain.entities import IngestionJob
-from apps.api.src.modules.ingestion.domain.enums import IngestionJobStatus
+from apps.api.src.modules.ingestion.domain.enums import (
+    DocumentSourceType,
+    IngestionJobStatus,
+)
 from apps.api.src.modules.ingestion.domain.exceptions import (
     InvalidIngestionJobTransitionError,
 )
@@ -20,6 +23,19 @@ def test_job_starts_from_pending() -> None:
     job.start()
     assert job.status is IngestionJobStatus.RUNNING
     assert job.started_at is not None
+
+
+def test_job_source_type_defaults_to_startup_evidence() -> None:
+    job = _make_job()
+    assert job.source_type is DocumentSourceType.STARTUP_EVIDENCE
+
+
+def test_job_accepts_nvidia_knowledge_source_type() -> None:
+    job = IngestionJob(
+        scraping_result_id=uuid4(),
+        source_type=DocumentSourceType.NVIDIA_KNOWLEDGE,
+    )
+    assert job.source_type is DocumentSourceType.NVIDIA_KNOWLEDGE
 
 
 def test_job_cannot_start_from_running() -> None:

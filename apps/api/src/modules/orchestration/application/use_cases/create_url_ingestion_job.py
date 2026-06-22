@@ -31,7 +31,10 @@ class CreateUrlIngestionJob:
     async def execute(
         self, job_input: CreateUrlIngestionJobInput
     ) -> UrlIngestionJobView:
-        job = UrlIngestionJob(url=job_input.url)
+        job = UrlIngestionJob(
+            url=job_input.url,
+            source_type=job_input.source_type,
+        )
 
         async with self._uow_factory() as uow:
             await uow.url_ingestion_job_repository.save(job)
@@ -46,6 +49,7 @@ def to_url_ingestion_job_view(job: UrlIngestionJob) -> UrlIngestionJobView:
     return UrlIngestionJobView(
         id=job.id,
         url=job.url,
+        source_type=job.source_type,
         status=job.status,
         scraping_job_id=job.scraping_job_id,
         scraping_result_id=job.scraping_result_id,

@@ -115,3 +115,24 @@ async def test_catalog_includes_all_brief_items_added_this_round() -> None:
         "nvidia-isaac",
         "nvidia-morpheus",
     }
+
+
+@pytest.mark.anyio
+async def test_catalog_matches_source_registry_slugs() -> None:
+    """Evita divergir os slugs entre catalogo estatico e fontes V2."""
+
+    from apps.api.src.modules.nvidia_knowledge.infrastructure.static_catalog.source_data import (
+        INITIAL_NVIDIA_KNOWLEDGE_SOURCES,
+    )
+
+    catalog = ListNvidiaTechnologies(StaticNvidiaTechnologyRepository())
+
+    technologies = await catalog.list_technologies(ListNvidiaTechnologiesInput())
+    catalog_slugs = {technology.slug for technology in technologies}
+    source_slugs = {
+        source.technology_slug
+        for source in INITIAL_NVIDIA_KNOWLEDGE_SOURCES
+        if source.technology_slug is not None
+    }
+
+    assert catalog_slugs <= source_slugs

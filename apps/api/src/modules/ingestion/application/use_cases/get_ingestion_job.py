@@ -24,6 +24,7 @@ class GetIngestionJob:
             return IngestionJobView(
                 id=job.id,
                 scraping_result_id=job.scraping_result_id,
+                source_type=job.source_type,
                 status=job.status,
                 document_id=job.document_id,
                 error_message=job.error_message,
