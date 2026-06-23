@@ -62,11 +62,17 @@ class FallbackPolicy:
     """Decide se outra estratégia de scraping pode corrigir a coleta."""
 
     # Estes problemas podem ser resolvidos usando outra tecnologia de coleta.
+    # "link_farm" entrou aqui apos encontrar paginas de documentacao tecnica
+    # (ex. TensorRT-LLM no GitHub Pages) com barra lateral de navegacao densa
+    # em links: o BS4 mede a proporcao de links no HTML bruto e rejeita como
+    # "link farm", mas o Trafilatura (proxima estrategia) isola o conteudo
+    # principal do menu de navegacao e nao tem esse problema.
     fallback_problems = {
         "empty_content",
         "high_boilerplate",
         "insufficient_text",
         "javascript_required",
+        "link_farm",
     }
 
     def should_fallback(
