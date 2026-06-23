@@ -1,6 +1,7 @@
 """Repositório temporário de resultados aprovados armazenados em memória."""
 
 from copy import deepcopy
+from datetime import datetime
 from uuid import UUID
 
 from apps.api.src.modules.scraping.domain.entities import ScrapingResult
@@ -49,3 +50,19 @@ class InMemoryScrapingResultRepository(ScrapingResultRepository):
             return None
 
         return deepcopy(self._results[result_id])
+
+    async def get_recent_by_url(
+        self, url: str, *, since: datetime
+    ) -> ScrapingResult | None:
+        """Retorna o resultado mais recente para a URL dentro da janela."""
+
+        candidates = [
+            result
+            for result in self._results.values()
+            if result.url == url and result.created_at >= since
+        ]
+        if not candidates:
+            return None
+
+        latest = max(candidates, key=lambda result: result.created_at)
+        return deepcopy(latest)

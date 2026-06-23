@@ -39,3 +39,15 @@ class Reranker(ABC):
         top_n: int,
     ) -> list[EvidenceChunkView]:
         """Reordena e corta as evidencias para as `top_n` mais relevantes."""
+
+
+class EmbeddingGenerator(ABC):
+    """Gera o vetor de embedding de um texto de consulta.
+
+    Porta interna de `rag` — a implementacao concreta embrulha o contrato
+    publico do modulo `embeddings` (`application/public/embedding_service.py`).
+    """
+
+    @abstractmethod
+    async def generate(self, text: str) -> tuple[float, ...]:
+        """Gera o vetor de embedding correspondente ao texto da query."""

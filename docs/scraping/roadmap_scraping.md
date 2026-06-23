@@ -42,7 +42,7 @@ Documentos historicos de versao: `docs/scraping/scraper_v1.md` ate
 
 | Fraqueza confirmada | Tecnologia/abordagem | Impacto | Esforco |
 |---|---|---|---|
-| Mesma URL raspada de novo sempre refaz o scraping completo (3 estrategias + validacao); `scraping_results.content_hash` ja e unique, mas nada consulta por hash antes de raspar | checagem por `content_hash` (ou pela URL normalizada) antes de iniciar um novo `ScrapingJob` — reusa constraint que ja existe, sem lib nova | Alto (custo de rede + tempo) | Baixo |
+| Mesma URL raspada de novo sempre refaz o scraping completo (3 estrategias + validacao); `scraping_results.content_hash` ja e unique, mas nada consulta por hash antes de raspar | checagem por URL antes de iniciar um novo `ScrapingJob` — **concluido em 23/06/2026**, TTL de 3 dias (`SCRAPING_RESULT_CACHE_TTL`) | Alto (custo de rede + tempo) | Baixo |
 | `_has_captcha_challenge()` bloqueia so com base em `< 500 chars` de texto extraido — heuristica de tamanho, nao sinal real de captcha | nenhuma lib nova necessaria: refinar a heuristica com mais de um sinal (ex: presenca de formulario de captcha real no DOM, nao so a palavra "captcha" no JS) | Medio (falsos positivos em paginas legitimas com JS pesado) | Baixo |
 | `strategy_selector.py` tenta BS4 -> Playwright -> Trafilatura sequencialmente mesmo quando o padrao de falha (ex: captcha em todas) ja indica que nenhuma vai funcionar | circuit breaker simples por dominio: contar falhas consecutivas do mesmo tipo em Postgres (`scraping_attempts` ja registra cada tentativa) e pular estrategias condenadas sem nova infra | Medio (tempo desperdicado) | Medio |
 | Firecrawl e citado em comentarios (`strategy_selector.py`, `scraping_limits.py`, `dto.py`) como fallback pago, mas nunca foi implementado de fato | implementar o client real do Firecrawl (`FIRECRAWL_API_KEY` ja existe em `Settings` desde o inicio do projeto, nunca usada) como ultimo fallback, depois de BS4/Playwright/Trafilatura falharem | Alto para os gaps que ja esgotaram as 3 estrategias atuais (ex: `rapids-docs` no NVIDIA Knowledge V2) | Medio |
@@ -55,3 +55,15 @@ atuais cobrem a maioria dos casos reais (ver `nvidia_knowledge_v2_primeira_
 validacao_real.md`, 17/20 fontes com conteudo); Firecrawl como ultimo
 fallback pago (acima) e suficiente para os poucos casos que esgotam as
 estrategias gratuitas, sem trocar a arquitetura inteira do modulo.
+
+**Cache por URL — concluido em 23/06/2026:**
+`ScrapingResultRepository.get_recent_by_url(url, since=...)` (novo, Postgres
++ in-memory); `CreateScrapingJob.execute()` consulta esse cache primeiro
+(janela de `SCRAPING_RESULT_CACHE_TTL = timedelta(days=3)`,
+`domain/policies.py`) e, se achar um resultado aprovado recente, completa o
+job direto (`job.start()` + `job.complete(cached.id)`) sem despachar para a
+fila. TTL unico de 3 dias para todo `source_type`, sem diferenciacao —
+decisao do usuario. Efeito colateral corrigido de graca: reenviar a mesma
+URL hoje em dia podia falhar com `DuplicateScrapingContentError` (unique
+constraint em `content_hash`) se o conteudo viesse byte-identico; o cache
+evita chegar nesse caminho.

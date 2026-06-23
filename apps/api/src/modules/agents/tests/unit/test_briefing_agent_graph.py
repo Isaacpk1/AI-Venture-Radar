@@ -16,10 +16,16 @@ class FakeBriefingTool(BriefingToolPort):
     def __init__(self, content: str) -> None:
         self.content = content
         self.received_startup_id = None
+        self.update_calls: list[tuple] = []
+        self.briefing_id = uuid4()
 
     async def generate(self, startup_id):
         self.received_startup_id = startup_id
         return self.content
+
+    async def update_content(self, startup_id, content):
+        self.update_calls.append((startup_id, content))
+        return self.briefing_id
 
 
 class FakeProseRewriter(BriefingProseRewriterPort):
@@ -49,3 +55,5 @@ async def test_graph_returns_rewritten_content() -> None:
     assert rewriter.received_content == deterministic
     assert rewriter.call_count == 1
     assert result.content == rewritten
+    assert result.briefing_id == tool.briefing_id
+    assert tool.update_calls == [(startup_id, rewritten)]

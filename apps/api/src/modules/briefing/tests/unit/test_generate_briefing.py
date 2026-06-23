@@ -77,6 +77,11 @@ class FakeBriefingRepository(BriefingRepository):
     async def list_by_startup_id(self, startup_id: UUID) -> list[Briefing]:
         return [b for b in self.items.values() if b.startup_id == startup_id]
 
+    async def update_content(self, briefing_id: UUID, content: str) -> None:
+        briefing = self.items.get(briefing_id)
+        if briefing is not None:
+            briefing.content = content
+
 
 class FakeUoW(BriefingsUnitOfWork):
     def __init__(self, repository: FakeBriefingRepository) -> None:

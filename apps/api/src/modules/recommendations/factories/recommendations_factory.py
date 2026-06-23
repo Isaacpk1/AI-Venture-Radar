@@ -15,8 +15,14 @@ from apps.api.src.modules.recommendations.application.use_cases.list_recommendat
 from apps.api.src.modules.recommendations.application.public.recommendation_generator import (
     RecommendationGenerator,
 )
+from apps.api.src.modules.recommendations.application.public.recommendation_justification_updater import (
+    RecommendationJustificationUpdater,
+)
 from apps.api.src.modules.recommendations.application.public.recommendations_reader import (
     RecommendationsReader,
+)
+from apps.api.src.modules.recommendations.application.use_cases.update_recommendation_justifications import (
+    UpdateRecommendationJustifications,
 )
 from apps.api.src.modules.recommendations.infrastructure.database.postgres_unit_of_work import (
     PostgresRecommendationsUnitOfWork,
@@ -46,6 +52,10 @@ class RecommendationsFactory:
             profile_source,
             catalog_source,
         )
+
+    @staticmethod
+    def create_recommendation_justification_updater() -> RecommendationJustificationUpdater:
+        return UpdateRecommendationJustifications(PostgresRecommendationsUnitOfWork)
 
     @staticmethod
     def create_get_recommendation() -> GetRecommendation:

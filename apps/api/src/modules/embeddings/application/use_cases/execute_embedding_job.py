@@ -41,10 +41,12 @@ class ExecuteEmbeddingJob:
         uow_factory: EmbeddingsUnitOfWorkFactory,
         chunk_source_reader: ChunkSourceReader,
         upsert_chunk_embedding: UpsertChunkEmbedding,
+        current_model_name: str,
     ) -> None:
         self._uow_factory = uow_factory
         self._chunk_source_reader = chunk_source_reader
         self._upsert_chunk_embedding = upsert_chunk_embedding
+        self._current_model_name = current_model_name
 
     async def execute(self, *, job_id: UUID) -> None:
         async with self._uow_factory() as uow:
@@ -88,6 +90,12 @@ class ExecuteEmbeddingJob:
                     raise EmbeddingJobNotFoundError(
                         f"Chunk {row.chunk_id} nao encontrado para o documento {job.document_id}."
                     )
+                content_hash = chunk_content_hash(chunk.text)
+                async with self._uow_factory() as uow:
+                    cached = await uow.job_chunk_repository.find_completed_by_content_hash(
+                        content_hash, model_name=self._current_model_name
+                    )
+
                 started_at = perf_counter()
                 view = await self._upsert_chunk_embedding.execute(
                     UpsertChunkEmbeddingInput(
@@ -96,7 +104,8 @@ class ExecuteEmbeddingJob:
                         source_url=chunk.source_url,
                         source_type=chunk.source_type,
                         text=chunk.text,
-                    )
+                    ),
+                    cached_chunk_id=cached.chunk_id if cached is not None else None,
                 )
                 latency_ms = max(0, int((perf_counter() - started_at) * 1000))
                 row.complete(
@@ -105,7 +114,7 @@ class ExecuteEmbeddingJob:
                     input_char_count=len(chunk.text),
                     estimated_input_tokens=estimate_input_tokens(chunk.text),
                     latency_ms=latency_ms,
-                    content_hash=chunk_content_hash(chunk.text),
+                    content_hash=content_hash,
                 )
             except Exception as exc:
                 row.record_failure(f"{type(exc).__name__}: {exc}")

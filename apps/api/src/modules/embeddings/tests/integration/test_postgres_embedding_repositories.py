@@ -145,3 +145,84 @@ async def test_postgres_embedding_repositories_persist_job_and_chunks() -> None:
             await transaction.rollback()
 
     await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_find_completed_by_content_hash_filters_by_hash_and_model() -> None:
+    async with engine.connect() as connection:
+        transaction = await connection.begin()
+        session = AsyncSession(bind=connection, expire_on_commit=False)
+
+        try:
+            scraping_job_id = uuid4()
+            scraping_result_id = uuid4()
+            ingestion_job_id = uuid4()
+            document_id = uuid4()
+            chunk_id = uuid4()
+
+            await session.execute(
+                _INSERT_SCRAPING_JOB,
+                {"id": scraping_job_id, "url": "https://startup.example.com"},
+            )
+            await session.execute(
+                _INSERT_SCRAPING_RESULT,
+                {
+                    "id": scraping_result_id,
+                    "job_id": scraping_job_id,
+                    "url": "https://startup.example.com",
+                    "content_hash": uuid4().hex,
+                },
+            )
+            await session.execute(
+                _INSERT_INGESTION_JOB,
+                {"id": ingestion_job_id, "scraping_result_id": scraping_result_id},
+            )
+            await session.execute(
+                _INSERT_DOCUMENT,
+                {
+                    "id": document_id,
+                    "ingestion_job_id": ingestion_job_id,
+                    "scraping_result_id": scraping_result_id,
+                    "url": "https://startup.example.com",
+                },
+            )
+            await session.execute(
+                _INSERT_CHUNK, {"id": chunk_id, "document_id": document_id}
+            )
+            await session.flush()
+
+            chunk_repo = PostgresEmbeddingJobChunkRepository(session)
+            job = EmbeddingJob(document_id=document_id)
+            job.start(total_chunks=1)
+            await PostgresEmbeddingJobRepository(session).save(job)
+
+            chunk = EmbeddingJobChunk(job_id=job.id, chunk_id=chunk_id)
+            chunk.complete(
+                model_name="gemini-embedding-001",
+                vector_dimension=3,
+                input_char_count=7,
+                estimated_input_tokens=2,
+                latency_ms=5,
+                content_hash="shared-hash",
+            )
+            await chunk_repo.save(chunk)
+
+            found = await chunk_repo.find_completed_by_content_hash(
+                "shared-hash", model_name="gemini-embedding-001"
+            )
+            wrong_model = await chunk_repo.find_completed_by_content_hash(
+                "shared-hash", model_name="other-model"
+            )
+            wrong_hash = await chunk_repo.find_completed_by_content_hash(
+                "unrelated-hash", model_name="gemini-embedding-001"
+            )
+
+            assert found is not None
+            assert found.chunk_id == chunk_id
+            assert wrong_model is None
+            assert wrong_hash is None
+        finally:
+            await session.close()
+            await transaction.rollback()
+
+    await engine.dispose()

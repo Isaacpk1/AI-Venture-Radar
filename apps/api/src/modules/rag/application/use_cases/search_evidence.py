@@ -1,13 +1,7 @@
 """Caso de uso para buscar evidencias com busca hibrida + reranking."""
 
-from uuid import uuid4
-
-from apps.api.src.modules.embeddings.application.dto import GenerateChunkEmbeddingInput
 from apps.api.src.modules.embeddings.application.public.vector_repository import (
     VectorRepository,
-)
-from apps.api.src.modules.embeddings.application.use_cases.generate_chunk_embedding import (
-    GenerateChunkEmbedding,
 )
 from apps.api.src.modules.ingestion.application.public.ingested_reader import (
     ChunkRecord,
@@ -18,7 +12,11 @@ from apps.api.src.modules.rag.application.dto import (
     SearchEvidenceInput,
     SearchEvidenceView,
 )
-from apps.api.src.modules.rag.application.ports import LexicalSearchRepository, Reranker
+from apps.api.src.modules.rag.application.ports import (
+    EmbeddingGenerator,
+    LexicalSearchRepository,
+    Reranker,
+)
 from apps.api.src.modules.rag.application.public.retriever import Retriever
 from apps.api.src.modules.rag.domain.exceptions import EmptyRagQueryError
 from apps.api.src.modules.rag.domain.policies import RankedChunk, fuse_rankings
@@ -40,13 +38,13 @@ class SearchEvidence(Retriever):
     def __init__(
         self,
         *,
-        generate_embedding: GenerateChunkEmbedding,
+        embedding_generator: EmbeddingGenerator,
         vector_repository: VectorRepository,
         lexical_repository: LexicalSearchRepository,
         ingested_document_reader: IngestedDocumentReader,
         reranker: Reranker | None = None,
     ) -> None:
-        self._generate_embedding = generate_embedding
+        self._embedding_generator = embedding_generator
         self._vector_repository = vector_repository
         self._lexical_repository = lexical_repository
         self._ingested_document_reader = ingested_document_reader
@@ -60,11 +58,9 @@ class SearchEvidence(Retriever):
         limit = max(1, search_input.limit)
         candidate_limit = max(limit * CANDIDATE_POOL_MULTIPLIER, MIN_CANDIDATE_POOL)
 
-        embedding = await self._generate_embedding.execute(
-            GenerateChunkEmbeddingInput(chunk_id=uuid4(), text=query)
-        )
+        embedding_vector = await self._embedding_generator.generate(query)
         vector_results = await self._vector_repository.search(
-            embedding.values,
+            embedding_vector,
             limit=candidate_limit,
             source_type=search_input.source_type,
         )

@@ -285,10 +285,18 @@ agentes LangGraph de fato** (ver diagnostico, secao 8). Ordem seguida:
    executiva, com fallback seguro contra perda de citacoes)
 ```
 
+**Atualizacao 23/06/2026:** Recommendation Agent (V11) e Briefing Agent
+(V12) ganharam consumidor sincrono real — `orchestration` chama os dois
+direto (mesmo padrao de V8/V9), com fallback para os geradores V1 sem
+`GEMINI_API_KEY`. Detalhe completo na secao "Tecnologias candidatas"
+abaixo. NVIDIA RAG Agent (V10) continua so acionavel pela fila generica
+`agent_runs` — sem ponto de integracao natural ainda (nenhum dos outros 2
+grafos o chama como sub-tool).
+
 Trabalho restante fora do Entregavel 2: terminar NVIDIA Knowledge V2
-contra o resto do registry, dar consumidores sincronos reais a V10/V11/V12
-(hoje so acionaveis pela fila generica `agent_runs`), e o Entregavel 5
-(Frontend) e 6 (Diferencial), que continuam fora do escopo de `agents`.
+contra o resto do registry, dar consumidor sincrono real a V10, e o
+Entregavel 5 (Frontend) e 6 (Diferencial), que continuam fora do escopo de
+`agents`.
 
 ---
 
@@ -296,11 +304,27 @@ contra o resto do registry, dar consumidores sincronos reais a V10/V11/V12
 
 Confirmado lendo `application/use_cases/execute_agent_job.py` e os 7
 `application/public/*.py`: NVIDIA RAG (V10), Recommendation (V11) e
-Briefing (V12) so tem `AgentType` wired na fila generica `agent_runs` —
-nenhum modulo chama esses 3 sincronamente, diferente de Extraction/Startup
-Classifier (V8/V9, chamados por `startups`). Sao os agentes mais
+Briefing (V12) so tinham `AgentType` wired na fila generica `agent_runs` —
+nenhum modulo chamava esses 3 sincronamente, diferente de Extraction/Startup
+Classifier (V8/V9, chamados por `startups`). Eram os agentes mais
 sofisticados do projeto e os unicos sem consumidor real no fluxo de
 producao.
+
+**Recommendation Agent (V11) e Briefing Agent (V12) — concluido em
+23/06/2026:** ligados ao caminho sincrono de `orchestration`
+(`RecommendationsModulePort`/`BriefingModulePort`, infrastructure/
+recommendations_adapters` e `briefing_adapters` de `orchestration`),
+mesmo padrao de adapter usado em todo o projeto. Achado importante durante
+a implementacao: os dois agentes ja chamavam o gerador determinístico
+(que persiste) e DEPOIS reescreviam o resultado so em memoria — a melhoria
+do LLM nunca voltava ao banco. Corrigido com 2 contratos publicos novos —
+`RecommendationJustificationUpdater` (`recommendations`) e
+`BriefingContentUpdater` (`briefing`) — chamados por um node novo em cada
+grafo (`persist_reviewed_candidates`, `persist_rewritten_content`) logo
+antes do `finalize`. `BriefingAgentResult` ganhou o campo `briefing_id`
+(precisava propagar o id do briefing atualizado de volta para
+`orchestration`, que so tinha o conteudo antes). NVIDIA RAG Agent (V10)
+ficou de fora desta entrega — ver nota acima.
 
 | Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
 |---|---|---|---|

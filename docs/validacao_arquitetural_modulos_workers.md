@@ -150,13 +150,19 @@ parte do "contrato" rag->embeddings), so que desalinhado do docstring mais
 estrito que `embedding_service.py` ganhou depois. Ver nota datada naquele
 documento.
 
-Fix proposto (nao aplicado agora — ver `docs/roadmap_evolucao_tecnica_mvp.md`,
-Fase 5): `rag` passa a depender so de
+**Status: corrigido em 23/06/2026** (ver `docs/roadmap_evolucao_tecnica_mvp.md`,
+Fase 5). `rag` passou a depender so de
 `embeddings.application.public.embedding_service.EmbeddingService` +
-`vector_repository.py`; um adapter novo em `rag/infrastructure/
-embeddings_adapters/` traduz `EmbeddingServiceUnavailableError`/
-`EmptyChunkTextError` para uma excecao propria de `rag`, e
-`presentation/routes.py` passa a tratar so excecoes de `rag`.
+`vector_repository.py`; novo adapter
+`rag/infrastructure/embeddings_adapters/embeddings_query_embedder.py`
+(`EmbeddingsQueryEmbedder`, implementa a porta interna `EmbeddingGenerator`
+de `rag/application/ports.py`) traduz a falta de servico para
+`RagSearchServiceUnavailableError` (`rag/domain/exceptions.py`);
+`rag/presentation/routes.py` passou a tratar so excecoes de `rag`.
+`search_evidence.py` e `rag_factory.py` atualizados; testes:
++2 unit novos (`test_embeddings_query_embedder.py`), `test_search_evidence.py`
+ajustado para usar um fake da porta nova em vez do `EmbeddingService` de
+`embeddings`.
 
 ### Confirmado SEM violacao (calibracao para nao confundir com o padrao acima)
 

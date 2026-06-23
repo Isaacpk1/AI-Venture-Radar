@@ -43,3 +43,11 @@ class Recommendation:
             raise RecommendationError("Recomendacao precisa ter justificativa.")
         if not 0 <= self.score <= 1:
             raise RecommendationError("score deve ficar entre 0 e 1.")
+
+    def update_justification(self, text: str) -> None:
+        """Substitui a justificativa (ex: revisao de linguagem via agente)."""
+
+        text = text.strip()
+        if not text:
+            raise RecommendationError("Recomendacao precisa ter justificativa.")
+        self.justification = text

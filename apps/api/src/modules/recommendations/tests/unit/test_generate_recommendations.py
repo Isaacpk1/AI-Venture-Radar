@@ -78,6 +78,13 @@ class FakeRecommendationRepository(RecommendationRepository):
     async def list_by_startup_id(self, startup_id: UUID) -> list[Recommendation]:
         return [rec for rec in self.items.values() if rec.startup_id == startup_id]
 
+    async def update_justification(
+        self, recommendation_id: UUID, justification: str
+    ) -> None:
+        recommendation = self.items.get(recommendation_id)
+        if recommendation is not None:
+            recommendation.justification = justification
+
 
 class FakeUoW(RecommendationsUnitOfWork):
     def __init__(self, repository: FakeRecommendationRepository) -> None:

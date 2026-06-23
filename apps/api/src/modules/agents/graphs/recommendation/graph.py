@@ -35,7 +35,10 @@ class RecommendationAgentGraph(RecommendationAgentService):
     de ``RecommendationToolPort``) como tool, sem reimplementar
     ``match_technologies()``. O node ``review_and_enrich`` so aciona o LLM
     quando ha pelo menos um candidato — recomendacoes vazias nao custam
-    chamada nenhuma.
+    chamada nenhuma. O node ``persist_reviewed_candidates`` grava a
+    justificativa revisada de volta em ``recommendations`` (sem isso, a
+    melhoria do LLM nunca chegaria ao usuario — ficaria so na resposta em
+    memoria deste grafo).
     """
 
     def __init__(
@@ -104,12 +107,16 @@ class RecommendationAgentGraph(RecommendationAgentService):
         workflow.add_node("prepare_context", self._prepare_context)
         workflow.add_node("generate_recommendations", self._generate_recommendations)
         workflow.add_node("review_and_enrich", self._review_and_enrich)
+        workflow.add_node(
+            "persist_reviewed_candidates", self._persist_reviewed_candidates
+        )
         workflow.add_node("finalize", self._finalize)
 
         workflow.set_entry_point("prepare_context")
         workflow.add_edge("prepare_context", "generate_recommendations")
         workflow.add_edge("generate_recommendations", "review_and_enrich")
-        workflow.add_edge("review_and_enrich", "finalize")
+        workflow.add_edge("review_and_enrich", "persist_reviewed_candidates")
+        workflow.add_edge("persist_reviewed_candidates", "finalize")
         workflow.add_edge("finalize", END)
 
         return workflow
@@ -136,6 +143,21 @@ class RecommendationAgentGraph(RecommendationAgentService):
 
         reviewed = await self.reviewer.review(candidates)
         return {"reviewed_candidates": reviewed}
+
+    async def _persist_reviewed_candidates(
+        self, state: RecommendationState
+    ) -> RecommendationState:
+        reviewed = state["reviewed_candidates"]
+        if reviewed:
+            startup_id = state["recommendation_input"].startup_id
+            justifications = {
+                candidate.technology_slug: candidate.justification
+                for candidate in reviewed
+            }
+            await self.recommendation_tool.update_justifications(
+                startup_id, justifications
+            )
+        return {}
 
     async def _finalize(self, state: RecommendationState) -> RecommendationState:
         return {

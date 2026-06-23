@@ -23,3 +23,9 @@ class RecommendationRepository(ABC):
     @abstractmethod
     async def list_by_startup_id(self, startup_id: UUID) -> list[Recommendation]:
         """Lista recomendacoes de uma startup, ordenadas por score."""
+
+    @abstractmethod
+    async def update_justification(
+        self, recommendation_id: UUID, justification: str
+    ) -> None:
+        """Atualiza so a justificativa de uma recomendacao ja existente."""

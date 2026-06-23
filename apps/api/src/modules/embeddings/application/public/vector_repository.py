@@ -9,6 +9,7 @@ embeddings (``UpsertChunkEmbedding``). A implementacao concreta hoje (V3) e'
 """
 
 from abc import ABC, abstractmethod
+from uuid import UUID
 
 from apps.api.src.modules.embeddings.application.dto import (
     ChunkEmbeddingRecord,
@@ -32,3 +33,11 @@ class VectorRepository(ABC):
         source_type: str | None = None,
     ) -> list[ChunkSearchResult]:
         """Busca os chunks mais proximos do vetor de consulta informado."""
+
+    @abstractmethod
+    async def get_by_chunk_id(self, chunk_id: UUID) -> ChunkEmbeddingRecord | None:
+        """Recupera o vetor ja armazenado para um chunk_id, se existir.
+
+        Usado para reaproveitar um vetor existente (cache por content_hash)
+        sem chamar o provider de embedding de novo.
+        """

@@ -29,6 +29,19 @@ class FailingRecommendationGenerator:
         raise StartupProfileUnavailableError("Startup nao encontrada.")
 
 
+class FakeJustificationUpdater:
+    def __init__(self) -> None:
+        self.calls: list[tuple] = []
+
+    async def update_justifications(self, startup_id, justifications):
+        self.calls.append((startup_id, justifications))
+
+
+class FailingJustificationUpdater:
+    async def update_justifications(self, startup_id, justifications):
+        raise StartupProfileUnavailableError("Startup nao encontrada.")
+
+
 def make_view(**overrides) -> RecommendationView:
     defaults = dict(
         id=uuid4(),
@@ -50,7 +63,9 @@ def make_view(**overrides) -> RecommendationView:
 async def test_generate_maps_views_to_candidates() -> None:
     startup_id = uuid4()
     view = make_view()
-    adapter = RecommendationGeneratorAdapter(FakeRecommendationGenerator([view]))
+    adapter = RecommendationGeneratorAdapter(
+        FakeRecommendationGenerator([view]), FakeJustificationUpdater()
+    )
 
     candidates = await adapter.generate(startup_id)
 
@@ -64,7 +79,32 @@ async def test_generate_maps_views_to_candidates() -> None:
 
 @pytest.mark.anyio
 async def test_generate_translates_recommendation_error() -> None:
-    adapter = RecommendationGeneratorAdapter(FailingRecommendationGenerator())
+    adapter = RecommendationGeneratorAdapter(
+        FailingRecommendationGenerator(), FakeJustificationUpdater()
+    )
 
     with pytest.raises(AgentRecommendationError):
         await adapter.generate(uuid4())
+
+
+@pytest.mark.anyio
+async def test_update_justifications_delegates_to_updater() -> None:
+    startup_id = uuid4()
+    updater = FakeJustificationUpdater()
+    adapter = RecommendationGeneratorAdapter(
+        FakeRecommendationGenerator([]), updater
+    )
+
+    await adapter.update_justifications(startup_id, {"nvidia-nim": "nova justificativa"})
+
+    assert updater.calls == [(startup_id, {"nvidia-nim": "nova justificativa"})]
+
+
+@pytest.mark.anyio
+async def test_update_justifications_translates_recommendation_error() -> None:
+    adapter = RecommendationGeneratorAdapter(
+        FakeRecommendationGenerator([]), FailingJustificationUpdater()
+    )
+
+    with pytest.raises(AgentRecommendationError):
+        await adapter.update_justifications(uuid4(), {})

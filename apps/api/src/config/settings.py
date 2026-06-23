@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.5-flash"
     gemini_embedding_model: str = "models/gemini-embedding-001"
     cohere_api_key: str = ""
+    cohere_rerank_model: str = "rerank-v3.5"
 
     # Observability
     langfuse_public_key: str = ""

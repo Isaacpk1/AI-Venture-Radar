@@ -54,6 +54,12 @@ class RecommendationToolPort(ABC):
     async def generate(self, startup_id: UUID) -> list[RecommendationCandidate]:
         """Gera as recomendacoes deterministicas mais recentes da startup."""
 
+    @abstractmethod
+    async def update_justifications(
+        self, startup_id: UUID, justifications: dict[str, str]
+    ) -> None:
+        """Persiste a justificativa revisada por tecnologia (technology_slug)."""
+
 
 class RecommendationReviewerPort(ABC):
     """Contrato interno para revisar candidatos de recomendacao via LLM.
@@ -83,6 +89,11 @@ class BriefingToolPort(ABC):
     @abstractmethod
     async def generate(self, startup_id: UUID) -> str:
         """Gera o briefing deterministico (Markdown) mais recente da startup."""
+
+    @abstractmethod
+    async def update_content(self, startup_id: UUID, content: str) -> UUID:
+        """Persiste a prosa reescrita no briefing mais recente da startup
+        e devolve o id do briefing atualizado."""
 
 
 class BriefingProseRewriterPort(ABC):

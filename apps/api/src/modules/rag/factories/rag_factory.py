@@ -5,7 +5,11 @@ from apps.api.src.modules.embeddings.factories.embeddings_factory import (
     EmbeddingsFactory,
 )
 from apps.api.src.modules.ingestion.factories.ingestion_factory import IngestionFactory
-from apps.api.src.modules.rag.application.ports import LexicalSearchRepository, Reranker
+from apps.api.src.modules.rag.application.ports import (
+    EmbeddingGenerator,
+    LexicalSearchRepository,
+    Reranker,
+)
 from apps.api.src.modules.rag.application.public.answer_generator import (
     RagAnswerGenerator,
 )
@@ -20,6 +24,9 @@ from apps.api.src.modules.rag.application.use_cases.search_evidence import (
 )
 from apps.api.src.modules.rag.infrastructure.database.postgres_lexical_search_repository import (
     PostgresLexicalSearchRepository,
+)
+from apps.api.src.modules.rag.infrastructure.embeddings_adapters.embeddings_query_embedder import (
+    EmbeddingsQueryEmbedder,
 )
 from apps.api.src.modules.rag.infrastructure.llm.langchain_gemini_answer_generator import (
     LangChainGeminiRagAnswerGenerator,
@@ -46,12 +53,23 @@ class RagFactory:
         if not settings.cohere_api_key:
             return None
 
-        return CohereReranker(api_key=settings.cohere_api_key)
+        return CohereReranker(
+            api_key=settings.cohere_api_key,
+            model=settings.cohere_rerank_model,
+        )
+
+    @staticmethod
+    def create_embedding_generator() -> EmbeddingGenerator:
+        """Embrulha o contrato publico de `embeddings` (EmbeddingService)."""
+
+        return EmbeddingsQueryEmbedder(
+            embedding_service=EmbeddingsFactory.create_embedding_service()
+        )
 
     @staticmethod
     def create_search_evidence() -> SearchEvidence:
         return SearchEvidence(
-            generate_embedding=EmbeddingsFactory.create_generate_chunk_embedding(),
+            embedding_generator=RagFactory.create_embedding_generator(),
             vector_repository=EmbeddingsFactory.create_vector_repository(),
             lexical_repository=RagFactory.create_lexical_search_repository(),
             ingested_document_reader=IngestionFactory.create_ingested_document_reader(),

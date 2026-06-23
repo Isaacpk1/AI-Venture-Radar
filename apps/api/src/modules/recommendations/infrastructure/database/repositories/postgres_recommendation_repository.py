@@ -47,3 +47,12 @@ class PostgresRecommendationRepository(RecommendationRepository):
             .order_by(RecommendationModel.score.desc())
         )
         return [RecommendationMapper.to_entity(model) for model in models]
+
+    async def update_justification(
+        self, recommendation_id: UUID, justification: str
+    ) -> None:
+        model = await self._session.get(RecommendationModel, recommendation_id)
+        if model is None:
+            return
+        model.justification = justification
+        await self._session.flush()

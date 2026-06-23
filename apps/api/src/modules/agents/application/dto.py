@@ -242,6 +242,7 @@ class BriefingAgentResult:
     """
 
     content: str
+    briefing_id: UUID
 
 
 @dataclass(frozen=True)

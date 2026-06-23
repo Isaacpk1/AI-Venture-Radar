@@ -1,5 +1,6 @@
 """Composicao das dependencias concretas do modulo orchestration."""
 
+from apps.api.src.modules.agents.factories.agents_factory import AgentsFactory
 from apps.api.src.modules.briefing.factories.briefing_factory import BriefingFactory
 from apps.api.src.modules.embeddings.factories.embeddings_factory import EmbeddingsFactory
 from apps.api.src.modules.ingestion.factories.ingestion_factory import IngestionFactory
@@ -115,9 +116,11 @@ class OrchestrationFactory:
                 StartupsFactory.create_classify_startup(),
             ),
             recommendations_port=RecommendationsModulePort(
-                RecommendationsFactory.create_recommendation_generator()
+                RecommendationsFactory.create_recommendation_generator(),
+                agent_service=AgentsFactory.create_recommendation_agent_service(),
             ),
             briefing_port=BriefingModulePort(
-                BriefingFactory.create_briefing_generator()
+                BriefingFactory.create_briefing_generator(),
+                agent_service=AgentsFactory.create_briefing_agent_service(),
             ),
         )

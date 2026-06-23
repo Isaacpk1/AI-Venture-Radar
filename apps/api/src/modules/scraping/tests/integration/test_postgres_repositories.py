@@ -1,5 +1,6 @@
 """Testes integrados dos repositórios contra o PostgreSQL Docker."""
 
+from datetime import timedelta
 from hashlib import sha256
 
 import pytest
@@ -10,6 +11,7 @@ from apps.api.src.modules.scraping.domain.entities import (
     ScrapingAttempt,
     ScrapingJob,
     ScrapingResult,
+    utc_now,
 )
 from apps.api.src.modules.scraping.domain.enums import (
     AttemptStatus,
@@ -171,6 +173,58 @@ async def test_postgres_rejects_duplicate_content_hash() -> None:
             # O savepoint preserva a transacao externa depois da colisao.
             restored = await results.get_by_id(first_result.id)
             assert restored is not None
+        finally:
+            await session.close()
+            await transaction.rollback()
+
+    await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_get_recent_by_url_respects_time_window() -> None:
+    """Cache de scraping: so reaproveita resultado dentro da janela informada."""
+
+    async with engine.connect() as connection:
+        transaction = await connection.begin()
+        session = AsyncSession(bind=connection, expire_on_commit=False)
+
+        try:
+            jobs = PostgresScrapingJobRepository(session)
+            results = PostgresScrapingResultRepository(session)
+            job = ScrapingJob(url="https://cache-test.example")
+            await jobs.save(job)
+
+            scraping_result = ScrapingResult(
+                job_id=job.id,
+                url=job.url,
+                final_url=job.url,
+                title="Cache test",
+                raw_html="<html>conteudo</html>",
+                raw_text="conteudo aprovado",
+                method=ScrapingMethod.BEAUTIFULSOUP,
+                status_code=200,
+                technical_score=1.0,
+                text_score=1.0,
+                evidence_score=1.0,
+                quality_score=1.0,
+                content_hash=sha256(b"cache test content").hexdigest(),
+            )
+            await results.save(scraping_result)
+
+            within_window = await results.get_recent_by_url(
+                job.url, since=utc_now() - timedelta(days=3)
+            )
+            outside_window = await results.get_recent_by_url(
+                job.url, since=utc_now() + timedelta(seconds=1)
+            )
+            different_url = await results.get_recent_by_url(
+                "https://other-url.example", since=utc_now() - timedelta(days=3)
+            )
+
+            assert within_window is not None
+            assert within_window.id == scraping_result.id
+            assert outside_window is None
+            assert different_url is None
         finally:
             await session.close()
             await transaction.rollback()

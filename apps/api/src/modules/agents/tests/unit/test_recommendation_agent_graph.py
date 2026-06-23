@@ -21,10 +21,14 @@ class FakeRecommendationTool(RecommendationToolPort):
     def __init__(self, candidates: list[RecommendationCandidate]) -> None:
         self.candidates = candidates
         self.received_startup_id = None
+        self.update_calls: list[tuple] = []
 
     async def generate(self, startup_id):
         self.received_startup_id = startup_id
         return self.candidates
+
+    async def update_justifications(self, startup_id, justifications):
+        self.update_calls.append((startup_id, justifications))
 
 
 class FakeReviewer(RecommendationReviewerPort):
@@ -66,6 +70,9 @@ async def test_graph_returns_reviewed_recommendations() -> None:
     assert tool.received_startup_id == startup_id
     assert reviewer.received_candidates == [candidate]
     assert result.recommendations == [reviewed_candidate]
+    assert tool.update_calls == [
+        (startup_id, {"nvidia-nim": "Justificativa de negocio."})
+    ]
 
 
 @pytest.mark.anyio
@@ -78,3 +85,4 @@ async def test_graph_skips_reviewer_when_no_candidates() -> None:
 
     assert result.recommendations == []
     assert reviewer.call_count == 0
+    assert tool.update_calls == []

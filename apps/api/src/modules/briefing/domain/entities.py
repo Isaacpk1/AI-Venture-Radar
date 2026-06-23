@@ -25,3 +25,11 @@ class Briefing:
         self.content = self.content.strip()
         if not self.content:
             raise BriefingError("Briefing precisa ter conteudo.")
+
+    def update_content(self, content: str) -> None:
+        """Substitui o conteudo (ex: prosa reescrita pelo Briefing Agent)."""
+
+        content = content.strip()
+        if not content:
+            raise BriefingError("Briefing precisa ter conteudo.")
+        self.content = content

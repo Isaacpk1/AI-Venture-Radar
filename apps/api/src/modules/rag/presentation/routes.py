@@ -2,10 +2,6 @@
 
 from fastapi import APIRouter, HTTPException, status
 
-from apps.api.src.modules.embeddings.domain.exceptions import (
-    EmbeddingServiceUnavailableError,
-    EmptyChunkTextError,
-)
 from apps.api.src.modules.rag.application.dto import (
     AnswerQuestionInput,
     SearchEvidenceInput,
@@ -15,6 +11,7 @@ from apps.api.src.modules.rag.domain.exceptions import (
     RagAnswerGenerationError,
     RagAnswerServiceUnavailableError,
     RagEvidenceNotFoundError,
+    RagSearchServiceUnavailableError,
 )
 from apps.api.src.modules.rag.factories.rag_factory import RagFactory
 
@@ -44,9 +41,9 @@ async def search_evidence(body: SearchEvidenceRequest) -> SearchEvidenceResponse
                 source_type=body.source_type,
             )
         )
-    except (EmptyRagQueryError, EmptyChunkTextError) as error:
+    except EmptyRagQueryError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-    except EmbeddingServiceUnavailableError as error:
+    except RagSearchServiceUnavailableError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(error),
@@ -68,12 +65,12 @@ async def answer_question(body: AnswerQuestionRequest) -> RagAnswerResponse:
                 source_type=body.source_type,
             )
         )
-    except (EmptyRagQueryError, EmptyChunkTextError) as error:
+    except EmptyRagQueryError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except RagEvidenceNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except (
-        EmbeddingServiceUnavailableError,
+        RagSearchServiceUnavailableError,
         RagAnswerServiceUnavailableError,
     ) as error:
         raise HTTPException(

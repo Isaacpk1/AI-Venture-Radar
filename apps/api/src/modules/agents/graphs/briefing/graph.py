@@ -35,7 +35,10 @@ class BriefingAgentGraph(BriefingAgentService):
     LLM (reescrever a prosa e' o proposito inteiro deste agente, diferente
     do Recommendation Agent, que so aciona LLM para candidatos ambiguos) —
     o fallback seguro contra perda de citacoes fica dentro do
-    ``BriefingProseRewriterPort``, nao aqui.
+    ``BriefingProseRewriterPort``, nao aqui. O node ``persist_rewritten_content``
+    grava a prosa reescrita de volta em ``briefing`` (sem isso, a reescrita
+    nunca chegaria ao usuario — ficaria so na resposta em memoria deste
+    grafo).
     """
 
     def __init__(
@@ -104,12 +107,16 @@ class BriefingAgentGraph(BriefingAgentService):
         workflow.add_node("prepare_context", self._prepare_context)
         workflow.add_node("generate_briefing", self._generate_briefing)
         workflow.add_node("rewrite_prose", self._rewrite_prose)
+        workflow.add_node(
+            "persist_rewritten_content", self._persist_rewritten_content
+        )
         workflow.add_node("finalize", self._finalize)
 
         workflow.set_entry_point("prepare_context")
         workflow.add_edge("prepare_context", "generate_briefing")
         workflow.add_edge("generate_briefing", "rewrite_prose")
-        workflow.add_edge("rewrite_prose", "finalize")
+        workflow.add_edge("rewrite_prose", "persist_rewritten_content")
+        workflow.add_edge("persist_rewritten_content", "finalize")
         workflow.add_edge("finalize", END)
 
         return workflow
@@ -130,7 +137,17 @@ class BriefingAgentGraph(BriefingAgentService):
         rewritten = await self.prose_rewriter.rewrite(content)
         return {"rewritten_content": rewritten}
 
+    async def _persist_rewritten_content(self, state: BriefingState) -> BriefingState:
+        startup_id = state["briefing_input"].startup_id
+        briefing_id = await self.briefing_tool.update_content(
+            startup_id, state["rewritten_content"]
+        )
+        return {"briefing_id": briefing_id}
+
     async def _finalize(self, state: BriefingState) -> BriefingState:
         return {
-            "result": BriefingAgentResult(content=state["rewritten_content"])
+            "result": BriefingAgentResult(
+                content=state["rewritten_content"],
+                briefing_id=state["briefing_id"],
+            )
         }

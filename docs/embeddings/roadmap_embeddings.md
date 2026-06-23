@@ -138,9 +138,19 @@ extensao da V4 no `CLAUDE.md`) sem nenhum campo de versao gravado no Qdrant
 | Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
 |---|---|---|---|
 | Troca de modelo de embedding nao deixa rastro no vetor armazenado | gravar `embedding_model` no payload do Qdrant a cada upsert (campo novo, sem lib nova) | Base para uma futura V6 de migracao de modelo sem busca quebrada | Baixo |
-| Chunk identico (mesmo `content_hash`) e reembeddido do zero se o job rodar de novo | cache por `content_hash` do chunk antes de chamar o provider — pula a chamada Gemini se o hash ja tem vetor salvo | Reduz custo de API, complementa a V5 (metricas) | Baixo — so consulta antes de gerar |
+| Chunk identico (mesmo `content_hash`) e reembeddido do zero se o job rodar de novo | cache por `content_hash` do chunk antes de chamar o provider — pula a chamada Gemini se o hash ja tem vetor salvo — **concluido em 23/06/2026** | Reduz custo de API, complementa a V5 (metricas) | Baixo — so consulta antes de gerar |
 | Tokens de entrada sao estimados (`estimate_input_tokens()`), nao o uso real reportado pela API | usar o uso real de tokens que a resposta do LangChain/Gemini ja retorna (`usage_metadata`), em vez da heuristica | Fecha o gap que a V5 ja deixou registrado como limite conhecido | Baixo — dado ja vem na resposta, falta so ler e logar (via `shared/logging`, Fase 0 ja entregue) |
 
 Nao adotar embeddings locais (Hugging Face/sentence-transformers) nem trocar
 de provider agora: o ponto fraco real e observabilidade/cache em torno do
 provider atual, nao o provider em si.
+
+**Cache por content_hash — concluido em 23/06/2026:**
+`EmbeddingJobChunkRepository.find_completed_by_content_hash()` (novo,
+filtra por hash + `model_name` — nunca reusa vetor de um modelo diferente
+do configurado) + `VectorRepository.get_by_chunk_id()` (novo, recupera
+vetor existente do Qdrant) + `UpsertChunkEmbedding.execute(...,
+cached_chunk_id=...)` (pula a chamada ao provider quando ha cache hit).
+`ExecuteEmbeddingJob` consulta o cache antes de cada chunk. Testado:
+2 chunks com texto identico em documentos diferentes geram 1 unica chamada
+ao provider de embedding.

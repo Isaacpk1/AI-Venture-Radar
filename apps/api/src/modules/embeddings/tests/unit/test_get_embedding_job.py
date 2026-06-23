@@ -37,6 +37,11 @@ class FakeJobChunkRepo(EmbeddingJobChunkRepository):
     async def list_by_job_id(self, job_id: UUID) -> list[EmbeddingJobChunk]:
         return []
 
+    async def find_completed_by_content_hash(
+        self, content_hash: str, *, model_name: str
+    ) -> EmbeddingJobChunk | None:
+        return None
+
 
 class FakeUoW(EmbeddingsUnitOfWork):
     def __init__(self, jobs: dict[UUID, EmbeddingJob]) -> None:

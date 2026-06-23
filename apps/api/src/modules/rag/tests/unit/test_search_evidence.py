@@ -6,18 +6,10 @@ import pytest
 
 from apps.api.src.modules.embeddings.application.dto import (
     ChunkEmbeddingRecord,
-    ChunkEmbeddingView,
     ChunkSearchResult,
-    GenerateChunkEmbeddingInput,
-)
-from apps.api.src.modules.embeddings.application.public.embedding_service import (
-    EmbeddingService,
 )
 from apps.api.src.modules.embeddings.application.public.vector_repository import (
     VectorRepository,
-)
-from apps.api.src.modules.embeddings.application.use_cases.generate_chunk_embedding import (
-    GenerateChunkEmbedding,
 )
 from apps.api.src.modules.ingestion.application.public.ingested_reader import (
     ChunkRecord,
@@ -29,7 +21,11 @@ from apps.api.src.modules.rag.application.dto import (
     LexicalSearchResult,
     SearchEvidenceInput,
 )
-from apps.api.src.modules.rag.application.ports import LexicalSearchRepository, Reranker
+from apps.api.src.modules.rag.application.ports import (
+    EmbeddingGenerator,
+    LexicalSearchRepository,
+    Reranker,
+)
 from apps.api.src.modules.rag.application.use_cases.search_evidence import (
     MIN_CANDIDATE_POOL,
     SearchEvidence,
@@ -37,20 +33,13 @@ from apps.api.src.modules.rag.application.use_cases.search_evidence import (
 from apps.api.src.modules.rag.domain.exceptions import EmptyRagQueryError
 
 
-class FakeEmbeddingService(EmbeddingService):
+class FakeEmbeddingGenerator(EmbeddingGenerator):
     def __init__(self) -> None:
-        self.inputs: list[GenerateChunkEmbeddingInput] = []
+        self.received_texts: list[str] = []
 
-    async def embed(
-        self, embedding_input: GenerateChunkEmbeddingInput
-    ) -> ChunkEmbeddingView:
-        self.inputs.append(embedding_input)
-        return ChunkEmbeddingView(
-            chunk_id=embedding_input.chunk_id,
-            values=(0.1, 0.2, 0.3),
-            dimension=3,
-            model_name="fake-rag",
-        )
+    async def generate(self, text: str) -> tuple[float, ...]:
+        self.received_texts.append(text)
+        return (0.1, 0.2, 0.3)
 
 
 class FakeVectorRepository(VectorRepository):
@@ -74,6 +63,9 @@ class FakeVectorRepository(VectorRepository):
         self.limits.append(limit)
         self.source_types.append(source_type)
         return self.results[:limit]
+
+    async def get_by_chunk_id(self, chunk_id):
+        return None
 
 
 class FakeLexicalSearchRepository(LexicalSearchRepository):
@@ -140,20 +132,18 @@ def _make_use_case(
     lexical_results: list[LexicalSearchResult] | None = None,
     reranker: Reranker | None = None,
 ):
-    embedding_service = FakeEmbeddingService()
+    embedding_generator = FakeEmbeddingGenerator()
     vector_repository = FakeVectorRepository(vector_results)
     lexical_repository = FakeLexicalSearchRepository(lexical_results)
     reader = FakeIngestedDocumentReader(chunks_by_document)
     use_case = SearchEvidence(
-        generate_embedding=GenerateChunkEmbedding(
-            embedding_service=embedding_service
-        ),
+        embedding_generator=embedding_generator,
         vector_repository=vector_repository,
         lexical_repository=lexical_repository,
         ingested_document_reader=reader,
         reranker=reranker,
     )
-    return use_case, embedding_service, vector_repository, lexical_repository, reader
+    return use_case, embedding_generator, vector_repository, lexical_repository, reader
 
 
 @pytest.mark.anyio
@@ -183,7 +173,7 @@ async def test_search_evidence_returns_chunks_with_text_and_source() -> None:
             score=0.87,
         )
     ]
-    use_case, embedding_service, vector_repository, lexical_repository, reader = (
+    use_case, embedding_generator, vector_repository, lexical_repository, reader = (
         _make_use_case(
             vector_results=vector_results,
             chunks_by_document={document_id: chunks},
@@ -199,7 +189,7 @@ async def test_search_evidence_returns_chunks_with_text_and_source() -> None:
     assert view.results[0].chunk_id == second_chunk_id
     assert view.results[0].text == "A empresa menciona inferencia em producao."
     assert view.results[0].score > 0
-    assert embedding_service.inputs[0].text == "Como a startup usa IA?"
+    assert embedding_generator.received_texts[0] == "Como a startup usa IA?"
     assert vector_repository.searched_vectors == [(0.1, 0.2, 0.3)]
     # pool de candidatos (max(limit*4, MIN_CANDIDATE_POOL)), nao o limit bruto
     assert vector_repository.limits == [MIN_CANDIDATE_POOL]

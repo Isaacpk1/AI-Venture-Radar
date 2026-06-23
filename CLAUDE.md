@@ -97,6 +97,28 @@ corrigido: `link_farm` sem fallback de estrategia
 navegacao densa em links (ex. TensorRT-LLM) — corrigido, validado
 (BS4 -> fallback -> Trafilatura -> accept).
 
+Fase 6 do roadmap_evolucao_tecnica_mvp.md concluida (23/06/2026): dois
+caches por content_hash/URL para reduzir custo redundante. Embeddings —
+`EmbeddingJobChunkRepository.find_completed_by_content_hash()` +
+`VectorRepository.get_by_chunk_id()` pulam a chamada ao provider de
+embedding quando outro chunk com o mesmo texto (e mesmo `model_name`) ja
+foi processado, mesmo em documentos diferentes. Scraping —
+`ScrapingResultRepository.get_recent_by_url()` com TTL de 3 dias
+(`SCRAPING_RESULT_CACHE_TTL`) evita raspar de novo uma URL recem-aprovada;
+corrige de graca um efeito colateral existente
+(`DuplicateScrapingContentError` se o conteudo reraspado vier
+byte-identico). `COHERE_RERANK_MODEL` tambem ficou configuravel (Fase 4).
+Ver docs/embeddings/roadmap_embeddings.md e docs/scraping/roadmap_scraping.md.
+
+Fase 5 do roadmap_evolucao_tecnica_mvp.md concluida (23/06/2026): auditoria
+das 10 regras do PRE-DECISION CHECKLIST encontrou 1 violacao real —
+`rag` importava classe concreta (`GenerateChunkEmbedding`) e excecoes de
+dominio de `embeddings` em vez de so o contrato publico
+`EmbeddingService`. Corrigido com adapter novo
+(`rag/infrastructure/embeddings_adapters/embeddings_query_embedder.py`,
+porta `EmbeddingGenerator`), mesmo padrao do `IngestionChunkReader` em
+`embeddings`. Ver docs/validacao_arquitetural_modulos_workers.md.
+
 Fase 2 do roadmap_evolucao_tecnica_mvp.md concluida: baseline Ragas
 contra o conteudo NVIDIA Knowledge real (12 perguntas, ver
 test_ragas_quality_baseline.py, opt-in via RUN_RAGAS_EVAL=1):
@@ -1054,25 +1076,26 @@ url_ingestion_jobs      orquestracao URL -> scraping -> ingestion -> embeddings 
 
 | Modulo | Testes | Ultima verificacao |
 |---|---|---|
-| scraping | 130 unit + 5 integracao | 2026-06-23 |
+| scraping | 132 unit + 6 integracao | 2026-06-23 |
 | agents | 98 unit + 1 integracao | 2026-06-23 |
 | ingestion | 37 unit + 1 integracao | 2026-06-23 |
-| embeddings | 58 unit + 2 integracao | 2026-06-23 |
+| embeddings | 61 unit + 3 integracao | 2026-06-23 |
 | startups | 35 unit + 1 integracao | 2026-06-23 |
-| rag | 17 unit + 2 integracao | 2026-06-23 |
+| rag | 19 unit + 2 integracao | 2026-06-23 |
 | nvidia_knowledge | 15 unit | 2026-06-23 |
 | recommendations | 23 unit + 1 integracao | 2026-06-23 |
 | briefing | 15 unit + 1 integracao | 2026-06-23 |
 | orchestration | 22 unit + 2 integracao | 2026-06-23 |
 | shared | 10 unit (logging + observability) | 2026-06-23 |
-| **Total** | **476 testes coletados** | **2026-06-23** |
+| **Total** | **485 testes coletados** | **2026-06-23** |
 
 Nota: numeros desta tabela vem de `pytest --collect-only -q` por modulo
 (nao exige Postgres/Redis/Qdrant vivos, so confirma quantos testes existem
 no codigo) — todas as 11 linhas foram reconferidas nesta entrega, corrigindo
 pequenos desvios acumulados ao longo de entregas anteriores (ex: `rag` ganhou
 +1 teste de integracao com `test_ragas_quality_baseline.py`, ainda nao
-commitado). A ultima execucao completa (`passed`, exigindo infra viva) deu
+commitado, e +2 unit com `test_embeddings_query_embedder.py` do fix
+arquitetural rag->embeddings, ver "Recent validation"). A ultima execucao completa (`passed`, exigindo infra viva) deu
 **474 passed, 2 warnings em 2026-06-23**, antes do teste Ragas ser
 adicionado — por isso o total agora coletado (476) e' maior que o ultimo
 `passed` real. Rode o comando abaixo com a infra ativa para obter um
@@ -1288,8 +1311,9 @@ QDRANT_COLLECTION_NAME   ← colecao de vetores de chunks (embeddings V3)
 REDIS_URL
 FIRECRAWL_API_KEY
 LLM_API_KEY          ← Gemini API key
-GEMINI_EMBEDDING_MODEL   ← modelo de embedding (embeddings V2), default models/text-embedding-004
+GEMINI_EMBEDDING_MODEL   ← modelo de embedding (embeddings V2), default models/gemini-embedding-001
 COHERE_API_KEY       ← reranking RAG V4 (Cohere Rerank); opcional, sem ela busca segue sem reranking
+COHERE_RERANK_MODEL  ← modelo do Cohere Rerank, default rerank-v3.5 (configuravel desde 23/06/2026)
 LANGFUSE_PUBLIC_KEY  ← tracing de LLM (shared/observability); opcional, sem ela chamadas seguem sem tracing
 LANGFUSE_SECRET_KEY
 LANGFUSE_HOST        ← URL do Langfuse self-hosted, default http://localhost:3300 (infra/docker-compose.yml)

@@ -76,6 +76,30 @@ class QdrantVectorRepository(VectorRepository):
             for point in response.points
         ]
 
+    async def get_by_chunk_id(self, chunk_id: UUID) -> ChunkEmbeddingRecord | None:
+        if not await self._client.collection_exists(self._collection_name):
+            return None
+
+        points = await self._client.retrieve(
+            collection_name=self._collection_name,
+            ids=[str(chunk_id)],
+            with_vectors=True,
+        )
+        if not points:
+            return None
+
+        point = points[0]
+        values = tuple(point.vector)
+        return ChunkEmbeddingRecord(
+            chunk_id=chunk_id,
+            document_id=UUID(point.payload["document_id"]),
+            source_url=point.payload["source_url"],
+            source_type=point.payload.get("source_type", "startup_evidence"),
+            values=values,
+            dimension=len(values),
+            model_name=point.payload["model_name"],
+        )
+
     def _build_filter(self, source_type: str | None) -> Filter | None:
         if source_type is None:
             return None

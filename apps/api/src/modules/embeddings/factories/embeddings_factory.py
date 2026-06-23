@@ -127,6 +127,7 @@ class EmbeddingsFactory:
             uow_factory=PostgresEmbeddingsUnitOfWork,
             chunk_source_reader=EmbeddingsFactory.create_chunk_source_reader(),
             upsert_chunk_embedding=EmbeddingsFactory.create_upsert_chunk_embedding(),
+            current_model_name=get_settings().gemini_embedding_model,
         )
 
     @staticmethod

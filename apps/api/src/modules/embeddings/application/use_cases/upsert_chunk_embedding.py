@@ -1,5 +1,7 @@
 """Caso de uso para gerar e persistir o embedding de um chunk."""
 
+from uuid import UUID
+
 from apps.api.src.modules.embeddings.application.dto import (
     ChunkEmbeddingRecord,
     ChunkEmbeddingView,
@@ -15,7 +17,12 @@ from apps.api.src.modules.embeddings.application.use_cases.generate_chunk_embedd
 
 
 class UpsertChunkEmbedding:
-    """Gera o embedding de um chunk e o persiste no VectorRepository."""
+    """Gera o embedding de um chunk e o persiste no VectorRepository.
+
+    Quando ``cached_chunk_id`` e informado e ja existe vetor salvo para ele
+    (mesmo content_hash + modelo, verificado pelo chamador), reusa esse
+    vetor em vez de chamar o provider de embedding de novo.
+    """
 
     def __init__(
         self,
@@ -27,13 +34,31 @@ class UpsertChunkEmbedding:
         self._vector_repository = vector_repository
 
     async def execute(
-        self, upsert_input: UpsertChunkEmbeddingInput
+        self,
+        upsert_input: UpsertChunkEmbeddingInput,
+        *,
+        cached_chunk_id: UUID | None = None,
     ) -> ChunkEmbeddingView:
-        view = await self._generate_chunk_embedding.execute(
-            GenerateChunkEmbeddingInput(
-                chunk_id=upsert_input.chunk_id, text=upsert_input.text
-            )
+        cached = (
+            await self._vector_repository.get_by_chunk_id(cached_chunk_id)
+            if cached_chunk_id is not None
+            else None
         )
+
+        if cached is not None:
+            view = ChunkEmbeddingView(
+                chunk_id=upsert_input.chunk_id,
+                values=cached.values,
+                dimension=cached.dimension,
+                model_name=cached.model_name,
+            )
+        else:
+            view = await self._generate_chunk_embedding.execute(
+                GenerateChunkEmbeddingInput(
+                    chunk_id=upsert_input.chunk_id, text=upsert_input.text
+                )
+            )
+
         await self._vector_repository.upsert(
             ChunkEmbeddingRecord(
                 chunk_id=view.chunk_id,

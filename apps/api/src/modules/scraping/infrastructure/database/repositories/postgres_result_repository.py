@@ -1,5 +1,6 @@
 """Implementação PostgreSQL do contrato ``ScrapingResultRepository``."""
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -72,6 +73,25 @@ class PostgresScrapingResultRepository(ScrapingResultRepository):
             select(ScrapingResultModel).where(
                 ScrapingResultModel.content_hash == content_hash
             )
+        )
+        if model is None:
+            return None
+
+        return ScrapingResultMapper.to_entity(model)
+
+    async def get_recent_by_url(
+        self, url: str, *, since: datetime
+    ) -> ScrapingResult | None:
+        """Consulta o resultado mais recente para a URL dentro da janela."""
+
+        model = await self.session.scalar(
+            select(ScrapingResultModel)
+            .where(
+                ScrapingResultModel.url == url,
+                ScrapingResultModel.created_at >= since,
+            )
+            .order_by(ScrapingResultModel.created_at.desc())
+            .limit(1)
         )
         if model is None:
             return None

@@ -91,6 +91,9 @@ class FakeVectorRepository(VectorRepository):
     ) -> list[ChunkSearchResult]:
         return []
 
+    async def get_by_chunk_id(self, chunk_id: UUID) -> ChunkEmbeddingRecord | None:
+        return self.records.get(chunk_id)
+
 
 class FakeChunkSourceReader(ChunkSourceReader):
     def __init__(self, chunks_by_document: dict[UUID, list[ChunkSourceItem]]) -> None:
@@ -122,6 +125,18 @@ class FakeJobChunkRepo(EmbeddingJobChunkRepository):
 
     async def list_by_job_id(self, job_id: UUID) -> list[EmbeddingJobChunk]:
         return [c for c in self.chunks.values() if c.job_id == job_id]
+
+    async def find_completed_by_content_hash(
+        self, content_hash: str, *, model_name: str
+    ) -> EmbeddingJobChunk | None:
+        for chunk in self.chunks.values():
+            if (
+                chunk.status is EmbeddingJobChunkStatus.COMPLETED
+                and chunk.content_hash == content_hash
+                and chunk.model_name == model_name
+            ):
+                return chunk
+        return None
 
 
 class FakeUoW(EmbeddingsUnitOfWork):
@@ -174,6 +189,7 @@ def _make_setup(
         uow_factory=lambda: uow,
         chunk_source_reader=chunk_source_reader,
         upsert_chunk_embedding=upsert_chunk_embedding,
+        current_model_name="fake-test",
     )
 
     return use_case, job, job_repo, job_chunk_repo, embedding_service, vector_repository
@@ -305,3 +321,54 @@ async def test_raises_when_job_not_found() -> None:
 
     with pytest.raises(EmbeddingJobNotFoundError):
         await use_case.execute(job_id=uuid4())
+
+
+@pytest.mark.anyio
+async def test_chunk_with_identical_text_across_documents_reuses_vector() -> None:
+    """Boilerplate repetido entre paginas diferentes nao deve chamar o
+    provider de embedding de novo - so o primeiro chunk gera vetor."""
+
+    shared_text = "paragrafo de boilerplate identico entre paginas"
+    document_a, document_b = uuid4(), uuid4()
+    chunk_a = ChunkSourceItem(
+        chunk_id=uuid4(), text=shared_text, source_url="https://a.example.com"
+    )
+    chunk_b = ChunkSourceItem(
+        chunk_id=uuid4(), text=shared_text, source_url="https://b.example.com"
+    )
+
+    job_a = EmbeddingJob(document_id=document_a)
+    job_b = EmbeddingJob(document_id=document_b)
+    job_repo = FakeJobRepo()
+    job_repo.jobs[job_a.id] = job_a
+    job_repo.jobs[job_b.id] = job_b
+    job_chunk_repo = FakeJobChunkRepo()
+    uow = FakeUoW(job_repo, job_chunk_repo)
+
+    chunk_source_reader = FakeChunkSourceReader(
+        {document_a: [chunk_a], document_b: [chunk_b]}
+    )
+    embedding_service = ControllableEmbeddingService()
+    vector_repository = FakeVectorRepository()
+    upsert_chunk_embedding = UpsertChunkEmbedding(
+        generate_chunk_embedding=GenerateChunkEmbedding(
+            embedding_service=embedding_service
+        ),
+        vector_repository=vector_repository,
+    )
+    use_case = ExecuteEmbeddingJob(
+        uow_factory=lambda: uow,
+        chunk_source_reader=chunk_source_reader,
+        upsert_chunk_embedding=upsert_chunk_embedding,
+        current_model_name="fake-test",
+    )
+
+    await use_case.execute(job_id=job_a.id)
+    await use_case.execute(job_id=job_b.id)
+
+    assert embedding_service.calls == [chunk_a.chunk_id]
+    assert (
+        vector_repository.records[chunk_a.chunk_id].values
+        == vector_repository.records[chunk_b.chunk_id].values
+    )
+    assert job_repo.jobs[job_b.id].status is EmbeddingJobStatus.COMPLETED

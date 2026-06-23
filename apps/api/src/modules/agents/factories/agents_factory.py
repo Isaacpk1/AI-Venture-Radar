@@ -266,7 +266,8 @@ class AgentsFactory:
             return None
 
         recommendation_tool = RecommendationGeneratorAdapter(
-            RecommendationsFactory.create_recommendation_generator()
+            RecommendationsFactory.create_recommendation_generator(),
+            RecommendationsFactory.create_recommendation_justification_updater(),
         )
         reviewer = LangChainGeminiRecommendationReviewer(
             api_key=settings.gemini_api_key,
@@ -307,7 +308,8 @@ class AgentsFactory:
             return None
 
         briefing_tool = BriefingGeneratorAdapter(
-            BriefingFactory.create_briefing_generator()
+            BriefingFactory.create_briefing_generator(),
+            BriefingFactory.create_briefing_content_updater(),
         )
         prose_rewriter = LangChainGeminiBriefingProseRewriter(
             api_key=settings.gemini_api_key,

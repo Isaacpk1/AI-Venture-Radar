@@ -4,8 +4,9 @@ from apps.api.src.modules.scraping.application.ports import TaskDispatcher
 from apps.api.src.modules.scraping.application.unit_of_work import (
     ScrapingUnitOfWorkFactory,
 )
-from apps.api.src.modules.scraping.domain.entities import ScrapingJob
+from apps.api.src.modules.scraping.domain.entities import ScrapingJob, utc_now
 from apps.api.src.modules.scraping.domain.exceptions import TaskDispatchError
+from apps.api.src.modules.scraping.domain.policies import SCRAPING_RESULT_CACHE_TTL
 
 
 class CreateScrapingJob:
@@ -26,7 +27,25 @@ class CreateScrapingJob:
     async def execute(
         self, url: str, *, source_type: str = "startup_evidence"
     ) -> ScrapingJob:
-        """Cria um job pendente e envia somente seu ID para execução."""
+        """Cria um job pendente e envia somente seu ID para execução.
+
+        Antes de raspar de novo, reaproveita um resultado aprovado recente
+        para a mesma URL (cache de ``SCRAPING_RESULT_CACHE_TTL``) — evita
+        custo de rede/validacao redundante e o erro de hash duplicado que
+        ocorreria se o conteudo vier byte-identico de novo.
+        """
+
+        async with self.unit_of_work_factory() as unit_of_work:
+            cached_result = await unit_of_work.result_repository.get_recent_by_url(
+                url, since=utc_now() - SCRAPING_RESULT_CACHE_TTL
+            )
+            if cached_result is not None:
+                job = ScrapingJob(url=url, source_type=source_type)
+                job.start()
+                job.complete(cached_result.id)
+                await unit_of_work.job_repository.save(job)
+                await unit_of_work.commit()
+                return job
 
         # A entidade nasce como pending por regra definida em ScrapingJob.
         job = ScrapingJob(url=url, source_type=source_type)

@@ -188,8 +188,9 @@ Dependencias: Fase 2 concluida com numero de baseline.
 Entregaveis:
 
 - extrair modelo do Cohere Rerank para `Settings`
-  (`COHERE_RERANK_MODEL`, default `rerank-v3.5`) — pendencia trivial ja
-  documentada;
+  (`COHERE_RERANK_MODEL`, default `rerank-v3.5`) — **concluido em
+  23/06/2026**, `RagFactory.create_reranker()` agora passa
+  `settings.cohere_rerank_model`;
 - revalidar com Ragas (Fase 2/3) se algum modelo de rerank alternativo
   da Cohere muda a metrica;
 - consolidar dashboards do Langfuse (Fase 0) com os numeros de qualidade
@@ -243,7 +244,63 @@ Dependencias: nenhuma. Risco baixo — e refatoracao de fronteira, sem mudar
 comportamento observavel (`SearchEvidence.search()` continua devolvendo o
 mesmo resultado).
 
-## 8. Fora de escopo deste roadmap
+### Fase 5 — concluida em 23/06/2026
+
+```txt
+rag/application/ports.py            + EmbeddingGenerator (porta nova)
+rag/domain/exceptions.py             + RagSearchServiceUnavailableError
+rag/infrastructure/embeddings_adapters/embeddings_query_embedder.py (novo)
+rag/application/use_cases/search_evidence.py  (usa a porta, nao mais
+  GenerateChunkEmbedding de embeddings)
+rag/presentation/routes.py           (so excecoes de rag)
+rag/factories/rag_factory.py         + create_embedding_generator()
+```
+
+Validado: `pytest apps/api/src/modules/rag/tests/
+apps/api/src/modules/embeddings/tests/unit/ -q` -> 78 passed, 1 skipped
+(integracao que exige Postgres). Grep confirma zero import de
+`embeddings.application.use_cases`/`embeddings.domain.exceptions` em
+`rag/`. `docs/validacao_mensagens_interacoes_modulos.md` e
+`docs/validacao_arquitetural_modulos_workers.md` atualizados para refletir
+o contrato real (`EmbeddingService`, nao mais `GenerateChunkEmbedding`).
+
+## 8. Fase 6 — Cache por content_hash/URL (embeddings + scraping)
+
+Dois itens de baixo esforço/alto impacto das seções "Tecnologias
+candidatas" de `docs/embeddings/roadmap_embeddings.md` e
+`docs/scraping/roadmap_scraping.md`, priorizados pela "Ordem de
+implementação recomendada" de `docs/roadmap_produto_final.md` (item 2).
+
+Entregáveis:
+
+- `embeddings`: `EmbeddingJobChunkRepository.find_completed_by_content_hash()`
+  (filtra por hash + `model_name`, nunca reusa vetor de modelo diferente)
+  + `VectorRepository.get_by_chunk_id()` (recupera vetor existente do
+  Qdrant) + `UpsertChunkEmbedding.execute(..., cached_chunk_id=...)` pula a
+  chamada ao provider quando há cache hit; `ExecuteEmbeddingJob` consulta o
+  cache antes de cada chunk;
+- `scraping`: `ScrapingResultRepository.get_recent_by_url(url, since=...)`
+  (Postgres + in-memory) + `SCRAPING_RESULT_CACHE_TTL = timedelta(days=3)`
+  (`domain/policies.py`); `CreateScrapingJob.execute()` reaproveita um
+  resultado aprovado recente sem despachar para a fila.
+
+Critério de pronto:
+
+```txt
+2 chunks com texto identico em documentos diferentes geram so 1 chamada ao
+provider de embedding; reenviar a mesma URL dentro de 3 dias completa o
+job sem raspar de novo.
+```
+
+Validado: `pytest apps/api/src/modules/embeddings/tests/
+apps/api/src/modules/scraping/tests/unit/ -q` -> todos passam (+7 testes
+novos: 3 unit + 1 integração em embeddings, 2 unit + 1 integração em
+scraping). Suite completa do projeto: 485 testes coletados, 484 passed +
+1 skipped (Ragas opt-in).
+
+Dependências: nenhuma.
+
+## 9. Fora de escopo deste roadmap
 
 ```txt
 DeepEval em CI — entra quando existir pipeline de CI (P2 do roadmap
@@ -260,7 +317,7 @@ Autenticacao, CORS, rate limiting, deploy — P2 de producao, fora do
 escopo de "qualidade do pipeline existente".
 ```
 
-## 9. Ordem resumida
+## 10. Ordem resumida
 
 ```txt
 Fase 0 (observabilidade)  ----\
@@ -272,6 +329,9 @@ Fase 2 (baseline Ragas) -> Fase 3 (BM25, so se Fase 2 justificar)
 
 Fase 5 (fix arquitetural rag->embeddings) -- independente, pode rodar em
                                               paralelo com qualquer fase
+
+Fase 6 (cache embeddings + scraping) -- independente, concluida em
+                                          23/06/2026
 ```
 
 Para a ordem de implementacao que cruza isto com os itens de produto (P1
@@ -280,7 +340,7 @@ de cada modulo, ver `docs/roadmap_produto_final.md`, secao "Ordem de
 implementacao recomendada" — este documento aqui cobre so qualidade do
 pipeline existente, nao features novas de produto.
 
-## 10. Referencias
+## 11. Referencias
 
 ```txt
 docs/diagnostico_fraquezas_e_tecnologias_recomendadas.md  — diagnostico completo
@@ -289,8 +349,13 @@ docs/rag/rag_v4_reranking.md                              — Cohere Rerank atua
 docs/rag/roadmap_rag.md                                   — RAG V5 (avaliacao)
 docs/recommendations/roadmap_recommendations.md
 docs/validacao_arquitetural_modulos_workers.md            — violacao rag->embeddings (Fase 5)
+docs/embeddings/roadmap_embeddings.md                     — cache por content_hash (Fase 6)
+docs/scraping/roadmap_scraping.md                         — cache por URL (Fase 6)
+docs/roadmap_produto_final.md                             — Ordem de implementacao recomendada
 apps/api/src/modules/recommendations/domain/policies.py
 apps/api/src/modules/rag/infrastructure/database/postgres_lexical_search_repository.py
 apps/api/src/modules/rag/application/ports.py
 apps/api/src/modules/rag/application/use_cases/search_evidence.py
+apps/api/src/modules/embeddings/application/use_cases/execute_embedding_job.py
+apps/api/src/modules/scraping/application/use_cases/create_scraping_job.py
 ```

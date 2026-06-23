@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.src.modules.embeddings.domain.entities import EmbeddingJobChunk
+from apps.api.src.modules.embeddings.domain.enums import EmbeddingJobChunkStatus
 from apps.api.src.modules.embeddings.domain.repositories import (
     EmbeddingJobChunkRepository,
 )
@@ -37,3 +38,20 @@ class PostgresEmbeddingJobChunkRepository(EmbeddingJobChunkRepository):
             .order_by(EmbeddingJobChunkModel.created_at)
         )
         return [EmbeddingJobChunkMapper.to_entity(m) for m in models]
+
+    async def find_completed_by_content_hash(
+        self, content_hash: str, *, model_name: str
+    ) -> EmbeddingJobChunk | None:
+        model = await self._session.scalar(
+            select(EmbeddingJobChunkModel)
+            .where(
+                EmbeddingJobChunkModel.content_hash == content_hash,
+                EmbeddingJobChunkModel.model_name == model_name,
+                EmbeddingJobChunkModel.status == EmbeddingJobChunkStatus.COMPLETED.value,
+            )
+            .order_by(EmbeddingJobChunkModel.finished_at.desc())
+            .limit(1)
+        )
+        if model is None:
+            return None
+        return EmbeddingJobChunkMapper.to_entity(model)

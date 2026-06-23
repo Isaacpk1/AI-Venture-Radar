@@ -23,3 +23,7 @@ class BriefingRepository(ABC):
     @abstractmethod
     async def list_by_startup_id(self, startup_id: UUID) -> list[Briefing]:
         """Lista briefings de uma startup, mais recentes primeiro."""
+
+    @abstractmethod
+    async def update_content(self, briefing_id: UUID, content: str) -> None:
+        """Atualiza so o conteudo de um briefing ja existente."""

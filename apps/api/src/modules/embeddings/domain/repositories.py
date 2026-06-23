@@ -29,3 +29,13 @@ class EmbeddingJobChunkRepository(ABC):
     @abstractmethod
     async def list_by_job_id(self, job_id: UUID) -> list[EmbeddingJobChunk]:
         """Lista todos os chunks rastreados de um job."""
+
+    @abstractmethod
+    async def find_completed_by_content_hash(
+        self, content_hash: str, *, model_name: str
+    ) -> EmbeddingJobChunk | None:
+        """Busca um chunk ja completado com o mesmo hash de conteudo e modelo.
+
+        O filtro por ``model_name`` evita reusar um vetor gerado por um
+        modelo de embedding diferente do atualmente configurado.
+        """

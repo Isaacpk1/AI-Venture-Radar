@@ -1,6 +1,7 @@
 """Estado compartilhado do Briefing Graph."""
 
 from typing import TypedDict
+from uuid import UUID
 
 from apps.api.src.modules.agents.application.dto import (
     BriefingAgentInput,
@@ -15,4 +16,5 @@ class BriefingState(TypedDict, total=False):
     prepared_context: str
     deterministic_content: str
     rewritten_content: str
+    briefing_id: UUID
     result: BriefingAgentResult

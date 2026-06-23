@@ -6,6 +6,7 @@ contratos usando memória, PostgreSQL ou outro mecanismo de armazenamento.
 """
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 from uuid import UUID
 
 from .entities import ScrapingAttempt, ScrapingJob, ScrapingResult
@@ -49,3 +50,9 @@ class ScrapingResultRepository(ABC):
     @abstractmethod
     async def get_by_content_hash(self, content_hash: str) -> ScrapingResult | None:
         """Procura conteúdo duplicado usando seu hash."""
+
+    @abstractmethod
+    async def get_recent_by_url(
+        self, url: str, *, since: datetime
+    ) -> ScrapingResult | None:
+        """Retorna o resultado mais recente para a URL dentro da janela informada."""

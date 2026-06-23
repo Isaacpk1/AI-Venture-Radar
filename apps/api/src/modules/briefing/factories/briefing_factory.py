@@ -9,8 +9,14 @@ from apps.api.src.modules.briefing.application.use_cases.get_briefing import (
 from apps.api.src.modules.briefing.application.use_cases.list_briefings import (
     ListBriefings,
 )
+from apps.api.src.modules.briefing.application.public.briefing_content_updater import (
+    BriefingContentUpdater,
+)
 from apps.api.src.modules.briefing.application.public.briefing_generator import (
     BriefingGenerator,
+)
+from apps.api.src.modules.briefing.application.use_cases.update_briefing_content import (
+    UpdateBriefingContent,
 )
 from apps.api.src.modules.briefing.infrastructure.database.postgres_unit_of_work import (
     PostgresBriefingsUnitOfWork,
@@ -65,3 +71,7 @@ class BriefingFactory:
             profile_source,
             recommendations_source,
         )
+
+    @staticmethod
+    def create_briefing_content_updater() -> BriefingContentUpdater:
+        return UpdateBriefingContent(PostgresBriefingsUnitOfWork)

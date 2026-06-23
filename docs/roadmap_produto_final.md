@@ -87,11 +87,16 @@ para a terceira — ver `docs/nvidia_knowledge/roadmap_nvidia_knowledge.md`,
 - aprofundar o uso de `ai_maturity_level` no score (bonus deterministico inicial entregue);
 - adicionar prioridade, confianca, complexidade, proxima acao e trade-offs;
 - separar justificativa de negocio da justificativa tecnica;
-- integrar Recommendation Agent V11 ao caminho principal quando aplicavel.
+- integrar Recommendation Agent V11 ao caminho principal — **ENTREGUE em
+  23/06/2026**: `orchestration` usa o agente quando `GEMINI_API_KEY` esta
+  configurada (justificativa revisada persistida de volta em
+  `recommendations`), cai para o gerador V1 puro sem a chave.
 
 ### 5. Briefing e revisao
 
-- integrar Briefing Agent V12 ao fluxo principal quando aplicavel;
+- integrar Briefing Agent V12 ao fluxo principal — **ENTREGUE em
+  23/06/2026**: mesma logica do item acima, prosa reescrita persistida de
+  volta em `briefings`;
 - exportar HTML/PDF preservando citacoes;
 - aprovar/rejeitar, comentar e manter historico de revisao;
 - ranquear oportunidades e gerar visao de lote.
@@ -137,9 +142,14 @@ repete o detalhe de cada item — so a sequencia e o motivo da ordem.
    arquitetura nova.
 
 3. P1 #4/#5 (Recommendation Agent V11 e Briefing Agent V12 no caminho
-   principal) + rapidfuzz para dedup em startups (V4). Esforco medio,
-   mas desbloqueia capacidade ja construida e testada (os agentes existem
-   desde Agents V11/V12) em vez de criar algo novo.
+   principal) — **ENTREGUE em 23/06/2026**. Esforco maior do que o
+   estimado: os dois agentes so reescreviam o resultado em memoria, sem
+   persistir — foi preciso adicionar `update_justification`/`update_content`
+   em `recommendations`/`briefing` (contratos publicos novos) para a
+   melhoria do LLM chegar de fato ao banco. NVIDIA RAG Agent (V10) ficou
+   de fora: nao tem ponto de integracao natural ainda (nenhum dos outros
+   2 grafos o chama como sub-tool hoje). rapidfuzz para dedup em startups
+   (V4) continua pendente, fica para a proxima rodada.
 
 4. Chain de enriquecimento por busca (Search Planner Agent + client de
    busca novo, ver docs/agents/roadmap_agentes.md e

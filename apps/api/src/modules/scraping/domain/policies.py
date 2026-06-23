@@ -6,8 +6,14 @@ estratégia ou precisa ser rejeitada.
 """
 
 from dataclasses import dataclass, field
+from datetime import timedelta
 
 from .enums import ValidationDecision
+
+# Por quanto tempo um ScrapingResult aprovado para uma URL pode ser
+# reaproveitado em vez de raspar de novo. Janela curta o suficiente para
+# nao arriscar dado muito desatualizado se o site mudar.
+SCRAPING_RESULT_CACHE_TTL = timedelta(days=3)
 
 
 @dataclass(frozen=True)

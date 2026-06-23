@@ -43,3 +43,10 @@ class PostgresBriefingRepository(BriefingRepository):
             .order_by(BriefingModel.generated_at.desc())
         )
         return [BriefingMapper.to_entity(model) for model in models]
+
+    async def update_content(self, briefing_id: UUID, content: str) -> None:
+        model = await self._session.get(BriefingModel, briefing_id)
+        if model is None:
+            return
+        model.content = content
+        await self._session.flush()
