@@ -23,11 +23,13 @@ class CreateScrapingJob:
         self.unit_of_work_factory = unit_of_work_factory
         self.task_dispatcher = task_dispatcher
 
-    async def execute(self, url: str) -> ScrapingJob:
+    async def execute(
+        self, url: str, *, source_type: str = "startup_evidence"
+    ) -> ScrapingJob:
         """Cria um job pendente e envia somente seu ID para execução."""
 
         # A entidade nasce como pending por regra definida em ScrapingJob.
-        job = ScrapingJob(url=url)
+        job = ScrapingJob(url=url, source_type=source_type)
 
         # Primeiro persistimos o job. Assim, o futuro worker conseguirá
         # encontrá-lo quando receber o identificador pela fila.

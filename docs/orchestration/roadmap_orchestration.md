@@ -27,6 +27,8 @@ startup_id -> dispara recommendations -> dispara briefing -> AnalysisJob
 | Orchestration V3 | Futuro | Retomada de jobs falhados (retry por etapa) |
 | Orchestration V4 | Futuro | Notificacoes de conclusao |
 
+O detalhamento da prioridade de produto esta em `docs/roadmap_produto_final.md`.
+
 ---
 
 ## Orchestration V1 - analysis_jobs a partir de startup_id
@@ -81,8 +83,14 @@ Entregaveis:
 - persistir `url_ingestion_jobs` com `source_type` - entregue;
 - avançar scraping -> ingestion -> embeddings por chamada explicita - entregue;
 - worker/dispatcher para reenfileirar advance ate estado terminal - entregue;
-- seguir para startups/recommendations/briefing;
-- criar ou associar a `Startup` correspondente.
+- criar ou associar a `Startup` correspondente - pendente;
+- disparar extract e classify - pendente;
+- disparar recommendations e briefing - pendente;
+- expor resultado agregado e historico adequado ao frontend - pendente.
+
+**Criterio de conclusao:** uma URL submetida deve chegar a um briefing sem
+intervencao manual, preservando IDs, estados e erros de cada etapa para consulta
+e retomada.
 
 Documentos da entrega parcial: `docs/orchestration/orchestration_v2_url_ingestion_jobs.md`
 e `docs/orchestration/orchestration_v2_worker_automatico.md`.

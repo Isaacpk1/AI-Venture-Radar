@@ -63,7 +63,9 @@ class ExecuteScrapingJob:
             pipeline = self.pipeline_factory(unit_of_work.attempt_repository)
 
             try:
-                result = await pipeline.execute(job.id, job.url)
+                result = await pipeline.execute(
+                    job.id, job.url, source_type=job.source_type
+                )
 
                 # A validacao garante qualidade. Esta consulta separada garante
                 # que o conteudo aprovado tambem seja novo para o banco.

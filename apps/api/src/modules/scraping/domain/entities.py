@@ -47,6 +47,12 @@ class ScrapingJob:
     # Em caso de falha, guardaremos uma mensagem controlada neste campo.
     error_message: str | None = None
 
+    # Preserva o tipo da fonte (ex: "nvidia_knowledge") ate a pipeline de
+    # validacao, mesmo padrao de ``ingestion_jobs.source_type``. Fontes
+    # curadas (fora de "startup_evidence") pulam a avaliacao "evidencia de
+    # IA de uma startup" — ver ``QualityScoringService``/``ScrapingPipeline``.
+    source_type: str = "startup_evidence"
+
     # Datas importantes para auditoria e medição do tempo de execução.
     created_at: datetime = field(default_factory=utc_now)
     started_at: datetime | None = None

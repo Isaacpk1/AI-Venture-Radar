@@ -38,6 +38,12 @@ class ScrapingJobModel(Base):
 
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    source_type: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        server_default="startup_evidence",
+    )
+
     # timezone=True preserva timestamps com fuso horário no PostgreSQL.
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

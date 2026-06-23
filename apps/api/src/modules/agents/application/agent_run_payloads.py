@@ -7,6 +7,8 @@ ponto explicito de traducao entre esses dois formatos.
 from uuid import UUID
 
 from apps.api.src.modules.agents.application.dto import (
+    BriefingAgentInput,
+    BriefingAgentResult,
     EvidenceValidationInput,
     EvidenceValidationResult,
     ExtractionInput,
@@ -14,6 +16,9 @@ from apps.api.src.modules.agents.application.dto import (
     NvidiaRagCitation,
     NvidiaRagInput,
     NvidiaRagResult,
+    RecommendationAgentInput,
+    RecommendationAgentResult,
+    RecommendationCandidate,
     SearchPlanInput,
     SearchPlanResult,
     SearchQuerySuggestion,
@@ -259,6 +264,85 @@ def nvidia_rag_result_from_payload(payload: dict[str, object]) -> NvidiaRagResul
             if isinstance(item, dict)
         ],
     )
+
+
+def recommendation_agent_input_from_payload(
+    payload: dict[str, object],
+) -> RecommendationAgentInput:
+    """Reconstrói ``RecommendationAgentInput`` a partir do JSON persistido."""
+
+    return RecommendationAgentInput(
+        startup_id=UUID(str(payload["startup_id"])),
+    )
+
+
+def recommendation_agent_result_to_payload(
+    result: RecommendationAgentResult,
+) -> dict[str, object]:
+    """Serializa resultado do Recommendation Agent para JSON."""
+
+    return {
+        "recommendations": [
+            {
+                "technology_slug": candidate.technology_slug,
+                "technology_name": candidate.technology_name,
+                "category": candidate.category,
+                "score": candidate.score,
+                "justification": candidate.justification,
+                "matched_keywords": list(candidate.matched_keywords),
+            }
+            for candidate in result.recommendations
+        ],
+    }
+
+
+def recommendation_agent_result_from_payload(
+    payload: dict[str, object],
+) -> RecommendationAgentResult:
+    """Reconstrói resultado do Recommendation Agent quando necessario em testes."""
+
+    return RecommendationAgentResult(
+        recommendations=[
+            RecommendationCandidate(
+                technology_slug=str(item["technology_slug"]),
+                technology_name=str(item["technology_name"]),
+                category=str(item["category"]),
+                score=float(item["score"]),
+                justification=str(item["justification"]),
+                matched_keywords=[
+                    str(keyword) for keyword in item.get("matched_keywords", [])
+                ],
+            )
+            for item in payload.get("recommendations", [])
+            if isinstance(item, dict)
+        ],
+    )
+
+
+def briefing_agent_input_from_payload(payload: dict[str, object]) -> BriefingAgentInput:
+    """Reconstrói ``BriefingAgentInput`` a partir do JSON persistido."""
+
+    return BriefingAgentInput(
+        startup_id=UUID(str(payload["startup_id"])),
+    )
+
+
+def briefing_agent_result_to_payload(
+    result: BriefingAgentResult,
+) -> dict[str, object]:
+    """Serializa resultado do Briefing Agent para JSON."""
+
+    return {
+        "content": result.content,
+    }
+
+
+def briefing_agent_result_from_payload(
+    payload: dict[str, object],
+) -> BriefingAgentResult:
+    """Reconstrói resultado do Briefing Agent quando necessario em testes."""
+
+    return BriefingAgentResult(content=str(payload["content"]))
 
 
 def evidence_validation_result_from_payload(

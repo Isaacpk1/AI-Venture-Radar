@@ -23,8 +23,8 @@ docs/validacao_arquitetural_modulos_workers.md
 | Agents V8 | Implementado | `docs/agents/agents_v8_extraction_agent.md` |
 | Agents V9 | Implementado | `docs/agents/agents_v9_startup_classifier.md` |
 | Agents V10 | Implementado | `docs/agents/agents_v10_nvidia_rag_agent.md` |
-| Agents V11 | Futuro | Recommendation Agent |
-| Agents V12 | Futuro | Briefing Agent |
+| Agents V11 | Implementado | `docs/agents/agents_v11_recommendation_agent.md` |
+| Agents V12 | Implementado | `docs/agents/agents_v12_briefing_agent.md` |
 
 ## Agentes Planejados
 
@@ -172,29 +172,69 @@ com `source_type="nvidia_knowledge"`).
 
 Documento da entrega: `docs/agents/agents_v10_nvidia_rag_agent.md`.
 
-### Recommendation Agent (Agents V11 = Recommendations V3)
+### Recommendation Agent (Agents V11)
 
-Recomenda tecnologias NVIDIA para uma startup com justificativa e
-evidencias. Mesma entrega que `recommendations` V3 ("Agent
-Recommendation") — ver `docs/recommendations/roadmap_recommendations.md`.
+Status:
 
-Decisao de design: orquestrar `RecommendationGenerator`
-(`recommendations/application/public/`, ja existe desde Orchestration V1)
-como tool, acionando LLM so quando o score determinístico cair numa banda
-ambigua ou para enriquecer a justificativa de negocio — mesmo padrao de
-escalonamento que `scraping` ja usa para chamar `agents` (`AGENT_REVIEW`).
-Nao reescreve `match_technologies()`; usa o resultado dele como insumo.
+```txt
+implementado
+```
 
-### Briefing Agent (Agents V12 = Briefing V2)
+Recomenda tecnologias NVIDIA para uma startup com justificativa revisada.
+Nao e' a mesma entrega que `recommendations` V3 (ver
+`docs/recommendations/roadmap_recommendations.md` — V3 continua futuro,
+sem RAG/`ai_maturity_level`/prioridade no scoring); este agente so
+orquestra o que `recommendations` V1 ja entrega.
 
-Gera uma analise final clara para negocio. Mesma entrega que `briefing` V2
-("Agente de Briefing") — ver `docs/briefing/roadmap_briefing.md`.
+Entregue:
 
-Decisao de design: orquestrar `BriefingGenerator`
-(`briefing/application/public/`, ja existe desde Orchestration V1) como
-tool, usando LLM so para reescrever a prosa executiva (linguagem de
-negocio), preservando as citacoes/rastreabilidade que o template
-determinístico ja garante.
+- `RecommendationAgentGraph` (4 nodes, copia estrutural de `NvidiaRagGraph`
+  na entrada/saida do grafo, mas com um node extra de revisao);
+- chama `RecommendationGenerator` (`recommendations/application/public/`,
+  ja existe desde Orchestration V1) como tool via
+  `RecommendationGeneratorAdapter`; nao reescreve `match_technologies()`;
+- LLM (`LangChainGeminiRecommendationReviewer`) so julga candidatos com
+  `score < 0.5` (banda ambigua) e reescreve a justificativa de todos os
+  mantidos em linguagem de negocio — mesmo padrao de escalonamento que
+  `scraping` ja usa para chamar `agents` (`AGENT_REVIEW`);
+- guarda em codigo: candidato confiante (`score >= 0.5`) nunca e'
+  descartado, mesmo se o LLM tentar;
+- import circular `agents -> recommendations -> startups -> agents`
+  descoberto e corrigido com import lazy.
+
+Documento da entrega: `docs/agents/agents_v11_recommendation_agent.md`.
+
+### Briefing Agent (Agents V12)
+
+Status:
+
+```txt
+implementado
+```
+
+Gera uma analise final clara para negocio. Nao e' a mesma entrega que
+`briefing` V2 (ver `docs/briefing/roadmap_briefing.md` — V2 continua
+futuro nesse sentido amplo); este agente so orquestra o que `briefing` V1
+ja entrega.
+
+Entregue:
+
+- `BriefingAgentGraph` (4 nodes, copia estrutural de
+  `RecommendationAgentGraph`, mas sem decisao de manter/descartar — so
+  reescrita de prosa);
+- chama `BriefingGenerator` (`briefing/application/public/`, ja existe
+  desde Orchestration V1) como tool via `BriefingGeneratorAdapter`; nao
+  reescreve `build_briefing_markdown()`;
+- LLM (`LangChainGeminiBriefingProseRewriter`) sempre reescreve a prosa
+  em linguagem executiva — diferente do Recommendation Agent, nao ha
+  condicao de "pular" (reescrever a prosa e' o proposito do agente);
+- fallback seguro em codigo: se a reescrita perder alguma URL de
+  citacao do Markdown original, devolve o Markdown deterministico
+  inalterado;
+- import lazy de `BriefingFactory` dentro da factory (mesmo ciclo
+  `agents -> briefing -> startups -> agents` do Recommendation Agent).
+
+Documento da entrega: `docs/agents/agents_v12_briefing_agent.md`.
 
 ## Regra Principal
 
@@ -208,11 +248,11 @@ agent -> contratos publicos -> services/use cases/tools -> resultado estruturado
 
 ## Estado atual e proximo passo (atualizado)
 
-Com `Startup Classifier Agent (V9)`, `Extraction Agent (V8)` e agora
-`NVIDIA RAG Agent (V10)` implementados, o Entregavel 2 do case ("sistema
-multiagente") avancou para 5/8 agentes reais — ainda faltam 3 dos 8
-agentes do brief como agentes LangGraph (ver diagnostico, secao 8). Ordem
-combinada com o usuario para fechar essa lacuna:
+Com `Startup Classifier Agent (V9)`, `Extraction Agent (V8)`,
+`NVIDIA RAG Agent (V10)`, `Recommendation Agent (V11)` e agora
+`Briefing Agent (V12)` implementados, o Entregavel 2 do case ("sistema
+multiagente") esta **completo: 8/8 agentes do brief implementados como
+agentes LangGraph de fato** (ver diagnostico, secao 8). Ordem seguida:
 
 ```txt
 1. Startup Classifier Agent (V9) - ENTREGUE
@@ -221,8 +261,18 @@ combinada com o usuario para fechar essa lacuna:
    tool; util de verdade so depois que NVIDIA Knowledge V2 rodar contra
    fontes reais, ver item 4)
 4. NVIDIA Knowledge V2 (ingestao real de docs NVIDIA via
-   scraping/ingestion/embeddings) - pendente, nao bloqueia mais o agente
-   em si, so a qualidade das respostas
-5. Recommendation Agent (V11) e Briefing Agent (V12) - tool-calling sobre
-   os contratos publicos que ja existem, incluindo NvidiaRagService (V10)
+   scraping/ingestion/embeddings) - em andamento (2/8 fontes P0 validadas
+   ponta a ponta), nao bloqueia mais nenhum agente em si, so a qualidade
+   das respostas
+5. Recommendation Agent (V11) - ENTREGUE (chama
+   recommendations/application/public/ como tool + LLM proprio para
+   ambiguidade e linguagem de negocio)
+6. Briefing Agent (V12) - ENTREGUE (chama briefing/application/public/
+   como tool + LLM proprio sempre ativo para reescrever a prosa
+   executiva, com fallback seguro contra perda de citacoes)
 ```
+
+Trabalho restante fora do Entregavel 2: terminar NVIDIA Knowledge V2
+contra o resto do registry, dar consumidores sincronos reais a V10/V11/V12
+(hoje so acionaveis pela fila generica `agent_runs`), e o Entregavel 5
+(Frontend) e 6 (Diferencial), que continuam fora do escopo de `agents`.

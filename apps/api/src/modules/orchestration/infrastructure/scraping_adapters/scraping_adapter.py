@@ -15,8 +15,8 @@ class ScrapingModulePort(ScrapingPort):
     def __init__(self, submitter: ScrapingJobSubmitter) -> None:
         self._submitter = submitter
 
-    async def submit(self, url: str) -> UUID:
-        return await self._submitter.submit(url)
+    async def submit(self, url: str, *, source_type: str = "startup_evidence") -> UUID:
+        return await self._submitter.submit(url, source_type=source_type)
 
     async def get_status(self, job_id: UUID) -> StepStatus:
         status = await self._submitter.get_status(job_id)

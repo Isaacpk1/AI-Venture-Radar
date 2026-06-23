@@ -11,9 +11,12 @@ NVIDIA para gerar recomendacoes explicaveis.
 |---|---|---|
 | Recommendations V1 | Implementado | Regras deterministicas iniciais |
 | Recommendations V2 | Futuro | Recomendacao com RAG |
-| Recommendations V3 | Futuro | Agent Recommendation (= Agents V11) |
+| Recommendations V3 | Futuro (agente entregue em Agents V11) | Agent Recommendation |
 | Recommendations V4 | Futuro | Ranking, confianca e acao sugerida |
 | Recommendations V5 | Futuro | Feedback humano |
+
+As prioridades transversais de produto estao consolidadas em
+`docs/roadmap_produto_final.md`.
 
 ---
 
@@ -67,15 +70,27 @@ consultar evidencias da startup
 consultar conhecimento NVIDIA via RAG
 montar contexto
 gerar recomendacao com citacoes
+usar `Startup.ai_maturity_level` como sinal de scoring
 ```
 
 ---
 
 ## Recommendations V3 - Agent Recommendation
 
-Mesma entrega que Agents V11.
+Status:
 
-Decisao de design:
+```txt
+agente entregue (Agents V11, ver docs/agents/agents_v11_recommendation_agent.md)
+modulo recommendations em si continua V1 — nao ganhou RAG, ai_maturity_level
+  no scoring, nem prioridade/complexidade/proxima acao (isso e' Recommendations
+  V2/V4, ainda futuro)
+```
+
+O Recommendation Agent (V11) so orquestra o que `recommendations` V1 ja
+entrega — nao e' a "mesma entrega" que V2/V4, que mudariam o motor de
+regras em si.
+
+Decisao de design (ja aplicada):
 
 ```txt
 LangGraph orquestra RecommendationGenerator como tool
@@ -97,6 +112,9 @@ proxima acao sugerida
 justificativa de negocio
 riscos e tradeoffs
 ```
+
+Integracao pendente: o Recommendation Agent V11 existe, mas o fluxo
+`POST /analysis/jobs` ainda chama apenas o gerador deterministico V1.
 
 ---
 

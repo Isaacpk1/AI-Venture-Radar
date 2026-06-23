@@ -3,17 +3,25 @@
 from uuid import UUID
 
 from apps.api.src.modules.agents.application.agent_run_payloads import (
+    briefing_agent_result_to_payload,
     evidence_validation_result_to_payload,
     extraction_result_to_payload,
     nvidia_rag_result_to_payload,
+    recommendation_agent_result_to_payload,
     search_plan_result_to_payload,
     startup_classification_result_to_payload,
+)
+from apps.api.src.modules.agents.application.public.briefing_agent import (
+    BriefingAgentService,
 )
 from apps.api.src.modules.agents.application.public.extractor import (
     ExtractionService,
 )
 from apps.api.src.modules.agents.application.public.nvidia_rag import (
     NvidiaRagService,
+)
+from apps.api.src.modules.agents.application.public.recommendation_agent import (
+    RecommendationAgentService,
 )
 from apps.api.src.modules.agents.application.public.search_planner import (
     SearchPlanningService,
@@ -53,6 +61,8 @@ class ResumeAgentJob:
         startup_classification_service: StartupClassifierService | None = None,
         extraction_service: ExtractionService | None = None,
         nvidia_rag_service: NvidiaRagService | None = None,
+        recommendation_agent_service: RecommendationAgentService | None = None,
+        briefing_agent_service: BriefingAgentService | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.evidence_validation_service = evidence_validation_service
@@ -60,6 +70,8 @@ class ResumeAgentJob:
         self.startup_classification_service = startup_classification_service
         self.extraction_service = extraction_service
         self.nvidia_rag_service = nvidia_rag_service
+        self.recommendation_agent_service = recommendation_agent_service
+        self.briefing_agent_service = briefing_agent_service
 
     async def execute(self, *, run_id: UUID, resume_value: object) -> None:
         async with self.uow_factory() as uow:
@@ -152,6 +164,26 @@ class ResumeAgentJob:
                 )
             result = await self.nvidia_rag_service.resume(thread_id, resume_value)
             return nvidia_rag_result_to_payload(result)
+
+        if agent_type is AgentType.RECOMMENDATION:
+            if self.recommendation_agent_service is None:
+                raise AgentServiceUnavailableError(
+                    "Recommendation agent service nao configurado."
+                )
+            result = await self.recommendation_agent_service.resume(
+                thread_id, resume_value
+            )
+            return recommendation_agent_result_to_payload(result)
+
+        if agent_type is AgentType.BRIEFING:
+            if self.briefing_agent_service is None:
+                raise AgentServiceUnavailableError(
+                    "Briefing agent service nao configurado."
+                )
+            result = await self.briefing_agent_service.resume(
+                thread_id, resume_value
+            )
+            return briefing_agent_result_to_payload(result)
 
         raise UnsupportedAgentJobError(
             f"Agent type '{agent_type}' ainda nao tem grafo configurado."

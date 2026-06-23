@@ -23,7 +23,7 @@ busca, extracao estruturada e classificacao de maturidade em IA.
 | Modulo | Versao atual | Observacao |
 |---|---|---|
 | scraping | V8 | pipeline com validacao deterministica, Gemini e agent review |
-| agents | V10 | Evidence, Search Planner, Extraction, Startup Classifier e NVIDIA RAG |
+| agents | V12 | Evidence, Search Planner, Extraction, Startup Classifier, NVIDIA RAG, Recommendation e Briefing (8/8 agentes do brief) |
 | ingestion | V1 | documents/chunks + worker |
 | embeddings | V5 | Gemini embeddings, Qdrant, worker, metricas |
 | startups | V3 | dados estruturados + classificacao AI-native/AI-enabled/Non-AI |
@@ -83,6 +83,7 @@ f77998c46d08  campos estruturados em startups
 1d3e7f9a2b4c  source_type em documents para separar evidencias de startups e conhecimento NVIDIA
 2a7c9b8d1e5f  source_type em ingestion_jobs para preservar tipo ate o worker
 5b6c7d8e9f01  url_ingestion_jobs para Orchestration V2
+7d4f2a9c6e83  source_type em scraping_jobs para preservar origem desde a coleta
 ```
 
 Tabelas principais:
@@ -106,8 +107,7 @@ url_ingestion_jobs
 Validacao registrada em `CLAUDE.md`:
 
 ```txt
-402 passed + 13 skipped sem Postgres/Redis/Qdrant locais ativos
-415 esperado com infra ativa (0 skipped)
+443 passed
 ```
 
 A suite total agora marca dependencias de integracao como `skip` explicito
@@ -116,16 +116,14 @@ esses testes rodam normalmente.
 
 ---
 
-## O Que Falta
+## O Que Falta Para o Produto Final
 
 Para o MVP backend macro: nada estrutural grande.
 
 Para aderencia total ao case original:
 
 ```txt
-NVIDIA Knowledge V2 - rodar a ingestao real contra as fontes do registry (agente NVIDIA RAG ja existe, mas so e util depois disso)
-Recommendation Agent - Agents V11 / Recommendations V3
-Briefing Agent - Agents V12 / Briefing V2
+NVIDIA Knowledge V2 - terminar de rodar o restante do registry (2/8 P0 ja validados ponta a ponta; ver docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md)
 Frontend
 Diferencial do projeto escolhido e apresentado
 Auth, observabilidade e hardening de integracao
@@ -137,18 +135,33 @@ Orchestration V2 - continuidade ate startup/recommendations/briefing a partir de
 ## Proximo Passo Recomendado
 
 ```txt
-NVIDIA Knowledge V2 - ingestao das fontes oficiais registradas
+NVIDIA Knowledge V2 - terminar o lote P0 e rodar P1/P2
 ```
 
-Motivo: a fundacao de escopo ja existe (`documents.source_type`,
-payload `source_type` no Qdrant e filtro opcional em `/rag/search` e
-`/rag/answer`), o registry de fontes ja existe em
-`/nvidia-knowledge/sources`, a rota `POST /nvidia-knowledge/ingestion/jobs`
-ja cria `url_ingestion_jobs` com `source_type="nvidia_knowledge"`, o
-avanco desses jobs ate `completed` agora e automatico
-(`workers/orchestration_worker/`, fila `url_ingestion`), e o **NVIDIA RAG
-Agent (Agents V10)** ja existe para consumir essa base assim que ela tiver
-conteudo real. Falta rodar a ingestao contra as fontes reais e validar o
-resultado no RAG filtrado; depois, Recommendation Agent (V11) e Briefing
-Agent (V12), e completar o restante da Orchestration V2 ate
-startup/recommendations/briefing a partir de uma URL bruta.
+Motivo: a primeira rodada real ja confirmou o ciclo completo funcionando
+(`nemo-framework-docs` e `triton-inference-server-docs` completaram
+scraping -> ingestion -> embeddings, conteudo recuperavel via
+`/rag/search` filtrado por `source_type=nvidia_knowledge`). No caminho,
+foram corrigidos 4 bugs reais (3 em `scraping`: falso positivo de
+captcha, Playwright quebrando dentro do worker, validacao evidencial
+aplicada errado a fontes curadas; 1 em `embeddings`: modelo Gemini
+descontinuado) — ver
+`docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md`.
+Falta re-testar as outras 6 fontes do lote P0 com workers limpos (o
+worker precisa ser reiniciado matando processos `python.exe` orfaos pelo
+lado Windows, nao so o wrapper WSL) e rodar P1/P2. Um problema de
+resolucao de hostname intermitente do lado Windows (nao do codigo) ficou
+pendente para o usuario resolver no ambiente. Os 8/8 agentes do brief
+original ja foram entregues: Recommendation Agent (V11,
+`docs/agents/agents_v11_recommendation_agent.md`) e Briefing Agent (V12,
+`docs/agents/agents_v12_briefing_agent.md`) fecham o Entregavel 2 por
+completo. Falta completar o restante da Orchestration V2 ate
+startup/recommendations/briefing a partir de uma
+URL bruta.
+
+## Prioridade Atual
+
+O plano detalhado esta em `docs/roadmap_produto_final.md`. A prioridade imediata
+e fechar Orchestration V2 da URL ate briefing e, em paralelo, iniciar o
+frontend. Em seguida entram qualidade das recomendacoes, revisao/exportacao e
+hardening de producao.

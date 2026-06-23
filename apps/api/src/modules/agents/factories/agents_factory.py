@@ -8,11 +8,17 @@ publico ``EvidenceValidationService`` atraves desta factory.
 
 from apps.api.src.config.settings import get_settings
 from apps.api.src.modules.agents.application.ports import AgentTaskDispatcher
+from apps.api.src.modules.agents.application.public.briefing_agent import (
+    BriefingAgentService,
+)
 from apps.api.src.modules.agents.application.public.extractor import (
     ExtractionService,
 )
 from apps.api.src.modules.agents.application.public.nvidia_rag import (
     NvidiaRagService,
+)
+from apps.api.src.modules.agents.application.public.recommendation_agent import (
+    RecommendationAgentService,
 )
 from apps.api.src.modules.agents.application.public.semantic_investigator import (
     EvidenceValidationService,
@@ -35,16 +41,23 @@ from apps.api.src.modules.agents.application.use_cases.get_agent_run import (
 from apps.api.src.modules.agents.application.use_cases.resume_agent_job import (
     ResumeAgentJob,
 )
+from apps.api.src.modules.agents.graphs.briefing.graph import BriefingAgentGraph
 from apps.api.src.modules.agents.graphs.evidence_validation.graph import (
     EvidenceValidationGraph,
 )
 from apps.api.src.modules.agents.graphs.extraction.graph import ExtractionGraph
 from apps.api.src.modules.agents.graphs.nvidia_rag.graph import NvidiaRagGraph
+from apps.api.src.modules.agents.graphs.recommendation.graph import (
+    RecommendationAgentGraph,
+)
 from apps.api.src.modules.agents.graphs.search_planning.graph import (
     SearchPlanningGraph,
 )
 from apps.api.src.modules.agents.graphs.startup_classification.graph import (
     StartupClassificationGraph,
+)
+from apps.api.src.modules.agents.infrastructure.llm.langchain_gemini_briefing_prose_rewriter import (
+    LangChainGeminiBriefingProseRewriter,
 )
 from apps.api.src.modules.agents.infrastructure.llm.langchain_gemini_evidence_judge import (
     LangChainGeminiEvidenceJudge,
@@ -54,6 +67,9 @@ from apps.api.src.modules.agents.infrastructure.llm.langchain_gemini_extractor i
 )
 from apps.api.src.modules.agents.infrastructure.llm.langchain_gemini_search_planner import (
     LangChainGeminiSearchPlanner,
+)
+from apps.api.src.modules.agents.infrastructure.llm.langchain_gemini_recommendation_reviewer import (
+    LangChainGeminiRecommendationReviewer,
 )
 from apps.api.src.modules.agents.infrastructure.llm.langchain_gemini_startup_classifier import (
     LangChainGeminiStartupClassifier,
@@ -68,8 +84,14 @@ from apps.api.src.modules.agents.infrastructure.queue.dramatiq_agent_dispatcher 
     DramatiqAgentJobPublisher,
     DramatiqAgentTaskDispatcher,
 )
+from apps.api.src.modules.agents.infrastructure.briefing_adapters.briefing_generator_adapter import (
+    BriefingGeneratorAdapter,
+)
 from apps.api.src.modules.agents.infrastructure.rag_adapters.rag_question_answerer_adapter import (
     RagQuestionAnswererAdapter,
+)
+from apps.api.src.modules.agents.infrastructure.recommendations_adapters.recommendation_generator_adapter import (
+    RecommendationGeneratorAdapter,
 )
 from apps.api.src.modules.rag.factories.rag_factory import RagFactory
 from apps.api.src.shared.queue.dramatiq_broker import broker
@@ -217,6 +239,88 @@ class AgentsFactory:
         return NvidiaRagGraph(rag_tool=rag_tool, checkpointer=checkpointer)
 
     @staticmethod
+    def create_recommendation_agent_service(
+        checkpointer: PostgresCheckpointer | None = None,
+    ) -> RecommendationAgentService | None:
+        """Cria o servico publico do Recommendation Agent (V11).
+
+        Mesma regra dos demais agentes: sem chave Gemini configurada,
+        devolve ``None`` para evitar custo acidental. A "tool" determinística
+        e' o contrato publico de ``recommendations``
+        (``RecommendationsFactory``); o LLM so julga candidatos ambiguos e
+        reescreve a justificativa em linguagem de negocio — nao recalcula
+        score nem reimplementa ``match_technologies()``.
+        """
+
+        # Import local: recommendations -> startups -> agents (adapters de
+        # classificacao/extracao) fecharia um ciclo se importado no topo do
+        # arquivo. Mesmo padrao de import lazy usado em
+        # ``nvidia_knowledge_factory.py`` para chamar ``orchestration``.
+        from apps.api.src.modules.recommendations.factories.recommendations_factory import (
+            RecommendationsFactory,
+        )
+
+        settings = get_settings()
+
+        if not settings.gemini_api_key:
+            return None
+
+        recommendation_tool = RecommendationGeneratorAdapter(
+            RecommendationsFactory.create_recommendation_generator()
+        )
+        reviewer = LangChainGeminiRecommendationReviewer(
+            api_key=settings.gemini_api_key,
+            model=settings.gemini_model,
+        )
+
+        return RecommendationAgentGraph(
+            recommendation_tool=recommendation_tool,
+            reviewer=reviewer,
+            checkpointer=checkpointer,
+        )
+
+    @staticmethod
+    def create_briefing_agent_service(
+        checkpointer: PostgresCheckpointer | None = None,
+    ) -> BriefingAgentService | None:
+        """Cria o servico publico do Briefing Agent (V12).
+
+        Mesma regra dos demais agentes: sem chave Gemini configurada,
+        devolve ``None`` para evitar custo acidental. A "tool" determinística
+        e' o contrato publico de ``briefing`` (``BriefingFactory``); o LLM
+        so reescreve a prosa em linguagem executiva — nao decide riscos,
+        proximas acoes nem monta secoes (isso continua em
+        ``build_briefing_markdown()``).
+        """
+
+        # Import local: briefing -> startups -> agents (adapters de
+        # classificacao/extracao) fecharia um ciclo se importado no topo do
+        # arquivo. Mesmo padrao de import lazy usado em
+        # ``create_recommendation_agent_service()``.
+        from apps.api.src.modules.briefing.factories.briefing_factory import (
+            BriefingFactory,
+        )
+
+        settings = get_settings()
+
+        if not settings.gemini_api_key:
+            return None
+
+        briefing_tool = BriefingGeneratorAdapter(
+            BriefingFactory.create_briefing_generator()
+        )
+        prose_rewriter = LangChainGeminiBriefingProseRewriter(
+            api_key=settings.gemini_api_key,
+            model=settings.gemini_model,
+        )
+
+        return BriefingAgentGraph(
+            briefing_tool=briefing_tool,
+            prose_rewriter=prose_rewriter,
+            checkpointer=checkpointer,
+        )
+
+    @staticmethod
     def create_agent_task_dispatcher() -> AgentTaskDispatcher:
         """Cria dispatcher para publicar execucoes na fila ``agents``."""
 
@@ -247,6 +351,12 @@ class AgentsFactory:
             ),
             extraction_service=AgentsFactory.create_extraction_service(checkpointer),
             nvidia_rag_service=AgentsFactory.create_nvidia_rag_service(checkpointer),
+            recommendation_agent_service=AgentsFactory.create_recommendation_agent_service(
+                checkpointer
+            ),
+            briefing_agent_service=AgentsFactory.create_briefing_agent_service(
+                checkpointer
+            ),
         )
 
     @staticmethod
@@ -267,6 +377,12 @@ class AgentsFactory:
             ),
             extraction_service=AgentsFactory.create_extraction_service(checkpointer),
             nvidia_rag_service=AgentsFactory.create_nvidia_rag_service(checkpointer),
+            recommendation_agent_service=AgentsFactory.create_recommendation_agent_service(
+                checkpointer
+            ),
+            briefing_agent_service=AgentsFactory.create_briefing_agent_service(
+                checkpointer
+            ),
         )
 
     @staticmethod

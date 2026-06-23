@@ -11,7 +11,7 @@ modulos em V1.
 | Area | Estado |
 |---|---|
 | Scraping | Entregue |
-| Agents base | Entregue ate V9 |
+| Agents | Entregue ate V12 (8/8 do brief) |
 | Ingestion | Entregue |
 | Embeddings/Qdrant | Entregue |
 | Startups estruturado | Entregue em slice inicial |
@@ -19,11 +19,27 @@ modulos em V1.
 | Catalogo NVIDIA | Entregue em V1 estatico; V2 source_type + source registry + url_ingestion_jobs entregues |
 | Recommendations | Entregue em V1 deterministico |
 | Briefing | Entregue em V1 deterministico |
-| Orchestration | Entregue em V1 para startup existente |
+| Orchestration | V1 entregue; V2 automatiza URL ate embeddings |
 | Frontend | Nao iniciado |
 | Auth/observabilidade/producao | Pendente |
 
 ---
+
+## Prioridade de Produto
+
+O backlog consolidado, com criterios de aceite, esta em
+`docs/roadmap_produto_final.md`. A ordem de execucao e:
+
+```txt
+1. Orchestration V2 completa: URL -> startup -> briefing
+2. Frontend operacional
+3. NVIDIA Knowledge V2 e Recommendations V2/V4
+4. Revisao humana, exportacao e ranking
+5. Auth, observabilidade, CI/CD e deploy
+```
+
+O worker automatico de `url_ingestion_jobs` ja esta entregue. O objetivo da
+V2 agora e concluir o fluxo apos embeddings, sem etapas manuais.
 
 ## Proximas Entregas
 
@@ -41,22 +57,14 @@ Qdrant e filtro opcional em RAG. Registry de fontes entregue em
 `POST /nvidia-knowledge/ingestion/jobs`. O default continua
 `startup_evidence`; docs NVIDIA devem entrar como `nvidia_knowledge`.
 
-Proximo passo desta entrega: criar worker/dispatcher para reenfileirar
-`url_ingestion_jobs` e chamar advance ate embedding concluido.
+O worker/dispatcher para reenfileirar `url_ingestion_jobs` ja foi entregue.
+Faltam validar as seis fontes P0 restantes e rodar os lotes P1/P2.
 
-### Agents V10 - NVIDIA RAG Agent
+### Agents V10-V12 - Entregues
 
-Grafo LangGraph que consulta a base NVIDIA com citacoes.
-
-### Agents V11 / Recommendations V3
-
-Recommendation Agent usando `RecommendationGenerator` como tool e RAG NVIDIA
-como contexto adicional.
-
-### Agents V12 / Briefing V2
-
-Briefing Agent usando `BriefingGenerator` como tool, melhorando a prosa sem
-perder rastreabilidade.
+NVIDIA RAG, Recommendation e Briefing Agents estao implementados. A lacuna
+atual e integra-los ao fluxo principal de `analysis_jobs` e da Orchestration
+V2, em vez de apenas mantelos como grafos disponiveis.
 
 ### Orchestration V2
 

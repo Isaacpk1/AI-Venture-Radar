@@ -273,6 +273,34 @@ async def test_pipeline_calls_semantic_validator_only_for_ambiguous_content() ->
 
 
 @pytest.mark.anyio
+async def test_pipeline_accepts_ambiguous_content_directly_for_curated_source() -> None:
+    """source_type != startup_evidence pula a avaliacao de evidencia de IA.
+
+    O mesmo conteudo que dispara LLM_REVIEW para startup_evidence (technical
+    0.90 + text 0.80 + evidence 0.20 = 0.59, banda ambigua) deve ser aceito
+    direto para uma fonte curada (nvidia_knowledge): sem o peso de evidencia,
+    o score fica em 0.85 (>= 0.75), e a base curada nao precisa provar
+    "evidencia de IA de uma startup".
+    """
+
+    attempts = InMemoryScrapingAttemptRepository()
+    semantic_validator = FakeSemanticValidator()
+    scraper = FakeScraper(
+        ScrapingMethod.BEAUTIFULSOUP,
+        text="conteudo ambiguo",
+    )
+
+    result = await make_pipeline(
+        [scraper],
+        attempts,
+        semantic_validator=semantic_validator,
+    ).execute(uuid4(), "https://docs.nvidia.com/nim/", source_type="nvidia_knowledge")
+
+    assert semantic_validator.call_count == 0
+    assert result.quality_score == 0.85
+
+
+@pytest.mark.anyio
 async def test_pipeline_does_not_call_semantic_validator_for_clear_content() -> None:
     attempts = InMemoryScrapingAttemptRepository()
     semantic_validator = FakeSemanticValidator()

@@ -38,6 +38,14 @@ class AgentRagQueryError(AgentError):
     """O agente nao conseguiu consultar a base de conhecimento NVIDIA via RAG."""
 
 
+class AgentRecommendationError(AgentError):
+    """O agente nao conseguiu gerar ou revisar recomendacoes para a startup."""
+
+
+class AgentBriefingError(AgentError):
+    """O agente nao conseguiu gerar ou reescrever o briefing da startup."""
+
+
 class AgentTaskDispatchError(AgentError):
     """O job de agente nao foi publicado na fila."""
 

@@ -44,6 +44,7 @@ workers/scraper_worker      fila scraping   job_id
 workers/agent_worker        fila agents     run_id
 workers/ingestion_worker    fila ingestion  job_id
 workers/embedding_worker    fila embeddings job_id
+workers/orchestration_worker fila url_ingestion job_id
 ```
 
 Workers nao contem regra de negocio; apenas recebem IDs e chamam factories/use
@@ -104,6 +105,9 @@ URL -> scraping -> ingestion -> embeddings -> startup/extract/classify
 -> recommendations -> briefing
 ```
 
+O estado atual ja automatiza URL ate embeddings. Permanecem pendentes a criacao
+ou associacao de startup e o encadeamento das etapas finais ate o briefing.
+
 ---
 
 ## Proximas Decisoes Arquiteturais
@@ -113,4 +117,5 @@ URL -> scraping -> ingestion -> embeddings -> startup/extract/classify
 2. Como persistir/identificar documentos oficiais NVIDIA em Knowledge V2
 3. Como Agents V10-V12 chamarao modulos existentes como tools
 4. Como expor o fluxo completo para frontend
+5. Como adicionar autenticacao, observabilidade e operacao de producao
 ```

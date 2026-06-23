@@ -9,6 +9,7 @@ Fonte de verdade operacional em 22/06/2026:
 docs/diagnostico_case_original_e_novas_prioridades.md
 docs/estado_atual_do_projeto.md
 CLAUDE.md
+docs/roadmap_produto_final.md
 ```
 
 ---
@@ -22,6 +23,7 @@ CLAUDE.md
 | 3 | `docs/roadmap_proximos_passos.md` | Roadmap macro atualizado |
 | 4 | `docs/validacao_arquitetural_modulos_workers.md` | Validacao de modulos, workers e contratos |
 | 5 | `docs/validacao_mensagens_interacoes_modulos.md` | Como os modulos conversam |
+| 6 | `docs/roadmap_produto_final.md` | Backlog priorizado para fechar o produto |
 
 ---
 
@@ -30,7 +32,7 @@ CLAUDE.md
 | Modulo | Estado | Docs |
 |---|---|---|
 | scraping | Scraping V8 | `docs/scraping/` |
-| agents | Agents V9 | `docs/agents/` |
+| agents | Agents V12 | `docs/agents/` |
 | ingestion | Ingestion V1 + worker | `docs/ingestion/` |
 | embeddings | Embeddings V5 + worker | `docs/embeddings/` |
 | startups | Startups V3 | `docs/startups/` |
@@ -38,7 +40,7 @@ CLAUDE.md
 | nvidia_knowledge | NVIDIA Knowledge V1 expandido + V2 source registry + url_ingestion_jobs | `docs/nvidia_knowledge/` |
 | recommendations | Recommendations V1 | `docs/recommendations/` |
 | briefing | Briefing V1 | `docs/briefing/` |
-| orchestration | Orchestration V1 | `docs/orchestration/` |
+| orchestration | Orchestration V1 + V2 parcial | `docs/orchestration/` |
 
 ---
 
@@ -47,7 +49,7 @@ CLAUDE.md
 | Entregavel | Estado |
 |---|---|
 | Pipeline de scraping | Completo |
-| Sistema multiagente LangGraph | Parcial: 4/8 agentes reais |
+| Sistema multiagente LangGraph | Completo: 8/8 agentes implementados |
 | RAG NVIDIA com busca hibrida + reranking | Completo |
 | Motor de recomendacao | Parcial: V1 deterministico entregue |
 | Interface web | Nao iniciado |
@@ -58,12 +60,11 @@ CLAUDE.md
 ## Proxima Ordem Recomendada
 
 ```txt
-1. Orchestration V2 - worker/dispatcher para avançar URL ingestion jobs
-2. Agents V10 - NVIDIA RAG Agent
-3. Agents V11 / Recommendations V3 - Recommendation Agent
-4. Agents V12 / Briefing V2 - Briefing Agent
-5. Frontend
-6. Hardening: integracao, auth, observabilidade
+1. Fechar Orchestration V2 da URL ate briefing
+2. Construir o frontend sobre esse fluxo
+3. Completar a base NVIDIA real e enriquecer recommendations
+4. Revisao humana e exportacao
+5. Hardening: auth, observabilidade, CI/CD e deploy
 ```
 
 Observacao: o MVP backend macro ja existe. O que falta agora e aderencia total

@@ -113,8 +113,16 @@ Status:
 fundacao source_type entregue
 source registry entregue
 submissao do registry para Orchestration V2 entregue
-worker automatico de advance pendente
+worker automatico de advance entregue (workers/orchestration_worker/)
+primeira validacao real ponta a ponta entregue (2/8 fontes P0; ver
+  docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md)
+restante do lote P0 + P1/P2 pendente
 ```
+
+O worker/dispatcher de `url_ingestion_jobs` ja esta entregue. A proxima acao
+real e validar as seis fontes P0 restantes com workers limpos, executar P1/P2
+e registrar taxa de sucesso, erros por dominio, custo e qualidade de
+recuperacao.
 
 Fundacao entregue:
 
@@ -155,8 +163,8 @@ Entregaveis:
 Proximo passo:
 
 ```txt
-criar worker/dispatcher para avançar `url_ingestion_jobs` automaticamente ate
-embedding concluido
+validar as seis fontes P0 restantes com workers limpos e executar P1/P2;
+registrar taxa de sucesso, erros por dominio, custo e qualidade de recuperacao.
 ```
 
 ---

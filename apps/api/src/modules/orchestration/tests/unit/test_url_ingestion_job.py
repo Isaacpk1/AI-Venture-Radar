@@ -91,11 +91,13 @@ class FakeDispatcher(UrlIngestionTaskDispatcher):
 class FakeScrapingPort(ScrapingPort):
     def __init__(self, status: StepStatus | None = None) -> None:
         self.submitted_urls: list[str] = []
+        self.submitted_source_types: list[str] = []
         self.job_id = uuid4()
         self.status = status
 
-    async def submit(self, url: str) -> UUID:
+    async def submit(self, url: str, *, source_type: str = "startup_evidence") -> UUID:
         self.submitted_urls.append(url)
+        self.submitted_source_types.append(source_type)
         return self.job_id
 
     async def get_status(self, job_id: UUID) -> StepStatus:
@@ -156,6 +158,30 @@ async def test_create_url_ingestion_job_persists_source_type_and_dispatches() ->
     assert view.source_type == "nvidia_knowledge"
     assert dispatcher.dispatched_job_ids == [view.id]
     assert repository.items[view.id].source_type == "nvidia_knowledge"
+
+
+@pytest.mark.anyio
+async def test_advance_uses_job_source_type_when_submitting_scraping() -> None:
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(
+        url="https://docs.nvidia.com/nim/",
+        source_type="nvidia_knowledge",
+    )
+    await repository.save(job)
+    scraping_port = FakeScrapingPort()
+    use_case = AdvanceUrlIngestionJob(
+        uow_factory=lambda: FakeUoW(repository),
+        scraping_port=scraping_port,
+        ingestion_port=FakeIngestionPort(),
+        embeddings_port=FakeEmbeddingsPort(),
+    )
+
+    with pytest.raises(UrlIngestionStillProcessingError):
+        await use_case.execute(job_id=job.id)
+
+    assert scraping_port.submitted_urls == ["https://docs.nvidia.com/nim/"]
+    assert scraping_port.submitted_source_types == ["nvidia_knowledge"]
+    assert repository.items[job.id].status is UrlIngestionJobStatus.SCRAPING
 
 
 @pytest.mark.anyio

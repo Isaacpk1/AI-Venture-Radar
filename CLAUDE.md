@@ -13,13 +13,13 @@ Implemented:
 
 ```txt
 Scraping V8
-Agents V10 (+ Startup Classifier Agent, Extraction Agent V8, NVIDIA RAG Agent V10)
+Agents V12 (+ Startup Classifier Agent, Extraction Agent V8, NVIDIA RAG Agent V10, Recommendation Agent V11, Briefing Agent V12 — all 8 agents from the original brief now implemented)
 Ingestion V1 + ingestion_worker
 Embeddings V5 + embedding_worker
 Startups V2 + V3 (slices iniciais: campos estruturados + classificacao de maturidade em IA)
 RAG V4 (busca hibrida + reranking)
 NVIDIA Knowledge V1
-NVIDIA Knowledge V2 foundation (`source_type` + source registry + url ingestion jobs)
+NVIDIA Knowledge V2 foundation + source registry + first real end-to-end validation (2/8 P0 sources)
 Recommendations V1
 Briefing V1
 Orchestration V1 + V2 partial URL ingestion jobs + orchestration_worker automatico
@@ -43,9 +43,20 @@ Orchestration V2 - URL bruta ate startup/recommendations/briefing (worker automa
 Recent validation:
 
 ```txt
-402 passed, 13 skipped (sem Postgres/Redis/Qdrant locais ativos nesta verificacao)
+443 passed (Postgres/Redis/Qdrant locais ativos)
 Integration tests are skipped explicitly when local Postgres/Redis/Qdrant
 are not reachable; with infra active, they run normally.
+
+NVIDIA Knowledge V2 first real run against live infra: 2/8 P0 sources
+completed end-to-end (scraping -> ingestion -> embeddings), content
+retrievable via /rag/search filtered by source_type=nvidia_knowledge.
+Fixed 4 bugs found in the process (3 in scraping: captcha false positive,
+Playwright stdio/Dramatiq conflict, evidential validation wrongly applied
+to curated sources; 1 in embeddings: deprecated Gemini embedding model).
+See docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md.
+Known unresolved: intermittent hostname resolution failures from the
+Windows-side Python process (not WSL) for some domains — environment
+networking issue, not a code bug.
 ```
 
 Next recommended implementation:
@@ -64,13 +75,22 @@ automaticamente via Dramatiq (fila `url_ingestion`, actor
 `advance_url_ingestion_job`) ate completed|failed, substituindo o advance
 manual. NVIDIA RAG Agent (V10) is done: `NvidiaRagGraph` calls
 `rag/application/public/question_answerer.py` as a tool (no own LLM
-client), filtered to `source_type="nvidia_knowledge"`. It has no
-synchronous consumer yet — reachable only via the generic `agent_runs`
-queue until Recommendation Agent (V11) and Briefing Agent (V12) exist to
-call it as a tool. Next is Recommendation Agent (V11) -> Briefing Agent
-(V12). wiring Startup.ai_maturity_level into recommendations' scoring is
-a smaller separate follow-up, not done yet. Frontend and integration
-hardening remain open and can run in parallel.
+client), filtered to `source_type="nvidia_knowledge"`. Recommendation
+Agent (V11) is done too: `RecommendationAgentGraph` calls
+`recommendations/application/public/recommendation_generator.py` as a
+tool **and** has its own Gemini client (`LangChainGeminiRecommendationReviewer`)
+to judge ambiguous-score candidates and rewrite justifications in business
+language — code-enforced guard keeps confident-score candidates
+regardless of what the LLM says. Briefing Agent (V12) closes out all 8
+brief agents: `BriefingAgentGraph` calls
+`briefing/application/public/briefing_generator.py` as a tool and always
+calls its own Gemini client (`LangChainGeminiBriefingProseRewriter`) to
+rewrite the executive prose — code-enforced fallback returns the
+deterministic Markdown unchanged if the rewrite drops any citation URL.
+None of V10/V11/V12 has a synchronous consumer yet — reachable only via
+the generic `agent_runs` queue. wiring Startup.ai_maturity_level into
+recommendations' scoring is a smaller separate follow-up, not done yet.
+Frontend and integration hardening remain open and can run in parallel.
 ```
 
 Relevant docs:
@@ -299,9 +319,30 @@ This section is the authoritative record of every version of every module. Updat
 
 **Versao atual: V8 — modulo completo**
 
-Tabelas: `scraping_jobs`, `scraping_attempts`, `scraping_results`
+Extensao feita durante a primeira validacao real do NVIDIA Knowledge V2
+(continua V8, nao e' nova versao — 3 correcoes de bugs encontrados rodando
+fontes reais, ver `docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md`):
+- `TechnicalValidator._has_captcha_challenge()` — so bloqueia "captcha"
+  quando o sinal vem com pouco texto extraido (`< 500 chars`), mesmo
+  padrao de `_requires_javascript`; antes bloqueava qualquer pagina que
+  so referenciasse uma lib de captcha no JS (ex: GitHub)
+- `PlaywrightScraper` restaura `sys.__stdout__`/`sys.__stderr__` durante
+  o launch do driver/browser — o Dramatiq substitui esses streams por um
+  pipe entre processos cujo `fileno()` nao e' herdavel no Windows para o
+  subprocesso que o Playwright cria, causando `[Errno 9] Bad file
+  descriptor`
+- `ScrapingJob.source_type` (migration `7d4f2a9c6e83`) trafega desde
+  `UrlIngestionJob`; `QualityScoringService` ignora a dimensao de
+  evidencia para `source_type != "startup_evidence"`
+  (`quality_score = technical*0.5 + text*0.5`), e a pipeline pula
+  LLM_REVIEW/AGENT_REVIEW inteiramente para esses casos — fontes curadas
+  pelo registry (NVIDIA Knowledge) nao precisam "provar evidencia de IA
+  de uma startup"
+- Testes: 134 (+4 desta extensao)
+
+Tabelas: `scraping_jobs` (+ `source_type`), `scraping_attempts`, `scraping_results`
 Worker: `workers/scraper_worker/` — consome fila `scraping`
-Testes: 130 (unit + integration)
+Testes: 134 (unit + integration)
 
 ---
 
@@ -320,10 +361,10 @@ Testes: 130 (unit + integration)
 | V8 | Entregue | Extraction Agent |
 | V9 | Entregue | Startup Classifier Agent |
 | V10 | Entregue | NVIDIA RAG Agent |
-| V11 | Futuro | Recommendation Agent |
-| V12 | Futuro | Briefing Agent |
+| V11 | Entregue | Recommendation Agent |
+| V12 | Entregue | Briefing Agent |
 
-**Versao atual: V10**
+**Versao atual: V12 — todos os 8 agentes do brief original implementados**
 
 O que a V8 entregou (entregue depois da V9, desbloqueado pelo Startups V2):
 - `AgentType.EXTRACTION` + `ExtractedFundingStage` (enum, vocabulario interno, mesmos valores de `startups.FundingStage`)
@@ -358,6 +399,34 @@ O que a V10 entregou:
 - Testes: 9 unit (+7 em `agents`: 2 adapter, 2 grafo, 2 `execute_agent_job`, 1 `resume_agent_job`; +0 em `rag`, os testes existentes de `AnswerQuestion.execute()` continuam cobrindo a logica movida para `answer()`)
 
 Documento da entrega: `docs/agents/agents_v10_nvidia_rag_agent.md`.
+
+O que a V11 entregou:
+- `AgentType.RECOMMENDATION` + `RecommendationAgentInput`/`RecommendationCandidate`/`RecommendationAgentResult` (`application/dto.py`)
+- `RecommendationToolPort` (chama `recommendations` como tool) + `RecommendationReviewerPort` (revisao via LLM), ambos em `application/ports.py`
+- `RecommendationAgentGraph` (`graphs/recommendation/`) — 4 nodes: `prepare_context -> generate_recommendations -> review_and_enrich -> finalize`; pula a revisao por LLM quando nao ha candidatos
+- Primeiro agente com as duas pontas ao mesmo tempo: tool determinística (`RecommendationGeneratorAdapter`, `infrastructure/recommendations_adapters/`, chama `RecommendationsFactory.create_recommendation_generator()` direto) **e** LLM client proprio (`LangChainGeminiRecommendationReviewer`, `infrastructure/llm/`) — diferente do NVIDIA RAG Agent (V10, so tool, sem LLM) e do Extraction/Startup Classifier (V8/V9, so LLM, sem tool cross-modulo)
+- Guarda em codigo (regra 9 do CLAUDE.md): candidatos com `score >= 0.5` sao sempre mantidos, mesmo se o LLM tentar descartar; so candidatos ambiguos (`score < 0.5`) tem o `keep`/`discard` do LLM respeitado. Limiar proprio de `agents`, decoupled do `MIN_MATCH_SCORE=0.25` de `recommendations`
+- Revisao em lote: uma chamada Gemini por startup (nao uma por recomendacao), julgando ambiguidade e reescrevendo a justificativa em linguagem de negocio de todos os candidatos mantidos
+- `AgentType.RECOMMENDATION` wired em `ExecuteAgentJob`/`ResumeAgentJob`; `AgentsFactory.create_recommendation_agent_service()` segue a mesma regra dos outros agentes (sem `GEMINI_API_KEY`, devolve `None`)
+- Import circular descoberto e corrigido: `agents -> recommendations -> startups -> agents` (`startups_factory.py` ja importa `AgentsFactory` para os adapters V8/V9); resolvido com import lazy de `RecommendationsFactory` dentro do metodo da factory, mesmo padrao de `nvidia_knowledge_factory.py` chamando `orchestration`
+- Sem consumidor sincrono dedicado ainda; acionavel pela fila generica `agent_runs` com `agent_type=recommendation`
+- Testes: 13 unit (+2 adapter, +9 reviewer, +2 grafo)
+
+Documento da entrega: `docs/agents/agents_v11_recommendation_agent.md`.
+
+O que a V12 entregou (ultimo dos 8 agentes do brief original — todos
+implementados a partir desta entrega):
+- `AgentType.BRIEFING` + `BriefingAgentInput`/`BriefingAgentResult` (`application/dto.py`)
+- `BriefingToolPort` (chama `briefing` como tool, devolve so o Markdown) + `BriefingProseRewriterPort` (reescrita via LLM), ambos em `application/ports.py`
+- `BriefingAgentGraph` (`graphs/briefing/`) — 4 nodes: `prepare_context -> generate_briefing -> rewrite_prose -> finalize`; diferente do Recommendation Agent, `rewrite_prose` nunca e' pulado (reescrever a prosa e' o proposito inteiro do agente, nao uma excecao condicional)
+- `BriefingGeneratorAdapter` (`infrastructure/briefing_adapters/`, chama `BriefingFactory.create_briefing_generator()` direto) + `LangChainGeminiBriefingProseRewriter` (`infrastructure/llm/`)
+- Fallback seguro em codigo (nao confiado so ao prompt, regra 9): extrai todas as URLs do Markdown deterministico, e se a reescrita do LLM perder alguma, devolve o Markdown original inalterado — mesmo espirito do "code-enforced override" do Recommendation Agent (V11), aplicado dentro da porta, nao no grafo
+- `AgentType.BRIEFING` wired em `ExecuteAgentJob`/`ResumeAgentJob`; `AgentsFactory.create_briefing_agent_service()` segue a mesma regra dos outros agentes (sem `GEMINI_API_KEY`, devolve `None`)
+- Import lazy de `BriefingFactory` dentro do metodo da factory (mesmo ciclo `agents -> briefing -> startups -> agents` do Recommendation Agent, corrigido preventivamente)
+- Sem consumidor sincrono dedicado ainda; acionavel pela fila generica `agent_runs` com `agent_type=briefing`
+- Testes: 10 unit (+2 adapter, +7 rewriter, +1 grafo)
+
+Documento da entrega: `docs/agents/agents_v12_briefing_agent.md`.
 
 O que a V6 entregou:
 - `PostgresCheckpointer` em `infrastructure/checkpoints/` wraps `AsyncPostgresSaver` (lazy init)
@@ -469,6 +538,14 @@ Tabelas: `embedding_jobs`, `embedding_job_chunks`
 Worker: `workers/embedding_worker/` — consome fila `embeddings`
 Testes: 56 unit + 2 integracao (exigem Postgres e Qdrant reais rodando)
 
+Extensao feita durante a primeira validacao real do NVIDIA Knowledge V2
+(continua V4, nao e' nova versao): `GEMINI_EMBEDDING_MODEL` default
+trocado de `models/text-embedding-004` (descontinuado pela API do
+Gemini, devolvia 404 em `embedContent`) para `models/gemini-embedding-001`
+(3072 dimensoes, validado com chamada real). Sem migracao de dados — a
+colecao Qdrant local estava vazia. Ver
+`docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md`.
+
 ---
 
 ### Startups module
@@ -551,11 +628,11 @@ Documentos: `docs/rag/rag_v3_busca_hibrida.md`, `docs/rag/rag_v4_reranking.md`.
 | Versao | Status | O que foi entregue |
 |---|---|---|
 | V1 | Entregue | Catalogo inicial de tecnologias (10 itens) |
-| V2 | Futuro | Ingestao de fontes oficiais (pipeline real, nao catalogo estatico) |
+| V2 | Em andamento | Ingestao de fontes oficiais (pipeline real, nao catalogo estatico) |
 | V3 | Futuro | Metadados tecnicos |
 | V4 | Futuro | Busca por caso de uso |
 
-**Versao atual: V1**
+**Versao atual: V1 + V2 em andamento**
 
 O que a V1 entregou: `NvidiaTechnology`, catalogo estatico em
 `catalog_data.py`, contrato publico `NvidiaTechnologyCatalog`, rotas
@@ -570,6 +647,29 @@ nova versao — catalogo e dado estatico em codigo, sem migration):
 - Testes: 7 unit (+2 desta extensao)
 
 Documento: `docs/nvidia_knowledge/roadmap_nvidia_knowledge.md` (secao "Extensao do catalogo V1").
+
+O que a V2 (em andamento) entregou — fundacao + registry + primeira
+validacao real:
+- `documents.source_type` + payload `source_type` no Qdrant + filtro
+  opcional em `/rag/search`/`/rag/answer` (ver
+  `docs/nvidia_knowledge/nvidia_knowledge_v2_foundation_source_type.md`)
+- `NvidiaKnowledgeSourceRegistry` com 20 fontes (8 P0/9 P1/3 P2),
+  `GET /nvidia-knowledge/sources`, `POST /nvidia-knowledge/ingestion/jobs`
+  (ver `docs/nvidia_knowledge/nvidia_knowledge_v2_source_registry.md`)
+- `workers/orchestration_worker/` avancando `url_ingestion_jobs`
+  automaticamente (ver `docs/orchestration/orchestration_v2_worker_automatico.md`)
+- Primeira ingestao real confirmada ponta a ponta: `nemo-framework-docs`
+  e `triton-inference-server-docs` completaram
+  `scraping -> ingestion -> embeddings`, conteudo recuperavel via
+  `/rag/search` filtrado por `source_type=nvidia_knowledge` — corrigiu 4
+  bugs que bloqueavam isso (3 em `scraping`, 1 em `embeddings`; ver
+  `docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md`)
+- Pendente: re-testar as outras 6 fontes do lote P0 com workers limpos, e
+  rodar P1/P2; resolucao de hostname intermitente do lado Windows
+  (docs.nvidia.com, docs.monai.io) ainda sem solucao — fora do alcance de
+  uma correcao de codigo
+
+Documento: `docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md`.
 
 ---
 
@@ -785,8 +885,8 @@ url_ingestion_jobs      orquestracao URL -> scraping -> ingestion -> embeddings 
 
 | Modulo | Testes | Ultima verificacao |
 |---|---|---|
-| scraping | 130 | 2026-06-16 |
-| agents | 74 unit + 1 integracao | 2026-06-22 |
+| scraping | 134 | 2026-06-22 |
+| agents | 97 unit + 1 integracao | 2026-06-22 |
 | ingestion | 33 unit + 1 integracao | 2026-06-21 |
 | embeddings | 56 unit + 2 integracao | 2026-06-21 |
 | startups | 27 unit + 1 integracao | 2026-06-22 |
@@ -795,14 +895,15 @@ url_ingestion_jobs      orquestracao URL -> scraping -> ingestion -> embeddings 
 | recommendations | 19 unit + 1 integracao | 2026-06-21 |
 | briefing | 15 unit + 1 integracao | 2026-06-21 |
 | orchestration | 14 unit + 1 integracao | 2026-06-22 |
-| **Total** | **402 passed + 13 skipped sem infra local (415 esperado com Postgres/Redis/Qdrant ativos)** | **2026-06-22** |
+| **Total** | **443 passed, 2 warnings (Postgres/Redis/Qdrant ativos durante a verificacao)** | **2026-06-22** |
 
-Nota: as linhas `ingestion` ate `briefing` (exceto `agents`/`rag`) nao
-foram reconferidas nesta verificacao — refletem a ultima contagem
+Nota: as linhas `ingestion` ate `briefing` (exceto `agents`/`rag`/`scraping`)
+nao foram reconferidas nesta verificacao — refletem a ultima contagem
 conhecida, nao necessariamente o numero exato apos as entregas mais
-recentes de `nvidia_knowledge`/`orchestration`. `agents`, `rag`,
-`orchestration` e o `Total` foram medidos de novo nas duas ultimas
-entregas (Orchestration V2 worker + Agents V10).
+recentes. `scraping`, `agents`, `rag`, `orchestration` e o `Total` foram
+medidos de novo nas entregas mais recentes (3 correcoes de scraping +
+modelo de embedding, Orchestration V2 worker, Agents V10, Agents V11,
+Agents V12).
 
 Comando para verificar:
 ```bash
@@ -1057,7 +1158,9 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Agents V7 | `docs/agents/agents_v7_human_in_the_loop.md` |
 | Agents V8 | `docs/agents/agents_v8_extraction_agent.md` |
 | Agents V9 | `docs/agents/agents_v9_startup_classifier.md` |
-| Agents V10 (current) | `docs/agents/agents_v10_nvidia_rag_agent.md` |
+| Agents V10 | `docs/agents/agents_v10_nvidia_rag_agent.md` |
+| Agents V11 | `docs/agents/agents_v11_recommendation_agent.md` |
+| Agents V12 (current) | `docs/agents/agents_v12_briefing_agent.md` |
 | Embeddings V1 | `docs/embeddings/embeddings_v1_contratos_e_fake.md` |
 | Embeddings V2+V3 | `docs/embeddings/embeddings_v2_v3_provider_real_e_qdrant.md` |
 | Embeddings V4 | `docs/embeddings/embeddings_v4_worker_em_lote.md` |
@@ -1071,6 +1174,7 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | NVIDIA Knowledge roadmap | `docs/nvidia_knowledge/roadmap_nvidia_knowledge.md` |
 | NVIDIA Knowledge V2 foundation | `docs/nvidia_knowledge/nvidia_knowledge_v2_foundation_source_type.md` |
 | NVIDIA Knowledge V2 source registry | `docs/nvidia_knowledge/nvidia_knowledge_v2_source_registry.md` |
+| NVIDIA Knowledge V2 primeira validacao real (current) | `docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md` |
 | Recommendations V1 (current) | `docs/recommendations/recommendations_v1_regras_deterministicas.md` |
 | Recommendations roadmap | `docs/recommendations/roadmap_recommendations.md` |
 | Briefing V1 (current) | `docs/briefing/briefing_v1_template_executivo.md` |

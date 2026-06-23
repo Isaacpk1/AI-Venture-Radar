@@ -44,7 +44,7 @@ class ScrapingPort(ABC):
     """Contrato para submeter e acompanhar um job de scraping (Orchestration V2)."""
 
     @abstractmethod
-    async def submit(self, url: str) -> UUID:
+    async def submit(self, url: str, *, source_type: str = "startup_evidence") -> UUID:
         """Submete a URL e devolve o scraping_job_id."""
 
     @abstractmethod

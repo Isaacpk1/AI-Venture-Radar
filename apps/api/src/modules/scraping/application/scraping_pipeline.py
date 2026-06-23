@@ -75,6 +75,8 @@ class ScrapingPipeline:
         self,
         job_id: UUID,
         url: str,
+        *,
+        source_type: str = "startup_evidence",
     ) -> ScrapingResult:
         """Executa estratégias até produzir um resultado aprovado.
 
@@ -85,7 +87,9 @@ class ScrapingPipeline:
 
         try:
             async with asyncio.timeout(self.limits.total_timeout_seconds):
-                return await self._execute_with_limits(job_id, url)
+                return await self._execute_with_limits(
+                    job_id, url, source_type=source_type
+                )
         except TimeoutError as error:
             raise GlobalScrapingLimitExceededError(
                 "O job excedeu o timeout total de "
@@ -96,6 +100,8 @@ class ScrapingPipeline:
         self,
         job_id: UUID,
         url: str,
+        *,
+        source_type: str,
     ) -> ScrapingResult:
         """Executa a pipeline já protegida pelo timeout global."""
 
@@ -122,7 +128,7 @@ class ScrapingPipeline:
                 output = await scraper.scrape(ScrapingInput(url=url))
                 validation_without_score = await self.validator.validate(output)
                 validation = self.scoring_service.calculate(
-                    validation_without_score
+                    validation_without_score, source_type=source_type
                 )
 
                 decision = self.decision_policy.decide(
@@ -139,10 +145,13 @@ class ScrapingPipeline:
                 agent_reviewed_value = False
                 agent_reason_value: str | None = None
 
-                # A revisao semantica interpreta somente conteudo ambiguo que
-                # ja passou pelos requisitos tecnicos e textuais minimos.
+                # A revisao semantica julga "evidencia de IA de uma startup",
+                # o que nao se aplica a fontes curadas (ex: nvidia_knowledge,
+                # vindas do source registry). Para essas, a decisao
+                # deterministica (tecnica + textual) e' a palavra final.
                 if (
                     decision is ValidationDecision.REJECT
+                    and source_type == "startup_evidence"
                     and self.semantic_validator is not None
                     and self.llm_review_policy.requires_review(
                         validation.to_summary()

@@ -20,10 +20,13 @@ startup + evidencias + recomendacoes -> briefing executivo
 | Versao | Status | Objetivo |
 |---|---|---|
 | Briefing V1 | Implementado | Template executivo em Markdown |
-| Briefing V2 | Futuro | Briefing gerado por agente |
+| Briefing V2 | Futuro (agente entregue em Agents V12) | Briefing gerado por agente |
 | Briefing V3 | Futuro | Exportacao PDF/HTML |
 | Briefing V4 | Futuro | Revisao humana |
 | Briefing V5 | Futuro | Ranking de oportunidades |
+
+As prioridades transversais de produto estao consolidadas em
+`docs/roadmap_produto_final.md`.
 
 ---
 
@@ -59,32 +62,43 @@ Documento da entrega: `docs/briefing/briefing_v1_template_executivo.md`.
 
 ---
 
-## Briefing V2 - Agente de Briefing (= Agents V12)
+## Briefing V2 - Agente de Briefing
 
-Mesma entrega que `agents` V12 ("Briefing Agent") — ver
-`docs/agents/roadmap_agentes.md`. Registrado nos dois lugares pela mesma
-razao de Recommendations V3/Agents V11: e ao mesmo tempo uma versao deste
-modulo e um agente novo do modulo `agents`.
+Status:
 
-Decisao de design: o grafo LangGraph orquestra `BriefingGenerator`
-(`application/public/briefing_generator.py`, contrato publico que ja
-existe desde Orchestration V1) como tool — nao reescreve
-`build_briefing_markdown()` (`domain/policies.py`). LLM entra so para
-reescrever a prosa executiva (linguagem de negocio), preservando as
-citacoes/evidencias que o template determinístico ja garante.
+```txt
+agente entregue (Agents V12, ver docs/agents/agents_v12_briefing_agent.md)
+modulo briefing em si continua V1 — sem exportacao/revisao humana/ranking
+  (isso e' Briefing V3/V4/V5, ainda futuro)
+```
 
-Pre-requisito recomendado: `Recommendation Agent` (Recommendations V3 /
-Agents V11) — um briefing fundamentado em recomendacoes mais ricas
-(prioridade, complexidade, proxima acao, justificativa de negocio — ver
-Recommendations V4) produz um documento mais util do que orquestrar so em
-cima da V1.
+O Briefing Agent (V12) so orquestra o que `briefing` V1 ja entrega — nao
+e' a "mesma entrega" que V3/V4/V5, que mudariam o modulo em si.
 
-Entregaveis:
+Decisao de design (ja aplicada): o grafo LangGraph orquestra
+`BriefingGenerator` (`application/public/briefing_generator.py`,
+contrato publico que ja existe desde Orchestration V1) como tool — nao
+reescreve `build_briefing_markdown()` (`domain/policies.py`). LLM entra
+so para reescrever a prosa executiva (linguagem de negocio), com
+fallback seguro em codigo se a reescrita perder alguma citacao/URL do
+template determinístico.
 
-- grafo LangGraph para gerar briefing;
-- controle de citacoes;
-- linguagem executiva;
-- saida estruturada.
+Pre-requisito recomendado (atendido): `Recommendation Agent` (Agents
+V11), ja entregue antes deste — um briefing fundamentado em
+recomendacoes revisadas produz um documento mais util do que orquestrar
+so em cima da V1 pura.
+
+Entregue:
+
+- `BriefingAgentGraph` para gerar briefing (4 nodes);
+- fallback de controle de citacoes (extrai URLs, compara original vs
+  reescrita, descarta a reescrita se alguma faltar);
+- linguagem executiva via `LangChainGeminiBriefingProseRewriter`;
+- saida estruturada (`BriefingAgentResult`).
+
+Integracao pendente: o Briefing Agent V12 existe, mas `POST /analysis/jobs`
+ainda chama o gerador deterministico V1. A decisao de usar a versao com agente
+precisa fazer parte do fechamento da Orchestration V2.
 
 ---
 

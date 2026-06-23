@@ -188,6 +188,61 @@ class NvidiaRagResult:
 
 
 @dataclass(frozen=True)
+class RecommendationAgentInput:
+    """Contexto entregue ao Recommendation Agent."""
+
+    startup_id: UUID
+
+
+@dataclass(frozen=True)
+class RecommendationCandidate:
+    """Uma recomendacao candidata, no vocabulario interno de ``agents``.
+
+    Reflete o resultado deterministico de ``recommendations`` (a fonte de
+    verdade para score/matched_keywords) mais a justificativa, que pode ser
+    substituida pela versao em linguagem de negocio apos a revisao do
+    agente. Candidatos ambiguos podem ser descartados pela revisao; os
+    confiantes sao sempre mantidos (decisao aplicada em codigo, nao confiada
+    so ao prompt).
+    """
+
+    technology_slug: str
+    technology_name: str
+    category: str
+    score: float
+    justification: str
+    matched_keywords: list[str]
+
+
+@dataclass(frozen=True)
+class RecommendationAgentResult:
+    """Resultado final produzido pelo Recommendation Agent."""
+
+    recommendations: list[RecommendationCandidate]
+
+
+@dataclass(frozen=True)
+class BriefingAgentInput:
+    """Contexto entregue ao Briefing Agent."""
+
+    startup_id: UUID
+
+
+@dataclass(frozen=True)
+class BriefingAgentResult:
+    """Resultado final produzido pelo Briefing Agent.
+
+    ``content`` e' a versao final em Markdown — reescrita em linguagem
+    executiva quando a revisao preserva as citacoes do template
+    deterministico, ou o conteudo deterministico original sem alteracao
+    quando a reescrita perde alguma citacao (fallback seguro aplicado em
+    codigo, nao confiado so ao prompt).
+    """
+
+    content: str
+
+
+@dataclass(frozen=True)
 class CreateAgentRunInput:
     """Entrada para criar uma execucao assincrona de agente."""
 

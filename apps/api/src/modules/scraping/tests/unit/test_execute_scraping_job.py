@@ -107,7 +107,7 @@ async def test_duplicate_content_fails_job_without_saving_second_result() -> Non
     await results.save(existing_result)
 
     class PipelineStub:
-        async def execute(self, job_id, url):
+        async def execute(self, job_id, url, *, source_type="startup_evidence"):
             return create_result(job_id, content_hash="same-hash")
 
     use_case = ExecuteScrapingJob(

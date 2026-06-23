@@ -70,3 +70,37 @@ def test_reports_redirect_as_warning() -> None:
 
     assert result.score == 1.0
     assert result.warnings == {"redirected"}
+
+
+def test_detects_real_captcha_challenge_page() -> None:
+    """Pagina curta dominada pelo widget de captcha deve ser bloqueada."""
+
+    result = TechnicalValidator().validate(
+        make_output(
+            raw_html=(
+                "<html><body><div class='g-recaptcha'></div>"
+                "Please complete the captcha to continue.</body></html>"
+            ),
+            raw_text="Please complete the captcha to continue.",
+        )
+    )
+
+    assert "captcha" in result.problems
+
+
+def test_does_not_block_long_page_that_merely_references_captcha_lib() -> None:
+    """Referencia a lib de captcha em pagina de conteudo real nao deve bloquear.
+
+    Sites como GitHub carregam libs de captcha globalmente (formularios de
+    login/abuso) mesmo em paginas sem nenhum desafio sendo exibido.
+    """
+
+    long_text = "Conteudo real do repositorio. " * 30
+    result = TechnicalValidator().validate(
+        make_output(
+            raw_html=f"<html><body>{long_text}<script src='captcha.js'></script></body></html>",
+            raw_text=long_text,
+        )
+    )
+
+    assert "captcha" not in result.problems

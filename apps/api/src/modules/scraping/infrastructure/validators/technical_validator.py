@@ -43,8 +43,7 @@ class TechnicalValidator:
             problems.add("empty_content")
             score -= 0.60
 
-        lowered_html = output.raw_html.lower()
-        if "captcha" in lowered_html:
+        if self._has_captcha_challenge(output):
             problems.add("captcha")
             score -= 0.60
 
@@ -60,6 +59,22 @@ class TechnicalValidator:
             problems=problems,
             warnings=warnings,
         )
+
+    def _has_captcha_challenge(self, output: ScrapingOutput) -> bool:
+        """Detecta uma pagina de desafio real, nao so uma referencia a lib.
+
+        Um match isolado de "captcha" no HTML nao prova um bloqueio: muitos
+        sites legitimos carregam libs de captcha globalmente (ex: GitHub,
+        para formularios de login/abuso) mesmo em paginas sem nenhum desafio
+        sendo exibido para esta coleta. Paginas de desafio real (Cloudflare,
+        reCAPTCHA, hCaptcha) sao curtas — quase todo o conteudo e o proprio
+        widget — por isso exigimos o sinal textual combinado com pouco texto
+        extraido, mesmo padrao usado em ``_requires_javascript``.
+        """
+
+        lowered_html = output.raw_html.lower()
+        has_captcha_signal = "captcha" in lowered_html
+        return has_captcha_signal and len(output.raw_text.strip()) < 500
 
     def _requires_javascript(self, output: ScrapingOutput) -> bool:
         """Detecta sinais fortes de uma pagina vazia antes da renderizacao."""

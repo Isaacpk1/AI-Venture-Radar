@@ -31,8 +31,13 @@ class ScrapingJobSubmitter(ABC):
     """Submete uma URL para scraping e permite consultar o andamento."""
 
     @abstractmethod
-    async def submit(self, url: str) -> UUID:
-        """Cria um job de scraping para a URL e devolve seu id."""
+    async def submit(self, url: str, *, source_type: str = "startup_evidence") -> UUID:
+        """Cria um job de scraping para a URL e devolve seu id.
+
+        ``source_type`` identifica a origem do conteudo (ex:
+        "nvidia_knowledge" para fontes curadas do registry). O valor padrao
+        preserva o comportamento de scraping de evidencia de startup.
+        """
 
     @abstractmethod
     async def get_status(self, job_id: UUID) -> ScrapingJobStatusView:
@@ -51,8 +56,8 @@ class DefaultScrapingJobSubmitter(ScrapingJobSubmitter):
         self._create_scraping_job = create_scraping_job
         self._get_scraping_job = get_scraping_job
 
-    async def submit(self, url: str) -> UUID:
-        job = await self._create_scraping_job.execute(url)
+    async def submit(self, url: str, *, source_type: str = "startup_evidence") -> UUID:
+        job = await self._create_scraping_job.execute(url, source_type=source_type)
         return job.id
 
     async def get_status(self, job_id: UUID) -> ScrapingJobStatusView:

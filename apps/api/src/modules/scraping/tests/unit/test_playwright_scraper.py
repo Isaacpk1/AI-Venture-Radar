@@ -1,5 +1,7 @@
 """Testes do PlaywrightScraper sem abrir um navegador real."""
 
+import sys
+
 import pytest
 
 from apps.api.src.modules.scraping.application.dto import ScrapingInput
@@ -160,6 +162,50 @@ async def test_blocks_unsafe_browser_subrequest() -> None:
 
     with pytest.raises(UnsafeUrlError, match="Destino privado"):
         await scraper.scrape(ScrapingInput(url="https://example.com"))
+
+
+@pytest.mark.anyio
+async def test_restores_real_stdio_only_during_browser_launch() -> None:
+    """sys.stdout/stderr devem ser os originais so durante o launch do Chromium.
+
+    Simula o cenario do scraper_worker (Dramatiq), que substitui
+    sys.stdout/stderr por um pipe entre processos antes de qualquer scraping
+    rodar (ver docstring de ``_real_stdio`` no modulo da implementacao).
+    """
+
+    class FakeLoggingPipe:
+        def fileno(self) -> int:
+            raise OSError("nao herdavel")
+
+    fake_pipe = FakeLoggingPipe()
+    captured: dict[str, object] = {}
+
+    class CapturingChromium(FakeChromium):
+        async def launch(self, **kwargs) -> FakeBrowser:
+            captured["stdout"] = sys.stdout
+            captured["stderr"] = sys.stderr
+            return await super().launch(**kwargs)
+
+    playwright_context = FakePlaywrightContext(["https://example.com"])
+    playwright_context.chromium = CapturingChromium(playwright_context.browser)
+
+    original_stdout, original_stderr = sys.stdout, sys.stderr
+    sys.stdout = fake_pipe
+    sys.stderr = fake_pipe
+    try:
+        scraper = PlaywrightScraper(
+            url_guard=RecordingUrlGuard(),
+            playwright_factory=lambda: playwright_context,
+        )
+        await scraper.scrape(ScrapingInput(url="https://example.com"))
+
+        assert captured["stdout"] is sys.__stdout__
+        assert captured["stderr"] is sys.__stderr__
+        # Restaurado para o pipe de log assim que o launch termina.
+        assert sys.stdout is fake_pipe
+        assert sys.stderr is fake_pipe
+    finally:
+        sys.stdout, sys.stderr = original_stdout, original_stderr
 
 
 @pytest.mark.anyio

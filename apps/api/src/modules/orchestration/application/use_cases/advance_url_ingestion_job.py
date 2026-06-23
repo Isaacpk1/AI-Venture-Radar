@@ -44,7 +44,9 @@ class AdvanceUrlIngestionJob:
         job = await self._get(job_id)
 
         if job.status is UrlIngestionJobStatus.PENDING:
-            scraping_job_id = await self._scraping_port.submit(job.url)
+            scraping_job_id = await self._scraping_port.submit(
+                job.url, source_type=job.source_type
+            )
             job.start_scraping(scraping_job_id)
             await self._save(job)
             raise UrlIngestionStillProcessingError("Scraping submetido.")

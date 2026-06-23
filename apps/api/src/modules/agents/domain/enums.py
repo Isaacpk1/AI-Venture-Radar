@@ -39,6 +39,8 @@ class AgentType(StrEnum):
     STARTUP_CLASSIFIER = "startup_classifier"
     EXTRACTION = "extraction"
     NVIDIA_RAG = "nvidia_rag"
+    RECOMMENDATION = "recommendation"
+    BRIEFING = "briefing"
 
 
 class StartupMaturityLevel(StrEnum):
