@@ -19,7 +19,7 @@ modulos em V1.
 | Catalogo NVIDIA | Entregue em V1 estatico; V2 source_type + source registry + url_ingestion_jobs entregues |
 | Recommendations | Entregue em V1 deterministico |
 | Briefing | Entregue em V1 deterministico |
-| Orchestration | V1 entregue; V2 automatiza URL ate embeddings |
+| Orchestration | V1 entregue; V2 entregue (URL bruta ate briefing, sem etapas manuais) |
 | Frontend | Nao iniciado |
 | Auth/observabilidade/producao | Pendente |
 
@@ -31,15 +31,16 @@ O backlog consolidado, com criterios de aceite, esta em
 `docs/roadmap_produto_final.md`. A ordem de execucao e:
 
 ```txt
-1. Orchestration V2 completa: URL -> startup -> briefing
+1. Orchestration V2 completa: URL -> startup -> briefing — ENTREGUE
 2. Frontend operacional
 3. NVIDIA Knowledge V2 e Recommendations V2/V4
 4. Revisao humana, exportacao e ranking
 5. Auth, observabilidade, CI/CD e deploy
 ```
 
-O worker automatico de `url_ingestion_jobs` ja esta entregue. O objetivo da
-V2 agora e concluir o fluxo apos embeddings, sem etapas manuais.
+O worker automatico de `url_ingestion_jobs` ja esta entregue, e a jornada
+ate o briefing tambem (`docs/orchestration/orchestration_v2_jornada_completa.md`).
+A prioridade agora e o Frontend (item 2).
 
 ## Proximas Entregas
 
@@ -63,21 +64,25 @@ Faltam validar as seis fontes P0 restantes e rodar os lotes P1/P2.
 ### Agents V10-V12 - Entregues
 
 NVIDIA RAG, Recommendation e Briefing Agents estao implementados. A lacuna
-atual e integra-los ao fluxo principal de `analysis_jobs` e da Orchestration
-V2, em vez de apenas mantelos como grafos disponiveis.
+atual e integra-los ao fluxo principal — hoje o fluxo automatico da
+Orchestration V2 usa os geradores deterministicos
+(`recommendations`/`briefing` V1), nao os agentes; eles continuam
+acionaveis so pela fila generica `agent_runs`.
 
-### Orchestration V2
+### Orchestration V2 - ENTREGUE
 
-Entrada por URL bruta:
+Entrada por URL bruta, ponta a ponta:
 
 ```txt
 URL -> scraping -> ingestion -> embeddings -> startup/extract/classify
 -> recommendations -> briefing
 ```
 
+Ver `docs/orchestration/orchestration_v2_jornada_completa.md`.
+
 ### Frontend
 
-Interface para operar o fluxo e visualizar resultados.
+Interface para operar o fluxo e visualizar resultados. Proxima prioridade.
 
 ---
 

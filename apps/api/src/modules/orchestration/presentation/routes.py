@@ -90,6 +90,7 @@ async def create_url_ingestion_job(
         CreateUrlIngestionJobInput(
             url=body.url,
             source_type=body.source_type,
+            startup_id=body.startup_id,
         )
     )
     return UrlIngestionJobResponse.from_view(view)

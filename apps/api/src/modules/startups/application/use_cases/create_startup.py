@@ -1,8 +1,13 @@
 """Caso de uso para criar startup."""
 
+from uuid import UUID
+
 from apps.api.src.modules.startups.application.dto import (
     CreateStartupInput,
     StartupView,
+)
+from apps.api.src.modules.startups.application.public.startup_creator import (
+    StartupCreator,
 )
 from apps.api.src.modules.startups.application.unit_of_work import (
     StartupsUnitOfWorkFactory,
@@ -10,11 +15,19 @@ from apps.api.src.modules.startups.application.unit_of_work import (
 from apps.api.src.modules.startups.domain.entities import Startup
 
 
-class CreateStartup:
+class CreateStartup(StartupCreator):
     """Cria uma startup no repositorio relacional."""
 
     def __init__(self, uow_factory: StartupsUnitOfWorkFactory) -> None:
         self._uow_factory = uow_factory
+
+    async def create_startup(
+        self, *, name: str, website_url: str | None = None
+    ) -> UUID:
+        view = await self.execute(
+            CreateStartupInput(name=name, website_url=website_url)
+        )
+        return view.id
 
     async def execute(self, startup_input: CreateStartupInput) -> StartupView:
         startup = Startup(

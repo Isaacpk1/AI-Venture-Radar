@@ -32,6 +32,7 @@ class AnalysisJobView:
 class CreateUrlIngestionJobInput:
     url: str
     source_type: str = "startup_evidence"
+    startup_id: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,9 @@ class UrlIngestionJobView:
     ingestion_job_id: UUID | None
     document_id: UUID | None
     embedding_job_id: UUID | None
+    startup_id: UUID | None
+    recommendation_count: int | None
+    briefing_id: UUID | None
     error_message: str | None
     created_at: datetime
     started_at: datetime | None

@@ -23,7 +23,7 @@ startup_id -> dispara recommendations -> dispara briefing -> AnalysisJob
 | Versao | Status | Objetivo |
 |---|---|---|
 | Orchestration V1 | Implementado | analysis_jobs a partir de startup_id existente |
-| Orchestration V2 | Em andamento | Entrada por URL bruta (scraping/ingestion/embeddings) |
+| Orchestration V2 | Implementado | Entrada por URL bruta, ponta a ponta ate o briefing |
 | Orchestration V3 | Futuro | Retomada de jobs falhados (retry por etapa) |
 | Orchestration V4 | Futuro | Notificacoes de conclusao |
 
@@ -77,23 +77,32 @@ Documento da entrega: `docs/orchestration/orchestration_v1_analysis_jobs.md`.
 
 ## Orchestration V2 - Entrada por URL Bruta
 
+Status:
+
+```txt
+implementado
+```
+
 Entregaveis:
 
 - criar/disparar `scraping_job` a partir da URL - entregue;
 - persistir `url_ingestion_jobs` com `source_type` - entregue;
 - avançar scraping -> ingestion -> embeddings por chamada explicita - entregue;
 - worker/dispatcher para reenfileirar advance ate estado terminal - entregue;
-- criar ou associar a `Startup` correspondente - pendente;
-- disparar extract e classify - pendente;
-- disparar recommendations e briefing - pendente;
-- expor resultado agregado e historico adequado ao frontend - pendente.
+- criar ou associar a `Startup` correspondente - entregue;
+- disparar extract e classify - entregue (best-effort, nao bloqueia o
+  restante quando o servico de LLM nao esta configurado);
+- disparar recommendations e briefing - entregue;
+- expor resultado agregado (`startup_id`/`recommendation_count`/
+  `briefing_id`) adequado ao polling do frontend - entregue.
 
 **Criterio de conclusao:** uma URL submetida deve chegar a um briefing sem
 intervencao manual, preservando IDs, estados e erros de cada etapa para consulta
-e retomada.
+e retomada. Atingido.
 
-Documentos da entrega parcial: `docs/orchestration/orchestration_v2_url_ingestion_jobs.md`
-e `docs/orchestration/orchestration_v2_worker_automatico.md`.
+Documentos da entrega: `docs/orchestration/orchestration_v2_url_ingestion_jobs.md`,
+`docs/orchestration/orchestration_v2_worker_automatico.md` e
+`docs/orchestration/orchestration_v2_jornada_completa.md` (fechamento final).
 
 ---
 

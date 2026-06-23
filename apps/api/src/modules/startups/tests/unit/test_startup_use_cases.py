@@ -113,6 +113,18 @@ async def test_create_startup_persists_and_returns_view() -> None:
 
 
 @pytest.mark.anyio
+async def test_create_startup_via_public_contract_returns_id() -> None:
+    uow = _make_uow()
+    use_case = CreateStartup(lambda: uow)
+
+    startup_id = await use_case.create_startup(
+        name="Acme AI", website_url="https://acme.example.com"
+    )
+
+    assert uow.startup_repository.items[startup_id].name == "Acme AI"
+
+
+@pytest.mark.anyio
 async def test_get_startup_returns_existing_startup() -> None:
     uow = _make_uow()
     startup = Startup(name="Acme AI")
@@ -180,6 +192,28 @@ async def test_add_evidence_requires_existing_startup() -> None:
                 source_url="https://example.com",
             )
         )
+
+
+@pytest.mark.anyio
+async def test_attach_evidence_via_public_contract() -> None:
+    uow = _make_uow()
+    startup = Startup(name="Acme AI")
+    await uow.startup_repository.save(startup)
+    scraping_result_id = uuid4()
+
+    await AddStartupEvidence(lambda: uow).attach_evidence(
+        startup_id=startup.id,
+        scraping_result_id=scraping_result_id,
+        source_url="https://acme.example.com",
+        title="Acme",
+        notes="conteudo",
+    )
+
+    evidences = await ListStartupEvidences(lambda: uow).execute(
+        startup_id=startup.id
+    )
+    assert len(evidences) == 1
+    assert evidences[0].scraping_result_id == scraping_result_id
 
 
 @pytest.mark.anyio

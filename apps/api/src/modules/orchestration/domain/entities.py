@@ -71,12 +71,16 @@ class AnalysisJob:
 
 @dataclass
 class UrlIngestionJob:
-    """Leva uma URL bruta atraves de scraping -> ingestion -> embeddings.
+    """Leva uma URL bruta atraves de scraping -> ingestion -> embeddings ->
+    analise (startup/evidencia/extract/classify/recommendations/briefing).
 
     Maquina de estados (Orchestration V2): cada metodo so avanca um passo
     e guarda o ponteiro para o job downstream correspondente, para que
     ``AdvanceUrlIngestionJob`` saiba exatamente o que consultar na proxima
-    chamada.
+    chamada. Jobs com ``source_type != "startup_evidence"`` (ex:
+    ``nvidia_knowledge``) pulam ``ANALYZING`` e concluem direto ao fim do
+    embedding — nao faz sentido criar uma "startup" a partir de
+    documentacao tecnica.
     """
 
     url: str
@@ -88,6 +92,10 @@ class UrlIngestionJob:
     ingestion_job_id: UUID | None = None
     document_id: UUID | None = None
     embedding_job_id: UUID | None = None
+    startup_id: UUID | None = None
+    evidence_attached: bool = False
+    recommendation_count: int | None = None
+    briefing_id: UUID | None = None
     error_message: str | None = None
     created_at: datetime = field(default_factory=utc_now)
     started_at: datetime | None = None
@@ -122,10 +130,32 @@ class UrlIngestionJob:
         self.document_id = document_id
         self.embedding_job_id = embedding_job_id
 
-    def complete(self) -> None:
+    def start_analyzing(self) -> None:
         if self.status is not UrlIngestionJobStatus.EMBEDDING:
             raise InvalidUrlIngestionJobTransitionError(
-                f"Somente jobs em embedding podem concluir. Estado atual: {self.status}."
+                f"Somente jobs em embedding podem iniciar analise. Estado atual: {self.status}."
+            )
+        self.status = UrlIngestionJobStatus.ANALYZING
+
+    def link_startup(self, startup_id: UUID) -> None:
+        self.startup_id = startup_id
+
+    def mark_evidence_attached(self) -> None:
+        self.evidence_attached = True
+
+    def record_analysis_result(
+        self, *, recommendation_count: int, briefing_id: UUID
+    ) -> None:
+        self.recommendation_count = recommendation_count
+        self.briefing_id = briefing_id
+
+    def complete(self) -> None:
+        if self.status not in (
+            UrlIngestionJobStatus.EMBEDDING,
+            UrlIngestionJobStatus.ANALYZING,
+        ):
+            raise InvalidUrlIngestionJobTransitionError(
+                f"Somente jobs em embedding ou analise podem concluir. Estado atual: {self.status}."
             )
         self.status = UrlIngestionJobStatus.COMPLETED
         self.finished_at = utc_now()

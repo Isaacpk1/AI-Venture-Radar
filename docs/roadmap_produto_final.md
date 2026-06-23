@@ -1,6 +1,6 @@
 # Roadmap para Fechar o Produto
 
-Atualizado em 22/06/2026 a partir da revisao cruzada de codigo, testes e
+Atualizado em 23/06/2026 a partir da revisao cruzada de codigo, testes e
 documentacao. Este documento prioriza o que falta para transformar o backend
 atual em um produto utilizavel, operavel e apresentavel.
 
@@ -8,25 +8,34 @@ atual em um produto utilizavel, operavel e apresentavel.
 
 O backend possui scraping, ingestao, embeddings, RAG, catalogo NVIDIA,
 startups, recomendacoes, briefings, workers e oito agentes LangGraph. A suite
-local passou com 443 testes. Ainda nao existe uma experiencia de produto
-completa nem uma jornada unica da URL ate o briefing.
+local passou com 457 testes. A jornada unica da URL ate o briefing (P0 #1)
+ja esta fechada; ainda nao existe uma experiencia de produto completa
+(falta o frontend, P0 #2).
 
 ## P0 — Jornada funcional de ponta a ponta
 
-### 1. Fechar Orchestration V2
+### 1. Fechar Orchestration V2 — ENTREGUE
 
-Implementar:
+```txt
+entregue
+```
 
-- criar ou associar uma `Startup` ao concluir a ingestao de uma URL;
-- anexar evidencias rastreaveis ao perfil;
-- executar extract e classify;
-- gerar recommendations e briefing;
-- persistir o estado, IDs downstream e erro de cada etapa;
-- expor consulta agregada do job para polling do frontend;
-- garantir idempotencia e retomada segura.
+Implementado (ver `docs/orchestration/orchestration_v2_jornada_completa.md`):
+
+- criar ou associar uma `Startup` ao concluir a ingestao de uma URL — entregue;
+- anexar evidencias rastreaveis ao perfil — entregue;
+- executar extract e classify — entregue (best-effort, nao bloqueia o
+  restante quando o servico de LLM nao esta configurado);
+- gerar recommendations e briefing — entregue;
+- persistir o estado, IDs downstream e erro de cada etapa — entregue;
+- expor consulta agregada do job para polling do frontend — entregue
+  (`startup_id`/`recommendation_count`/`briefing_id` em
+  `GET /url-ingestion/jobs/{id}`);
+- garantir idempotencia e retomada segura — entregue (guardas contra
+  reentrega-por-crash do Dramatiq).
 
 **Pronto quando:** uma URL de startup produz briefing e recomendacoes sem
-operacao manual entre as etapas.
+operacao manual entre as etapas. Atingido.
 
 ### 2. Frontend operacional
 

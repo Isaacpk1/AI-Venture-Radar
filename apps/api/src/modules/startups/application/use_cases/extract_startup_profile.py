@@ -1,10 +1,15 @@
 """Caso de uso para extrair dados estruturados de uma startup."""
 
+from uuid import UUID
+
 from apps.api.src.modules.startups.application.dto import (
     ExtractStartupProfileInput,
     StartupView,
 )
 from apps.api.src.modules.startups.application.ports import ExtractionPort
+from apps.api.src.modules.startups.application.public.extraction_trigger import (
+    ExtractionTrigger,
+)
 from apps.api.src.modules.startups.application.unit_of_work import (
     StartupsUnitOfWorkFactory,
 )
@@ -17,7 +22,7 @@ from apps.api.src.modules.startups.domain.exceptions import (
 )
 
 
-class ExtractStartupProfile:
+class ExtractStartupProfile(ExtractionTrigger):
     """Extrai founders/funding/customers de uma startup via Extraction Agent.
 
     Cada chamada repassa todas as evidencias atuais e sobrescreve os
@@ -32,6 +37,12 @@ class ExtractStartupProfile:
     ) -> None:
         self._uow_factory = uow_factory
         self._extractor = extractor
+
+    async def try_extract(self, startup_id: UUID) -> None:
+        try:
+            await self.execute(ExtractStartupProfileInput(startup_id=startup_id))
+        except StartupExtractionUnavailableError:
+            return
 
     async def execute(
         self, extract_input: ExtractStartupProfileInput

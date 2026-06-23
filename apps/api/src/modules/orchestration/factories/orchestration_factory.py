@@ -43,10 +43,14 @@ from apps.api.src.modules.orchestration.infrastructure.database.postgres_unit_of
 from apps.api.src.modules.orchestration.infrastructure.recommendations_adapters.recommendations_adapter import (
     RecommendationsModulePort,
 )
+from apps.api.src.modules.orchestration.infrastructure.startups_adapters.startups_adapter import (
+    StartupsModulePort,
+)
 from apps.api.src.modules.recommendations.factories.recommendations_factory import (
     RecommendationsFactory,
 )
 from apps.api.src.modules.scraping.factories.scraping_factory import ScrapingFactory
+from apps.api.src.modules.startups.factories.startups_factory import StartupsFactory
 from apps.api.src.shared.queue.dramatiq_broker import broker
 
 
@@ -97,8 +101,23 @@ class OrchestrationFactory:
         return AdvanceUrlIngestionJob(
             uow_factory=PostgresAnalysisUnitOfWork,
             scraping_port=ScrapingModulePort(ScrapingFactory.create_job_submitter()),
-            ingestion_port=IngestionModulePort(IngestionFactory.create_job_submitter()),
+            ingestion_port=IngestionModulePort(
+                IngestionFactory.create_job_submitter(),
+                IngestionFactory.create_ingested_document_reader(),
+            ),
             embeddings_port=EmbeddingsModulePort(
                 EmbeddingsFactory.create_job_submitter()
+            ),
+            startups_port=StartupsModulePort(
+                StartupsFactory.create_create_startup(),
+                StartupsFactory.create_add_startup_evidence(),
+                StartupsFactory.create_extract_startup_profile(),
+                StartupsFactory.create_classify_startup(),
+            ),
+            recommendations_port=RecommendationsModulePort(
+                RecommendationsFactory.create_recommendation_generator()
+            ),
+            briefing_port=BriefingModulePort(
+                BriefingFactory.create_briefing_generator()
             ),
         )

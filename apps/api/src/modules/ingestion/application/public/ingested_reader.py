@@ -20,6 +20,7 @@ class IngestedDocumentSummary:
     word_count: int
     chunk_count: int
     source_type: DocumentSourceType = DocumentSourceType.STARTUP_EVIDENCE
+    clean_text: str = ""
 
 
 @dataclass

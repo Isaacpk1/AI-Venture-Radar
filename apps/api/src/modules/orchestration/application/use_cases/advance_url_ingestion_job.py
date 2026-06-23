@@ -6,14 +6,31 @@ terminou, ou levanta ``UrlIngestionStillProcessingError`` para o
 Dramatiq reentregar a mensagem mais tarde enquanto espera. Mesmo padrao
 de retry-via-excecao ja usado por ``ExecuteEmbeddingJob`` para chunks
 pendentes.
+
+A etapa ``ANALYZING`` e diferente das anteriores: nao submete um job
+assincrono de outro modulo para ficar consultando depois — startup,
+evidencia, extract, classify, recommendations e briefing sao chamadas
+sincronas (mesmo padrao que ``ExecuteAnalysisJob`` ja usa para
+recommendations->briefing), entao a cadeia inteira roda numa unica
+entrega. Falha aqui e terminal (``job.fail()``, sem relancar) — nao e o
+padrao "ainda processando" usado para scraping/ingestion/embedding, que
+sao jobs assincronos de outro modulo. As escritas intermediarias
+(``link_startup``/``mark_evidence_attached``) existem para proteger
+contra reentrega-por-crash do Dramatiq: se o processo morrer entre criar
+a startup e salvar o job, a proxima entrega nao deve criar uma segunda
+startup nem duplicar a evidencia.
 """
 
+from urllib.parse import urlparse
 from uuid import UUID
 
 from apps.api.src.modules.orchestration.application.ports import (
+    BriefingPort,
     EmbeddingsPort,
     IngestionPort,
+    RecommendationsPort,
     ScrapingPort,
+    StartupsPort,
 )
 from apps.api.src.modules.orchestration.application.unit_of_work import (
     AnalysisUnitOfWorkFactory,
@@ -25,6 +42,16 @@ from apps.api.src.modules.orchestration.domain.exceptions import (
     UrlIngestionStillProcessingError,
 )
 
+STARTUP_EVIDENCE_SOURCE_TYPE = "startup_evidence"
+MAX_EVIDENCE_TEXT_CHARS = 8000
+
+
+def _derive_startup_name(*, title: str | None, url: str) -> str:
+    if title:
+        return title
+    hostname = urlparse(url).netloc
+    return hostname.removeprefix("www.") or url
+
 
 class AdvanceUrlIngestionJob:
 
@@ -34,11 +61,17 @@ class AdvanceUrlIngestionJob:
         scraping_port: ScrapingPort,
         ingestion_port: IngestionPort,
         embeddings_port: EmbeddingsPort,
+        startups_port: StartupsPort,
+        recommendations_port: RecommendationsPort,
+        briefing_port: BriefingPort,
     ) -> None:
         self._uow_factory = uow_factory
         self._scraping_port = scraping_port
         self._ingestion_port = ingestion_port
         self._embeddings_port = embeddings_port
+        self._startups_port = startups_port
+        self._recommendations_port = recommendations_port
+        self._briefing_port = briefing_port
 
     async def execute(self, *, job_id: UUID) -> None:
         job = await self._get(job_id)
@@ -102,12 +135,74 @@ class AdvanceUrlIngestionJob:
             if not status.is_done:
                 raise UrlIngestionStillProcessingError("Embedding em andamento.")
 
+            if job.source_type != STARTUP_EVIDENCE_SOURCE_TYPE:
+                job.complete()
+                await self._save(job)
+                return
+
+            job.start_analyzing()
+            await self._save(job)
+            raise UrlIngestionStillProcessingError(
+                "Embedding concluido, iniciando analise."
+            )
+
+        if job.status is UrlIngestionJobStatus.ANALYZING:
+            assert job.scraping_result_id is not None
+            try:
+                await self._run_analysis(job)
+            except Exception as error:
+                job.fail(str(error))
+                await self._save(job)
+                return
+
             job.complete()
             await self._save(job)
             return
 
         # COMPLETED/FAILED: estado terminal, nada a fazer.
         return
+
+    async def _run_analysis(self, job: UrlIngestionJob) -> None:
+        assert job.scraping_result_id is not None
+        content = await self._ingestion_port.get_document_content(
+            job.scraping_result_id
+        )
+
+        if job.startup_id is None:
+            name = _derive_startup_name(
+                title=content.title if content else None, url=job.url
+            )
+            startup_id = await self._startups_port.create_startup(
+                name=name, website_url=job.url
+            )
+            job.link_startup(startup_id)
+            await self._save(job)
+
+        assert job.startup_id is not None
+
+        if not job.evidence_attached:
+            notes = content.clean_text[:MAX_EVIDENCE_TEXT_CHARS] if content else None
+            title = content.title if content else None
+            await self._startups_port.attach_evidence(
+                startup_id=job.startup_id,
+                scraping_result_id=job.scraping_result_id,
+                source_url=job.url,
+                title=title,
+                notes=notes,
+            )
+            job.mark_evidence_attached()
+            await self._save(job)
+
+        await self._startups_port.try_extract(job.startup_id)
+        await self._startups_port.try_classify(job.startup_id)
+
+        recommendation_count = await self._recommendations_port.generate(
+            job.startup_id
+        )
+        briefing_id = await self._briefing_port.generate(job.startup_id)
+        job.record_analysis_result(
+            recommendation_count=recommendation_count, briefing_id=briefing_id
+        )
 
     async def _get(self, job_id: UUID) -> UrlIngestionJob:
         async with self._uow_factory() as uow:

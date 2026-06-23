@@ -106,3 +106,30 @@ async def test_extract_startup_profile_raises_when_extractor_unavailable() -> No
         await use_case.execute(
             ExtractStartupProfileInput(startup_id=startup.id)
         )
+
+
+@pytest.mark.anyio
+async def test_try_extract_persists_outcome() -> None:
+    uow = _make_uow()
+    startup = Startup(name="Acme AI")
+    await uow.startup_repository.save(startup)
+    outcome = ExtractionOutcome(founders=["Ana Silva"])
+    extractor = FakeExtractionPort(outcome)
+
+    use_case = ExtractStartupProfile(lambda: uow, extractor)
+    await use_case.try_extract(startup.id)
+
+    assert uow.startup_repository.items[startup.id].founders == ("Ana Silva",)
+
+
+@pytest.mark.anyio
+async def test_try_extract_is_noop_when_extractor_unavailable() -> None:
+    uow = _make_uow()
+    startup = Startup(name="Acme AI")
+    await uow.startup_repository.save(startup)
+
+    use_case = ExtractStartupProfile(lambda: uow, None)
+
+    await use_case.try_extract(startup.id)
+
+    assert uow.startup_repository.items[startup.id].founders == ()

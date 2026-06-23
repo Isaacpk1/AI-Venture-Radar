@@ -18,7 +18,8 @@ from apps.api.src.modules.ingestion.application.public.ingested_reader import (
 )
 
 _SUMMARY_QUERY = text("""
-    SELECT id, scraping_result_id, url, title, word_count, chunk_count, source_type
+    SELECT id, scraping_result_id, url, title, word_count, chunk_count,
+           source_type, clean_text
     FROM documents
     WHERE scraping_result_id = :scraping_result_id
 """)
@@ -59,6 +60,7 @@ class PostgresIngestedDocumentReader(IngestedDocumentReader):
                 word_count=row.word_count,
                 chunk_count=row.chunk_count,
                 source_type=DocumentSourceType(row.source_type),
+                clean_text=row.clean_text,
             )
         finally:
             await session.close()

@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -39,6 +39,16 @@ class UrlIngestionJobModel(Base):
         PostgresUUID(as_uuid=True), nullable=True
     )
     embedding_job_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), nullable=True
+    )
+    startup_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), nullable=True
+    )
+    evidence_attached: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    recommendation_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    briefing_id: Mapped[UUID | None] = mapped_column(
         PostgresUUID(as_uuid=True), nullable=True
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

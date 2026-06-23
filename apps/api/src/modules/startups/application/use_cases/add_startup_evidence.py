@@ -1,8 +1,13 @@
 """Caso de uso para associar evidencia aprovada a uma startup."""
 
+from uuid import UUID
+
 from apps.api.src.modules.startups.application.dto import (
     AddStartupEvidenceInput,
     StartupEvidenceView,
+)
+from apps.api.src.modules.startups.application.public.evidence_attacher import (
+    EvidenceAttacher,
 )
 from apps.api.src.modules.startups.application.unit_of_work import (
     StartupsUnitOfWorkFactory,
@@ -11,11 +16,30 @@ from apps.api.src.modules.startups.domain.entities import StartupEvidence
 from apps.api.src.modules.startups.domain.exceptions import StartupNotFoundError
 
 
-class AddStartupEvidence:
+class AddStartupEvidence(EvidenceAttacher):
     """Associa uma evidencia de scraping a uma startup."""
 
     def __init__(self, uow_factory: StartupsUnitOfWorkFactory) -> None:
         self._uow_factory = uow_factory
+
+    async def attach_evidence(
+        self,
+        *,
+        startup_id: UUID,
+        scraping_result_id: UUID,
+        source_url: str,
+        title: str | None = None,
+        notes: str | None = None,
+    ) -> None:
+        await self.execute(
+            AddStartupEvidenceInput(
+                startup_id=startup_id,
+                scraping_result_id=scraping_result_id,
+                source_url=source_url,
+                title=title,
+                notes=notes,
+            )
+        )
 
     async def execute(
         self, evidence_input: AddStartupEvidenceInput

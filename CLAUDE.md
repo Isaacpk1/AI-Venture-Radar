@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
-## Authoritative Current State (2026-06-22)
+## Authoritative Current State (2026-06-23)
 
 Use this section as the source of truth when older historical sections below
 disagree.
@@ -22,14 +22,16 @@ NVIDIA Knowledge V1
 NVIDIA Knowledge V2 foundation + source registry + first real end-to-end validation (2/8 P0 sources)
 Recommendations V1
 Briefing V1
-Orchestration V1 + V2 partial URL ingestion jobs + orchestration_worker automatico
+Orchestration V1 + V2 completa (URL bruta -> scraping -> ingestion -> embeddings -> startup -> evidencia -> extract -> classify -> recommendations -> briefing, sem operacao manual entre etapas) + orchestration_worker automatico
 ```
 
 MVP macro backlog (`docs/roadmap_proximos_passos.md`) is complete, and the
 top case-brief gap (Startup Classifier, see diagnostic doc) is closed too:
 scraping -> ingestion -> embeddings -> startups -> rag -> recommendations ->
 briefing -> orchestration all implemented, plus Agents V9 + Startups V3
-(AI-native/AI-enabled/Non-AI classification).
+(AI-native/AI-enabled/Non-AI classification). Orchestration V2 P0 #1
+(`docs/roadmap_produto_final.md`) is also closed: a raw URL now produces a
+briefing and recommendations end to end automatically.
 
 Pending:
 
@@ -37,13 +39,13 @@ Pending:
 Frontend
 Auth
 Production observability
-Orchestration V2 - URL bruta ate startup/recommendations/briefing (worker automatico de scraping->ingestion->embeddings ja entregue)
+Recommendations V2/V4 - incorporate ai_maturity_level into the score (Startup.ai_maturity_level exists since Startups V3/Agents V9, but match_technologies() still ignores it)
 ```
 
 Recent validation:
 
 ```txt
-443 passed (Postgres/Redis/Qdrant locais ativos)
+457 passed (Postgres/Redis/Qdrant locais ativos)
 Integration tests are skipped explicitly when local Postgres/Redis/Qdrant
 are not reachable; with infra active, they run normally.
 
@@ -62,35 +64,29 @@ networking issue, not a code bug.
 Next recommended implementation:
 
 ```txt
-Diagnostic priorities 1-3 done, plus Startups V2 and Extraction Agent
-(V8) delivered ahead of schedule. Agreed sequence now in progress (see
-docs/diagnostico_case_original_e_novas_prioridades.md section 8 and
-docs/agents/roadmap_agentes.md): NVIDIA Knowledge V2 foundation is done
-via `documents.source_type`, Qdrant payload `source_type`, optional RAG
-filters, `GET /nvidia-knowledge/sources`, and
-`POST /nvidia-knowledge/ingestion/jobs` to create `url_ingestion_jobs`
-with `source_type="nvidia_knowledge"`. Orchestration V2 now has
-`url_ingestion_jobs` plus `workers/orchestration_worker/` reenfileirando
-automaticamente via Dramatiq (fila `url_ingestion`, actor
-`advance_url_ingestion_job`) ate completed|failed, substituindo o advance
-manual. NVIDIA RAG Agent (V10) is done: `NvidiaRagGraph` calls
-`rag/application/public/question_answerer.py` as a tool (no own LLM
-client), filtered to `source_type="nvidia_knowledge"`. Recommendation
-Agent (V11) is done too: `RecommendationAgentGraph` calls
-`recommendations/application/public/recommendation_generator.py` as a
-tool **and** has its own Gemini client (`LangChainGeminiRecommendationReviewer`)
-to judge ambiguous-score candidates and rewrite justifications in business
-language — code-enforced guard keeps confident-score candidates
-regardless of what the LLM says. Briefing Agent (V12) closes out all 8
-brief agents: `BriefingAgentGraph` calls
-`briefing/application/public/briefing_generator.py` as a tool and always
-calls its own Gemini client (`LangChainGeminiBriefingProseRewriter`) to
-rewrite the executive prose — code-enforced fallback returns the
-deterministic Markdown unchanged if the rewrite drops any citation URL.
-None of V10/V11/V12 has a synchronous consumer yet — reachable only via
-the generic `agent_runs` queue. wiring Startup.ai_maturity_level into
-recommendations' scoring is a smaller separate follow-up, not done yet.
-Frontend and integration hardening remain open and can run in parallel.
+Orchestration V2 P0 #1 (docs/roadmap_produto_final.md) is now closed:
+AdvanceUrlIngestionJob gained an ANALYZING status between EMBEDDING and
+COMPLETED that runs, in a single synchronous pass, create/associate
+Startup -> attach evidence -> try_extract/try_classify (best-effort) ->
+recommendations.generate() -> briefing.generate(). Jobs with
+source_type != "startup_evidence" (e.g. nvidia_knowledge) still complete
+right after embedding, unchanged. `startups` gained its first 4 public
+contracts beyond StartupProfileReader (StartupCreator, EvidenceAttacher,
+ExtractionTrigger, ClassificationTrigger) so orchestration never reaches
+into startups' internals. See
+docs/orchestration/orchestration_v2_jornada_completa.md.
+
+Remaining P0/P1 from docs/roadmap_produto_final.md: Frontend (P0 #2);
+finish NVIDIA Knowledge V2's remaining P0/P1/P2 sources (P1 #3);
+Recommendations V2/V4 — incorporate ai_maturity_level into the score,
+add priority/confidence/complexity, integrate Recommendation Agent V11
+into the main path (P1 #4); Briefing export + human review, integrate
+Briefing Agent V12 (P1 #5). None of Agents V10/V11/V12 has a synchronous
+consumer yet — reachable only via the generic `agent_runs` queue; the
+automatic orchestration flow uses the deterministic
+recommendations/briefing generators (V1), not the agents. P2 (auth,
+observability, CI/CD, deploy) and P3 (case differentiator, demo) remain
+fully open.
 ```
 
 Relevant docs:
@@ -478,6 +474,12 @@ Extensao feita durante a entrega do Embeddings V4 (modulo `ingestion` continua V
 - `PostgresIngestedDocumentReader` (`infrastructure/database/`) — primeira implementacao concreta do contrato (existia desde a V1 mas nunca tinha sido implementado nem usado); SQL textual, mesmo padrao do `PostgresScrapingResultReader`
 - `IngestionFactory.create_ingested_document_reader()`
 
+Extensao feita durante o fechamento da Orchestration V2 (continua V1):
+`IngestedDocumentSummary` ganha `clean_text: str = ""` — primeira vez que
+o texto limpo do documento (nao so os chunks) e exposto via contrato
+publico; `orchestration` usa para nomear a startup criada e como conteudo
+da evidencia anexada.
+
 Tabelas: `ingestion_jobs`, `documents`, `chunks`
 Worker: `workers/ingestion_worker/` — consome fila `ingestion`
 Testes: 33 unit + 1 integracao (novo, exige Postgres real rodando)
@@ -589,6 +591,24 @@ original, ver limites na secao do documento da entrega):
 - Testes: 21 unit + 1 integracao (+5 unit desta entrega: 2 entidade, 3 caso de uso)
 
 Documento da entrega: `docs/startups/startups_v3_classificacao_maturidade.md`.
+
+Extensao feita durante o fechamento da Orchestration V2 (continua V3, nao
+e' nova versao — primeira vez que o modulo ganha contratos publicos alem
+de `StartupProfileReader`, ver
+`docs/orchestration/orchestration_v2_jornada_completa.md`):
+- 4 contratos publicos novos em `application/public/`: `StartupCreator`
+  (`create_startup`), `EvidenceAttacher` (`attach_evidence`),
+  `ExtractionTrigger` (`try_extract`), `ClassificationTrigger`
+  (`try_classify`) — cada um implementado direto pelo use case existente
+  (`CreateStartup`, `AddStartupEvidence`, `ExtractStartupProfile`,
+  `ClassifyStartup`), mesmo padrao de
+  `GenerateRecommendations(RecommendationGenerator)`
+- `try_extract`/`try_classify` fazem o swallow de
+  `StartupExtractionUnavailableError`/`StartupClassificationUnavailableError`
+  (sem `GEMINI_API_KEY`) dentro do proprio modulo — quem chama
+  (`orchestration`) nunca precisa conhecer essas excecoes
+- Testes: +6 unit (1 `create_startup`, 1 `attach_evidence`, 2
+  `try_extract`, 2 `try_classify`)
 
 ---
 
@@ -751,11 +771,11 @@ Extensao feita durante a entrega do Orchestration V1 (continua V1):
 | Versao | Status | O que foi entregue |
 |---|---|---|
 | V1 | Entregue | analysis_jobs a partir de startup_id existente (recommendations -> briefing) |
-| V2 | Em andamento | Entrada por URL bruta (scraping/ingestion/embeddings) |
+| V2 | Entregue | Entrada por URL bruta, ponta a ponta: scraping -> ingestion -> embeddings -> startup -> evidencia -> extract -> classify -> recommendations -> briefing |
 | V3 | Futuro | Retomada de jobs falhados (retry por etapa) |
 | V4 | Futuro | Notificacoes de conclusao |
 
-**Versao atual: V1 + V2 parcial**
+**Versao atual: V2 — jornada completa URL -> briefing**
 
 Decisao de escopo confirmada com o usuario: V1 assume que scraping,
 ingestion, embeddings e evidencias da startup ja foram feitos manualmente
@@ -826,6 +846,45 @@ startup/briefing):
 
 Documento da entrega: `docs/orchestration/orchestration_v2_worker_automatico.md`.
 
+O que a V2 entregou no fechamento final (jornada completa URL -> briefing,
+fecha o P0 #1 de `docs/roadmap_produto_final.md`):
+- Novo status `ANALYZING` em `UrlIngestionJobStatus`, entre `EMBEDDING` e
+  `COMPLETED`; `UrlIngestionJob` ganha `startup_id`, `evidence_attached`,
+  `recommendation_count`, `briefing_id` e os metodos
+  `start_analyzing()`/`link_startup()`/`mark_evidence_attached()`/
+  `record_analysis_result()`
+- `AdvanceUrlIngestionJob` ganha o branch `ANALYZING`: roda numa unica
+  entrega create/associate `Startup` -> attach evidence -> try_extract +
+  try_classify (best-effort) -> recommendations.generate() ->
+  briefing.generate(); falha e' terminal (`job.fail()`, sem relancar,
+  diferente do padrao "ainda processando" das etapas assincronas
+  anteriores); guardas de idempotencia (`startup_id`/`evidence_attached`
+  persistidos assim que resolvidos) protegem contra reentrega-por-crash
+  do Dramatiq
+- Gate por `source_type`: so `"startup_evidence"` entra em `ANALYZING`;
+  qualquer outro valor (`nvidia_knowledge` etc) completa direto ao fim do
+  embedding, como antes (allow-list deliberada)
+- 4 contratos publicos novos em `startups/application/public/`
+  (`StartupCreator`, `EvidenceAttacher`, `ExtractionTrigger`,
+  `ClassificationTrigger`), implementados direto pelos use cases
+  existentes — antes desta entrega `startups` so tinha
+  `StartupProfileReader`
+- `IngestedDocumentSummary` (`ingestion`) ganha `clean_text: str = ""`
+- `StartupsPort` novo em `orchestration/application/ports.py`;
+  `IngestionPort` ganha `get_document_content()`; adapter novo
+  `infrastructure/startups_adapters/startups_adapter.py`
+  (`StartupsModulePort`) — unica peca de `orchestration` que conhece
+  `startups`
+- `UrlIngestionJobView`/`UrlIngestionJobResponse` expoem `startup_id`,
+  `recommendation_count`, `briefing_id` para polling do frontend;
+  `POST /url-ingestion/jobs` aceita `startup_id` opcional (modo "associar
+  a startup existente" em vez de criar uma nova)
+- Migration `4c8a1f6e9b2d`: 4 colunas novas em `url_ingestion_jobs`
+- Testes: +16 (7 unit em `test_url_ingestion_job.py`, 6 unit em
+  `startups` para os 4 contratos novos, 1 integracao nova)
+
+Documento da entrega: `docs/orchestration/orchestration_v2_jornada_completa.md`.
+
 ---
 
 ## Database state
@@ -851,8 +910,10 @@ Documento da entrega: `docs/orchestration/orchestration_v2_worker_automatico.md`
 | `1d3e7f9a2b4c` | 2026-06-22 | Adiciona `source_type` em documents para separar startup_evidence/nvidia_knowledge |
 | `2a7c9b8d1e5f` | 2026-06-22 | Adiciona `source_type` em ingestion_jobs para preservar contexto ate o worker |
 | `5b6c7d8e9f01` | 2026-06-22 | Cria `url_ingestion_jobs` para Orchestration V2 |
+| `7d4f2a9c6e83` | 2026-06-22 | Adiciona `source_type` em scraping_jobs para preservar origem desde a coleta |
+| `4c8a1f6e9b2d` | 2026-06-23 | Adiciona `startup_id`/`evidence_attached`/`recommendation_count`/`briefing_id` em url_ingestion_jobs (Orchestration V2 jornada completa) |
 
-**Head atual: `5b6c7d8e9f01`**
+**Head atual: `4c8a1f6e9b2d`**
 
 ### Tabelas existentes
 
@@ -876,7 +937,7 @@ startup_evidences       evidencia aprovada associada a uma startup (FK scraping_
 recommendations         tecnologia NVIDIA recomendada por startup (score, justificativa, matched_keywords, evidence_ids)
 briefings               briefing executivo em Markdown por startup (substitui o anterior a cada geracao)
 analysis_jobs           historico de execucoes recommendations->briefing por startup (status, recommendation_count, briefing_id, error_message)
-url_ingestion_jobs      orquestracao URL -> scraping -> ingestion -> embeddings com source_type
+url_ingestion_jobs      orquestracao URL -> scraping -> ingestion -> embeddings -> startup -> recommendations -> briefing, com source_type/startup_id/recommendation_count/briefing_id
 ```
 
 ---
@@ -889,21 +950,22 @@ url_ingestion_jobs      orquestracao URL -> scraping -> ingestion -> embeddings 
 | agents | 97 unit + 1 integracao | 2026-06-22 |
 | ingestion | 33 unit + 1 integracao | 2026-06-21 |
 | embeddings | 56 unit + 2 integracao | 2026-06-21 |
-| startups | 27 unit + 1 integracao | 2026-06-22 |
+| startups | 33 unit + 1 integracao | 2026-06-23 |
 | rag | 17 unit + 1 integracao | 2026-06-22 |
 | nvidia_knowledge | 15 unit | 2026-06-22 |
 | recommendations | 19 unit + 1 integracao | 2026-06-21 |
 | briefing | 15 unit + 1 integracao | 2026-06-21 |
-| orchestration | 14 unit + 1 integracao | 2026-06-22 |
-| **Total** | **443 passed, 2 warnings (Postgres/Redis/Qdrant ativos durante a verificacao)** | **2026-06-22** |
+| orchestration | 22 unit + 2 integracao | 2026-06-23 |
+| **Total** | **457 passed, 2 warnings (Postgres/Redis/Qdrant ativos durante a verificacao)** | **2026-06-23** |
 
-Nota: as linhas `ingestion` ate `briefing` (exceto `agents`/`rag`/`scraping`)
-nao foram reconferidas nesta verificacao — refletem a ultima contagem
-conhecida, nao necessariamente o numero exato apos as entregas mais
-recentes. `scraping`, `agents`, `rag`, `orchestration` e o `Total` foram
-medidos de novo nas entregas mais recentes (3 correcoes de scraping +
-modelo de embedding, Orchestration V2 worker, Agents V10, Agents V11,
-Agents V12).
+Nota: as linhas `ingestion`, `embeddings`, `rag`, `nvidia_knowledge`,
+`recommendations`, `briefing` nao foram reconferidas nesta verificacao —
+refletem a ultima contagem conhecida, nao necessariamente o numero exato
+apos as entregas mais recentes. `scraping`, `agents`, `startups`,
+`orchestration` e o `Total` foram medidos de novo nas entregas mais
+recentes (3 correcoes de scraping + modelo de embedding, Orchestration V2
+worker, Agents V10, Agents V11, Agents V12, Orchestration V2 jornada
+completa).
 
 Comando para verificar:
 ```bash
@@ -1029,6 +1091,7 @@ Queue message → full document or large payload
 ### Current inter-module calls
 - `scraping` → `agents/application/public/semantic_investigator.py` (via adapter in `scraping/infrastructure/agent_adapters/`)
 - `nvidia_knowledge` → `scraping/application/public/job_submitter.py` (via adapter in `nvidia_knowledge/infrastructure/scraping_adapters/`)
+- `orchestration` → `startups/application/public/{startup_creator,evidence_attacher,extraction_trigger,classification_trigger}.py` (via adapter in `orchestration/infrastructure/startups_adapters/`)
 - Both modules use `shared/queue/dramatiq_broker.py`
 
 ---
@@ -1098,7 +1161,7 @@ pytest -k "test_acceptance_policy_rejects_captcha" -v
 # Run DB migrations
 alembic upgrade head
 
-# Current migration head: 5b6c7d8e9f01 (url_ingestion_jobs)
+# Current migration head: 4c8a1f6e9b2d (url_ingestion_jobs analysis fields)
 ```
 
 ---
@@ -1181,7 +1244,8 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Briefing roadmap | `docs/briefing/roadmap_briefing.md` |
 | Orchestration V1 (current) | `docs/orchestration/orchestration_v1_analysis_jobs.md` |
 | Orchestration V2 URL ingestion jobs | `docs/orchestration/orchestration_v2_url_ingestion_jobs.md` |
-| Orchestration V2 worker automatico (current) | `docs/orchestration/orchestration_v2_worker_automatico.md` |
+| Orchestration V2 worker automatico | `docs/orchestration/orchestration_v2_worker_automatico.md` |
+| Orchestration V2 jornada completa (current) | `docs/orchestration/orchestration_v2_jornada_completa.md` |
 | Orchestration roadmap | `docs/orchestration/roadmap_orchestration.md` |
 | Diagnostico vs. case original + prioridades | `docs/diagnostico_case_original_e_novas_prioridades.md` |
 | Estado atual do projeto | `docs/estado_atual_do_projeto.md` |

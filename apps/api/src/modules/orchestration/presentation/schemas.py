@@ -44,6 +44,7 @@ class AnalysisJobResponse(BaseModel):
 class CreateUrlIngestionJobRequest(BaseModel):
     url: str
     source_type: str = Field(default="startup_evidence")
+    startup_id: UUID | None = None
 
 
 class UrlIngestionJobResponse(BaseModel):
@@ -56,6 +57,9 @@ class UrlIngestionJobResponse(BaseModel):
     ingestion_job_id: UUID | None
     document_id: UUID | None
     embedding_job_id: UUID | None
+    startup_id: UUID | None
+    recommendation_count: int | None
+    briefing_id: UUID | None
     error_message: str | None
     created_at: datetime
     started_at: datetime | None
@@ -73,6 +77,9 @@ class UrlIngestionJobResponse(BaseModel):
             ingestion_job_id=view.ingestion_job_id,
             document_id=view.document_id,
             embedding_job_id=view.embedding_job_id,
+            startup_id=view.startup_id,
+            recommendation_count=view.recommendation_count,
+            briefing_id=view.briefing_id,
             error_message=view.error_message,
             created_at=view.created_at,
             started_at=view.started_at,

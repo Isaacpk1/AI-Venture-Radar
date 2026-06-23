@@ -1,6 +1,6 @@
 # Estado Atual do Projeto - NVIDIA Startup AI Radar
 
-Documento de referencia do estado real em 22/06/2026.
+Documento de referencia do estado real em 23/06/2026.
 
 ---
 
@@ -31,7 +31,7 @@ busca, extracao estruturada e classificacao de maturidade em IA.
 | nvidia_knowledge | V1 expandido + V2 em andamento | catalogo cobre o brief; source_type, registry e submissao inicial para scraping criados |
 | recommendations | V1 | regras deterministicas por overlap de keywords |
 | briefing | V1 | briefing Markdown deterministico |
-| orchestration | V1 + V2 parcial | analysis_jobs; url_ingestion_jobs para scraping -> ingestion -> embeddings com worker automatico (Dramatiq) |
+| orchestration | V1 + V2 completa | analysis_jobs; url_ingestion_jobs leva URL bruta ate startup/recommendations/briefing com worker automatico (Dramatiq) |
 
 ---
 
@@ -84,6 +84,7 @@ f77998c46d08  campos estruturados em startups
 2a7c9b8d1e5f  source_type em ingestion_jobs para preservar tipo ate o worker
 5b6c7d8e9f01  url_ingestion_jobs para Orchestration V2
 7d4f2a9c6e83  source_type em scraping_jobs para preservar origem desde a coleta
+4c8a1f6e9b2d  startup_id/evidence_attached/recommendation_count/briefing_id em url_ingestion_jobs (Orchestration V2 jornada completa)
 ```
 
 Tabelas principais:
@@ -107,7 +108,7 @@ url_ingestion_jobs
 Validacao registrada em `CLAUDE.md`:
 
 ```txt
-443 passed
+457 passed
 ```
 
 A suite total agora marca dependencias de integracao como `skip` explicito
@@ -127,7 +128,7 @@ NVIDIA Knowledge V2 - terminar de rodar o restante do registry (2/8 P0 ja valida
 Frontend
 Diferencial do projeto escolhido e apresentado
 Auth, observabilidade e hardening de integracao
-Orchestration V2 - continuidade ate startup/recommendations/briefing a partir de URL bruta (worker automatico de scraping->ingestion->embeddings ja entregue)
+Recommendations V2/V4 - incorporar ai_maturity_level ao score (Startup.ai_maturity_level existe desde Startups V3, recommendations ainda nao consulta)
 ```
 
 ---
@@ -155,13 +156,14 @@ pendente para o usuario resolver no ambiente. Os 8/8 agentes do brief
 original ja foram entregues: Recommendation Agent (V11,
 `docs/agents/agents_v11_recommendation_agent.md`) e Briefing Agent (V12,
 `docs/agents/agents_v12_briefing_agent.md`) fecham o Entregavel 2 por
-completo. Falta completar o restante da Orchestration V2 ate
-startup/recommendations/briefing a partir de uma
-URL bruta.
+completo. A Orchestration V2 tambem foi fechada (URL bruta ate
+startup/recommendations/briefing sem operacao manual, ver
+`docs/orchestration/orchestration_v2_jornada_completa.md`).
 
 ## Prioridade Atual
 
-O plano detalhado esta em `docs/roadmap_produto_final.md`. A prioridade imediata
-e fechar Orchestration V2 da URL ate briefing e, em paralelo, iniciar o
-frontend. Em seguida entram qualidade das recomendacoes, revisao/exportacao e
+O plano detalhado esta em `docs/roadmap_produto_final.md`. Com a
+Orchestration V2 fechada, a prioridade imediata e o frontend (P0 #2) e, em
+paralelo, terminar NVIDIA Knowledge V2 (P1 #3). Em seguida entram qualidade
+das recomendacoes (`ai_maturity_level` no score), revisao/exportacao e
 hardening de producao.

@@ -20,6 +20,10 @@ class UrlIngestionJobMapper:
             ingestion_job_id=entity.ingestion_job_id,
             document_id=entity.document_id,
             embedding_job_id=entity.embedding_job_id,
+            startup_id=entity.startup_id,
+            evidence_attached=entity.evidence_attached,
+            recommendation_count=entity.recommendation_count,
+            briefing_id=entity.briefing_id,
             error_message=entity.error_message,
             created_at=entity.created_at,
             started_at=entity.started_at,
@@ -38,6 +42,10 @@ class UrlIngestionJobMapper:
             ingestion_job_id=model.ingestion_job_id,
             document_id=model.document_id,
             embedding_job_id=model.embedding_job_id,
+            startup_id=model.startup_id,
+            evidence_attached=model.evidence_attached,
+            recommendation_count=model.recommendation_count,
+            briefing_id=model.briefing_id,
             error_message=model.error_message,
             created_at=model.created_at,
             started_at=model.started_at,
@@ -54,6 +62,10 @@ class UrlIngestionJobMapper:
         model.ingestion_job_id = entity.ingestion_job_id
         model.document_id = entity.document_id
         model.embedding_job_id = entity.embedding_job_id
+        model.startup_id = entity.startup_id
+        model.evidence_attached = entity.evidence_attached
+        model.recommendation_count = entity.recommendation_count
+        model.briefing_id = entity.briefing_id
         model.error_message = entity.error_message
         model.started_at = entity.started_at
         model.finished_at = entity.finished_at

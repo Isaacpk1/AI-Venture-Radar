@@ -1,10 +1,15 @@
 """Caso de uso para classificar a maturidade de IA de uma startup."""
 
+from uuid import UUID
+
 from apps.api.src.modules.startups.application.dto import (
     ClassifyStartupInput,
     StartupView,
 )
 from apps.api.src.modules.startups.application.ports import StartupClassifierPort
+from apps.api.src.modules.startups.application.public.classification_trigger import (
+    ClassificationTrigger,
+)
 from apps.api.src.modules.startups.application.unit_of_work import (
     StartupsUnitOfWorkFactory,
 )
@@ -17,7 +22,7 @@ from apps.api.src.modules.startups.domain.exceptions import (
 )
 
 
-class ClassifyStartup:
+class ClassifyStartup(ClassificationTrigger):
     """Classifica uma startup chamando o Startup Classifier Agent."""
 
     def __init__(
@@ -27,6 +32,12 @@ class ClassifyStartup:
     ) -> None:
         self._uow_factory = uow_factory
         self._classifier = classifier
+
+    async def try_classify(self, startup_id: UUID) -> None:
+        try:
+            await self.execute(ClassifyStartupInput(startup_id=startup_id))
+        except StartupClassificationUnavailableError:
+            return
 
     async def execute(self, classify_input: ClassifyStartupInput) -> StartupView:
         if self._classifier is None:
