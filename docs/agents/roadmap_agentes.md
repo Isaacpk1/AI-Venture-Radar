@@ -49,6 +49,19 @@ Status:
 implementado na V3
 ```
 
+**Limite confirmado em 23/06/2026:** `SearchPlanResult`
+(`application/dto.py:101-105`) devolve so `queries: list[SearchQuerySuggestion]`
+— sugestoes de QUERY DE TEXTO (query + proposito + prioridade), nunca uma
+URL candidata. O agente planeja a busca, mas nada no projeto executa essa
+busca: nao ha client de API de busca web (Tavily/SerpAPI/Google Search/Bing)
+em `requirements.txt` nem chave correspondente em `config/settings.py`. Hoje
+o unico jeito de obter conteudo e raspar uma URL ja conhecida (`scraping`).
+Por isso o agente nunca foi acoplado a um fluxo de "buscar mais evidencia
+quando falta campo estruturado" — falta a metade que transforma query em
+URL. Ver secao "Tecnologias candidatas" abaixo e
+`docs/orchestration/roadmap_orchestration.md` para o desenho de como fechar
+esse loop.
+
 ### Scraper Coordination Agent
 
 Coordena novas coletas chamando o modulo de scraping por contratos publicos.
@@ -276,3 +289,27 @@ Trabalho restante fora do Entregavel 2: terminar NVIDIA Knowledge V2
 contra o resto do registry, dar consumidores sincronos reais a V10/V11/V12
 (hoje so acionaveis pela fila generica `agent_runs`), e o Entregavel 5
 (Frontend) e 6 (Diferencial), que continuam fora do escopo de `agents`.
+
+---
+
+## Tecnologias candidatas (auditoria de codigo, 23/06/2026)
+
+Confirmado lendo `application/use_cases/execute_agent_job.py` e os 7
+`application/public/*.py`: NVIDIA RAG (V10), Recommendation (V11) e
+Briefing (V12) so tem `AgentType` wired na fila generica `agent_runs` —
+nenhum modulo chama esses 3 sincronamente, diferente de Extraction/Startup
+Classifier (V8/V9, chamados por `startups`). Sao os agentes mais
+sofisticados do projeto e os unicos sem consumidor real no fluxo de
+producao.
+
+| Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
+|---|---|---|---|
+| NVIDIA RAG/Recommendation/Briefing Agent so acionaveis via fila generica, nunca chamados pelo fluxo automatico | adapter sincrono em `orchestration` chamando esses 3 agentes (mesmo padrao de `AgentsExtractor`/`AgentsStartupClassifier` que `startups` ja usa) no lugar dos geradores V1 deterministicos, dentro da etapa `ANALYZING` | P1 #4/#5 do `docs/roadmap_produto_final.md` | Medio — sem tech nova, e' so trocar qual porta `AdvanceUrlIngestionJob` chama |
+| Nenhum `agent_run` tem timeout aplicado, so a estrutura existe | `asyncio.timeout(...)` em volta da chamada do grafo dentro de `execute_agent_job.py`, usando os limites que o `CLAUDE.md` ja declara obrigatorios (`max_iterations`, `timeout_total`) | Resiliencia de todos os 7 agentes | Baixo — biblioteca padrao do Python, sem dependencia nova |
+| Custo/latencia por agente nao tem painel, so trace individual no Langfuse | dashboard Langfuse agrupado por `agent_type` (Fase 0 de `docs/roadmap_evolucao_tecnica_mvp.md` ja entrega os dados via callback handler; falta so a visao agregada) | Fase 4 do roadmap de evolucao tecnica | Baixo — configuracao no Langfuse, sem codigo novo |
+| Search Planner Agent so gera queries de texto; nao existe client de busca web real para transformar query em URL candidata | `Tavily` (free tier, client Python simples, integra direto com LangChain — `langchain_community.tools.tavily_search`, zero infra propria) como `SearchExecutorPort` novo (`agents/application/ports.py`), implementado em `infrastructure/search_adapters/` | Habilita a "chain de enriquecimento" descrita em `docs/orchestration/roadmap_orchestration.md` ("Tecnologias candidatas") | Medio — 1 dependencia + adapter novo + variavel de ambiente `TAVILY_API_KEY`, sem mudar o grafo do Search Planner |
+
+Nao criar um orquestrador de agentes separado (ex: CrewAI, AutoGen) por
+cima do LangGraph existente: os 7 grafos ja seguem o mesmo padrao estrutural
+(3-4 nodes, `application/public/` como unico ponto de entrada) e trocar de
+framework reescreveria tudo sem resolver nenhuma das 3 fraquezas acima.

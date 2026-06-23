@@ -145,3 +145,22 @@ Ele nao deve importar infraestrutura interna do scraping.
 
 Ele nao deve chamar Qdrant diretamente. Qdrant pertence ao modulo de embeddings
 ou retrieval.
+
+---
+
+## Tecnologias candidatas (auditoria de codigo, 23/06/2026)
+
+Confirmado lendo `application/text_chunker.py` e `application/text_cleaner.py`:
+ambos sao implementacoes manuais (split por paragrafo/sentenca/palavra, sem
+lib externa). Funcionam, mas duas fraquezas reais do codigo ja tem
+tecnologia candidata sem dependencia nova no projeto:
+
+| Fraqueza confirmada | Tecnologia | Serve a | Esforco |
+|---|---|---|---|
+| `TextChunker` corta por contagem de caracteres, sem respeitar estrutura (titulos, listas) | `langchain_text_splitters` (`RecursiveCharacterTextSplitter`/`MarkdownHeaderTextSplitter`) — LangChain ja e dependencia direta de `agents` e `embeddings`, zero lib nova no projeto | Ingestion V2 (Limpeza Textual) | Baixo — troca a implementacao atras do mesmo `TextChunker`, sem mudar o contrato publico |
+| Mesma URL raspada de novo gera novo `Document` + novos `Chunk`, sem dedup | hash do `clean_text` (`content_hash`), mesmo padrao que `scraping_results.content_hash` (unique constraint) ja usa | Ingestion V3 (Deduplicacao e Versionamento) | Medio — migration + checagem antes de criar `Document` |
+
+Nao adotar Elasticsearch/Apache Tika aqui: o texto que chega ja passou pela
+validacao deterministica do `scraping` (V5-V8); `ingestion` so precisa
+limpar formatacao residual de HTML/Markdown ja extraido, nao parsear
+PDFs/binarios — fora do escopo real do modulo hoje.

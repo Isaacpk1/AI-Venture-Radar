@@ -30,7 +30,14 @@ class GeminiRagAnswerResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     answer: str = Field(min_length=1, max_length=4000)
-    citations: list[GeminiRagCitationResponse] = Field(min_length=1, max_length=10)
+    # Sem min_length: quando a evidencia recuperada nao responde a
+    # pergunta, o Gemini deve dizer isso e devolver citations vazio, nao
+    # inventar uma citacao so para satisfazer o schema. O caso de uso
+    # (_to_view) trata lista vazia como erro de dominio explicito, nao
+    # como falha de parsing do LLM.
+    citations: list[GeminiRagCitationResponse] = Field(
+        default_factory=list, max_length=10
+    )
 
 
 class LangChainGeminiRagAnswerGenerator(RagAnswerGenerator):
@@ -89,9 +96,12 @@ class LangChainGeminiRagAnswerGenerator(RagAnswerGenerator):
         system_message = SystemMessage(
             content=(
                 "Voce e o modulo RAG do AI Venture Radar. Responda somente com "
-                "base nas evidencias fornecidas. Nao invente fatos. Se as "
-                "evidencias forem insuficientes, diga isso claramente. Sempre "
-                "cite pelo menos um chunk_id usado."
+                "base nas evidencias fornecidas. Nao invente fatos. Cite o "
+                "chunk_id de cada evidencia realmente usada na resposta. Se "
+                "as evidencias recuperadas nao responderem a pergunta, diga "
+                "isso claramente na resposta e devolva citations como uma "
+                "lista vazia — nunca cite um chunk que nao sustenta a "
+                "resposta so para preencher a lista."
             )
         )
         human_message = HumanMessage(
@@ -151,8 +161,13 @@ class LangChainGeminiRagAnswerGenerator(RagAnswerGenerator):
                 )
             )
 
-        if not citations:
-            raise RagAnswerGenerationError("Resposta RAG nao trouxe citacoes.")
+        # citations vazio e' uma resposta valida, nao uma falha do sistema:
+        # o prompt pede explicitamente "diga isso claramente" quando a
+        # evidencia recuperada nao sustenta uma resposta. Tratar como erro
+        # (antes: RagAnswerGenerationError -> HTTP 502) devolvia uma falha
+        # de gateway para o que e' so o modelo sendo honesto sobre nao ter
+        # informacao suficiente - encontrado avaliando a baseline de
+        # qualidade do RAG (Fase 2, ver docs/roadmap_evolucao_tecnica_mvp.md).
 
         return RagAnswerView(
             query=answer_input.query,

@@ -19,7 +19,7 @@ Embeddings V5 + embedding_worker
 Startups V2 + V3 (slices iniciais: campos estruturados + classificacao de maturidade em IA)
 RAG V4 (busca hibrida + reranking)
 NVIDIA Knowledge V1
-NVIDIA Knowledge V2 foundation + source registry + first real end-to-end validation (2/8 P0 sources)
+NVIDIA Knowledge V2 foundation + source registry + P0+P1+P2 complete (20/20 sources processed, 17/20 with retrievable content)
 Recommendations V1
 Briefing V1
 Orchestration V1 + V2 completa (URL bruta -> scraping -> ingestion -> embeddings -> startup -> evidencia -> extract -> classify -> recommendations -> briefing, sem operacao manual entre etapas) + orchestration_worker automatico
@@ -36,8 +36,9 @@ briefing and recommendations end to end automatically.
 Pending:
 
 ```txt
-Frontend (apps/web existe localmente com V1+V2, ainda nao commitado/
-documentado formalmente nesta secao - ver docs/frontend/)
+Frontend V3-V5 (V1+V2 entregues e commitados, ver secao "Frontend module"
+do Module version history e docs/frontend/roadmap_frontend.md; falta
+historico/listagem paginada (V3), painel BI (V4) e revisao humana/auth (V5))
 Auth
 Production observability (foundation exists: shared/logging + shared/
 observability + Langfuse self-hosted via infra/docker-compose.yml,
@@ -86,7 +87,26 @@ logging, e nenhuma chamada LLM tinha tracing. Langfuse self-hosted (v3,
 6 servicos: web/worker/postgres/clickhouse/redis/minio) roda via
 infra/docker-compose.yml; validado com trace real capturado de uma
 chamada de extracao Gemini.
-```
+
+NVIDIA Knowledge V2 completo (P0+P1+P2, 20/20 fontes processadas):
+17/20 com conteudo disponivel. 3 gaps sem fix de codigo possivel agora:
+nvidia-nim-docs e monai-docs (DNS intermitente Windows-side), rapids-docs
+(esgotou BS4/Trafilatura/Playwright, precisaria de Firecrawl). Bug real
+corrigido: `link_farm` sem fallback de estrategia
+(scraping/domain/policies.py) rejeitava paginas de docs tecnicos com
+navegacao densa em links (ex. TensorRT-LLM) — corrigido, validado
+(BS4 -> fallback -> Trafilatura -> accept).
+
+Fase 2 do roadmap_evolucao_tecnica_mvp.md concluida: baseline Ragas
+contra o conteudo NVIDIA Knowledge real (12 perguntas, ver
+test_ragas_quality_baseline.py, opt-in via RUN_RAGAS_EVAL=1):
+faithfulness 0.92, answer_relevancy 0.86, context_precision 0.90,
+context_recall 0.67 (mais fraco — decide se BM25/pg_search da Fase 3
+vale o esforco). Bug real encontrado e corrigido nessa medicao:
+`GeminiRagAnswerResponse.citations` exigia min_length=1, e o codigo
+tratava citations vazio como erro (HTTP 502) em vez de resposta valida
+"evidencia insuficiente" — toda pergunta sem boa evidencia quebrava
+`/rag/answer` em produção; corrigido em langchain_gemini_answer_generator.py.
 
 Next recommended implementation:
 
@@ -103,19 +123,23 @@ ExtractionTrigger, ClassificationTrigger) so orchestration never reaches
 into startups' internals. See
 docs/orchestration/orchestration_v2_jornada_completa.md.
 
-Remaining P0/P1 from docs/roadmap_produto_final.md: commit/sync frontend
-(apps/web V1+V2 exist locally, P0 #2); finish NVIDIA Knowledge V2's
-remaining P0/P1/P2 sources (P1 #3); Recommendations V2/V4 — RAG context
-with citations, priority/confidence/complexity, integrate Recommendation
-Agent V11 into the main path (P1 #4); Briefing export + human review,
-integrate Briefing Agent V12 (P1 #5). None of Agents V10/V11/V12 has a
-synchronous consumer yet — reachable only via the generic `agent_runs`
-queue; the
-automatic orchestration flow uses the deterministic
-recommendations/briefing generators (V1), not the agents. P2 observability
-has a real foundation now (structured logging + Langfuse tracing, see
-"Recent validation" above); auth, CI/CD and deploy remain fully open. P3
-(case differentiator, demo) remains fully open.
+Remaining P0/P1 from docs/roadmap_produto_final.md: Frontend V3-V5 (V1+V2
+are entregue and committed, P0 #2 is now mostly closed — see "Frontend
+module" above; missing pieces are paginated history/listing, BI panel and
+human review/auth); NVIDIA Knowledge V2 P0/P1/P2 sources are now complete
+(20/20 processed, 17/20 with content — P1 #3 closed except the 3 known
+gaps with no code fix available, see roadmap_nvidia_knowledge.md);
+Recommendations V2/V4 — RAG context with citations, priority/confidence/
+complexity, integrate Recommendation Agent V11 into the main path (P1 #4);
+Briefing export + human review, integrate Briefing Agent V12 (P1 #5).
+None of Agents V10/V11/V12 has a synchronous consumer yet — reachable
+only via the generic `agent_runs` queue; the automatic orchestration flow
+uses the deterministic recommendations/briefing generators (V1), not the
+agents (see docs/agents/roadmap_agentes.md, "Tecnologias candidatas", for
+the concrete adapter pattern to close this). P2 observability has a real
+foundation now (structured logging + Langfuse tracing, see "Recent
+validation" above); auth, CI/CD and deploy remain fully open. P3 (case
+differentiator, demo) remains fully open.
 ```
 
 Relevant docs:
@@ -679,11 +703,11 @@ Documentos: `docs/rag/rag_v3_busca_hibrida.md`, `docs/rag/rag_v4_reranking.md`.
 | Versao | Status | O que foi entregue |
 |---|---|---|
 | V1 | Entregue | Catalogo inicial de tecnologias (10 itens) |
-| V2 | Em andamento | Ingestao de fontes oficiais (pipeline real, nao catalogo estatico) |
+| V2 | Entregue (20/20 fontes, 17/20 com conteudo) | Ingestao de fontes oficiais (pipeline real, nao catalogo estatico) |
 | V3 | Futuro | Metadados tecnicos |
 | V4 | Futuro | Busca por caso de uso |
 
-**Versao atual: V1 + V2 em andamento**
+**Versao atual: V1 + V2 completo**
 
 O que a V1 entregou: `NvidiaTechnology`, catalogo estatico em
 `catalog_data.py`, contrato publico `NvidiaTechnologyCatalog`, rotas
@@ -715,10 +739,14 @@ validacao real:
   `/rag/search` filtrado por `source_type=nvidia_knowledge` — corrigiu 4
   bugs que bloqueavam isso (3 em `scraping`, 1 em `embeddings`; ver
   `docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md`)
-- Pendente: re-testar as outras 6 fontes do lote P0 com workers limpos, e
-  rodar P1/P2; resolucao de hostname intermitente do lado Windows
-  (docs.nvidia.com, docs.monai.io) ainda sem solucao — fora do alcance de
-  uma correcao de codigo
+- **Atualizado 23/06/2026:** P0+P1+P2 completo, 20/20 fontes processadas,
+  17/20 com conteudo disponivel. Restam 3 gaps sem fix de codigo possivel
+  agora: `nvidia-nim-docs` e `monai-docs` (hostname intermitente do lado
+  Windows, fora do alcance de uma correcao de codigo), `rapids-docs`
+  (esgotou BS4/Trafilatura/Playwright — precisaria de Firecrawl real, ver
+  `docs/scraping/roadmap_scraping.md`). Bug real corrigido nesse lote:
+  `link_farm` sem fallback de estrategia rejeitava paginas de docs
+  tecnicos com navegacao densa (ex. TensorRT-LLM).
 
 Documento: `docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md`.
 
@@ -926,6 +954,47 @@ Documento da entrega: `docs/orchestration/orchestration_v2_jornada_completa.md`.
 
 ---
 
+### Frontend module
+
+| Versao | Status | O que foi entregue |
+|---|---|---|
+| V1 | Entregue | Fundacao Next.js e jornada URL -> job |
+| V2 | Entregue | Resultado da startup: evidencias, recomendacoes e briefing |
+| V3 | Futuro | Operacao e historico de analises |
+| V4 | Futuro | Painel BI de oportunidades |
+| V5 | Futuro | Revisao humana, auth e colaboracao |
+
+**Versao atual: V2 — primeiro MVP visual completo**
+
+Stack: Next.js + TypeScript + App Router + Tailwind CSS + TanStack Query
+(`apps/web/`). Frontend nao executa regras de negocio: envia comandos ao
+FastAPI via um BFF leve em `app/api/radar/`, faz polling dos jobs e
+apresenta o estado retornado pela API.
+
+O que a V1 entregou: paginas `/` e `/analyze` (formulario de URL),
+`POST /url-ingestion/jobs` via BFF, pagina `/jobs/[jobId]` com linha do
+tempo (`pending -> scraping -> ingesting -> embedding -> analyzing ->
+completed/failed`) e polling a cada 3s ate status terminal.
+
+O que a V2 entregou: pagina `/startups/[startupId]`
+(`features/startups/startup-details.tsx`) com perfil estruturado
+(setor/pais/founders/funding/clientes/maturidade de IA), evidencias com
+link para a fonte, recomendacoes NVIDIA com score/keywords/justificativa,
+e visualizador de briefing em Markdown. Acoes de refazer
+extract/classify/recommendations/briefing ficam para V3.
+
+Gap conhecido (nao corrigido nesta entrega, so documentado): `apps/web` nao
+tem nenhum arquivo de teste (`.test.`/`.spec.`) hoje. Um teste manual no
+navegador encontrou um bug real de Rules of Hooks em `StartupDetails`
+(`useMutation` chamado depois de um return condicional) que trava a pagina
+de resultado da analise — ver `docs/frontend/roadmap_frontend.md` para a
+tecnologia candidata a resolver isso (Vitest + React Testing Library).
+
+Documentos: `docs/frontend/nextjs_arquitetura.md`,
+`docs/frontend/roadmap_frontend.md`.
+
+---
+
 ## Database state
 
 ### Migrations aplicadas
@@ -985,30 +1054,33 @@ url_ingestion_jobs      orquestracao URL -> scraping -> ingestion -> embeddings 
 
 | Modulo | Testes | Ultima verificacao |
 |---|---|---|
-| scraping | 134 | 2026-06-22 |
-| agents | 99 unit + 1 integracao | 2026-06-23 |
-| ingestion | 33 unit + 1 integracao | 2026-06-21 |
-| embeddings | 56 unit + 2 integracao | 2026-06-21 |
-| startups | 36 unit + 1 integracao | 2026-06-23 |
-| rag | 17 unit + 1 integracao | 2026-06-22 |
-| nvidia_knowledge | 15 unit | 2026-06-22 |
-| recommendations | 24 unit + 1 integracao | 2026-06-23 |
-| briefing | 15 unit + 1 integracao | 2026-06-21 |
-| orchestration | 24 unit + 2 integracao | 2026-06-23 |
-| shared | 10 unit (logging + observability, novo) | 2026-06-23 |
-| **Total** | **474 passed, 2 warnings (Postgres/Redis/Qdrant ativos durante a verificacao)** | **2026-06-23** |
+| scraping | 130 unit + 5 integracao | 2026-06-23 |
+| agents | 98 unit + 1 integracao | 2026-06-23 |
+| ingestion | 37 unit + 1 integracao | 2026-06-23 |
+| embeddings | 58 unit + 2 integracao | 2026-06-23 |
+| startups | 35 unit + 1 integracao | 2026-06-23 |
+| rag | 17 unit + 2 integracao | 2026-06-23 |
+| nvidia_knowledge | 15 unit | 2026-06-23 |
+| recommendations | 23 unit + 1 integracao | 2026-06-23 |
+| briefing | 15 unit + 1 integracao | 2026-06-23 |
+| orchestration | 22 unit + 2 integracao | 2026-06-23 |
+| shared | 10 unit (logging + observability) | 2026-06-23 |
+| **Total** | **476 testes coletados** | **2026-06-23** |
 
-Nota: as linhas `ingestion`, `embeddings`, `rag`, `nvidia_knowledge`,
-`briefing` nao foram reconferidas nesta verificacao — refletem a ultima
-contagem conhecida, nao necessariamente o numero exato apos as entregas
-mais recentes. `scraping`, `agents`, `startups`, `recommendations`,
-`orchestration`, `shared` e o `Total` foram medidos de novo nesta entrega
-(fix de matching/extraction em recommendations+startups+agents, logging
-estruturado + Langfuse em shared, instrumentacao em orchestration).
+Nota: numeros desta tabela vem de `pytest --collect-only -q` por modulo
+(nao exige Postgres/Redis/Qdrant vivos, so confirma quantos testes existem
+no codigo) — todas as 11 linhas foram reconferidas nesta entrega, corrigindo
+pequenos desvios acumulados ao longo de entregas anteriores (ex: `rag` ganhou
++1 teste de integracao com `test_ragas_quality_baseline.py`, ainda nao
+commitado). A ultima execucao completa (`passed`, exigindo infra viva) deu
+**474 passed, 2 warnings em 2026-06-23**, antes do teste Ragas ser
+adicionado — por isso o total agora coletado (476) e' maior que o ultimo
+`passed` real. Rode o comando abaixo com a infra ativa para obter um
+`passed` atualizado.
 
 Comando para verificar:
 ```bash
-venv/Scripts/python.exe -m pytest apps/api/src/modules/ -q
+venv/Scripts/python.exe -m pytest apps/api/src/modules/ apps/api/src/shared/ -q
 ```
 
 ---
@@ -1260,6 +1332,9 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | MVP next steps | `docs/proximos_passos_mvp.md` |
 | Scraping module | `docs/scraping/modulo_scraping_atualizado.md` |
 | Scraping latest version | `docs/scraping/scraper_v8_agente_investigacao.md` |
+| Scraping roadmap (tecnologias candidatas) | `docs/scraping/roadmap_scraping.md` |
+| Ingestion V1 (current) | `docs/ingestion/ingestion_v1_documents_e_chunks.md` |
+| Ingestion roadmap | `docs/ingestion/roadmap_ingestion.md` |
 | Agents module architecture | `docs/agents/modulo_agents_arquitetura.md` |
 | Agents roadmap | `docs/agents/roadmap_agentes.md` |
 | Agents V5 | `docs/agents/agents_v5_executar_grafos_pelo_agent_run.md` |
@@ -1293,5 +1368,12 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Orchestration V2 worker automatico | `docs/orchestration/orchestration_v2_worker_automatico.md` |
 | Orchestration V2 jornada completa (current) | `docs/orchestration/orchestration_v2_jornada_completa.md` |
 | Orchestration roadmap | `docs/orchestration/roadmap_orchestration.md` |
+| Frontend architecture | `docs/frontend/nextjs_arquitetura.md` |
+| Frontend roadmap (current: V2) | `docs/frontend/roadmap_frontend.md` |
 | Diagnostico vs. case original + prioridades | `docs/diagnostico_case_original_e_novas_prioridades.md` |
 | Estado atual do projeto | `docs/estado_atual_do_projeto.md` |
+| Diagnostico de fraquezas e tecnologias recomendadas (transversal) | `docs/diagnostico_fraquezas_e_tecnologias_recomendadas.md` |
+| Roadmap de evolucao tecnica do MVP (execucao do diagnostico acima) | `docs/roadmap_evolucao_tecnica_mvp.md` |
+| Mapa de tecnologias (onde cada uma e usada/sera usada e por que) | `docs/mapa_tecnologias.md` |
+| Validacao arquitetural (modulos/workers, inclui violacoes encontradas) | `docs/validacao_arquitetural_modulos_workers.md` |
+| Validacao de mensagens e interacoes entre modulos | `docs/validacao_mensagens_interacoes_modulos.md` |

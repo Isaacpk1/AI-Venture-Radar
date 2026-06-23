@@ -39,6 +39,16 @@ modulo ainda nao reflete os bugs da secao 2.3.
 Isto importa porque qualquer decisao de tecnologia baseada so em ler os
 docs vai superestimar o que existe.
 
+**Atualizacao 23/06/2026 (mesmo dia, depois da execucao das Fases 0-2 de
+`docs/roadmap_evolucao_tecnica_mvp.md`):** os dois primeiros itens acima
+ja foram resolvidos, registrados aqui so para nao reescrever o diagnostico
+original. `apps/web` ja foi commitado (Frontend V1+V2, ver `CLAUDE.md` secao
+"Frontend module" e `docs/frontend/roadmap_frontend.md`). `shared/logging/`
+e `shared/observability/` ja existem e estao em uso (Fase 0 concluida) —
+`shared/` continua sem `errors/`/`auth/`. O restante desta secao (terceiro
+item, recommendations) e' tratado na secao 2.3 abaixo, que ja descrevia o
+bug real antes do fix.
+
 ### 2.2 Observabilidade — a fraqueza mais fundamental
 
 ```txt

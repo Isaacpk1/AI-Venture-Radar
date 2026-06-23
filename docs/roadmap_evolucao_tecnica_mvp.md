@@ -113,6 +113,47 @@ antes de qualquer mudanca em BM25 ou reranking.
 Dependencias: idealmente mais fontes do NVIDIA Knowledge V2 ingeridas
 (hoje 2/8 P0); pode comecar com o que existe e crescer depois.
 
+### Fase 2 — concluida em 23/06/2026
+
+```txt
+faithfulness        0.92
+answer_relevancy    0.86
+context_precision   0.90
+context_recall      0.67
+```
+
+Medido com `apps/api/src/modules/rag/tests/integration/test_ragas_quality_baseline.py`
+(opt-in via `RUN_RAGAS_EVAL=1` — chama Gemini de verdade, lento e pago,
+nao roda so por infra estar de pe), 12 perguntas sobre as fontes do
+NVIDIA Knowledge V2 com conteudo real ingerido (excluindo de proposito
+os 3 gaps conhecidos: nvidia-nim-docs e monai-docs por DNS, rapids-docs
+por esgotar as estrategias de scraping).
+
+`context_recall` (0.67) e o mais baixo dos 4 — cerca de 1/3 do conteudo
+de referencia nao e recuperado pela busca atual. Esse e o numero que
+decide a Fase 3: so vale trocar `ts_rank` por BM25/pg_search se uma
+mudanca de busca melhorar `context_recall` de forma medida, nao por
+suposicao.
+
+Dois bugs reais encontrados e corrigidos durante esta medicao (nenhum
+deles e about busca, sao sobre geracao de resposta):
+- `apps/api/src/modules/scraping/domain/policies.py`: `link_farm` nao
+  estava na lista de problemas que acionam fallback para outra
+  estrategia de scraping — paginas de documentacao tecnica com barra de
+  navegacao densa (ex. TensorRT-LLM no GitHub Pages) eram rejeitadas na
+  primeira estrategia (BS4) sem nunca tentar o Trafilatura, que isola o
+  conteudo principal.
+- `apps/api/src/modules/rag/infrastructure/llm/langchain_gemini_answer_generator.py`:
+  `GeminiRagAnswerResponse.citations` exigia `min_length=1`, forcando o
+  Gemini a inventar uma citacao ou falhar a validacao quando a evidencia
+  recuperada nao respondia a pergunta. O codigo ainda tinha uma guarda
+  redundante que tratava citations vazio como erro de sistema
+  (`RagAnswerGenerationError` -> HTTP 502) em vez de resposta valida tipo
+  "nao tenho informacao suficiente" — que e exatamente o que o prompt do
+  sistema ja pede ("diga isso claramente"). As duas causas levavam
+  perguntas legitimamente sem boa evidencia a quebrar `/rag/answer` em
+  produção em vez de devolver uma resposta honesta.
+
 ## 5. Fase 3 — Busca lexical real (BM25 nativo do Postgres)
 
 So entra se a Fase 2 mostrar que o `ts_rank` atual e de fato um
@@ -164,7 +205,45 @@ qualquer pessoa do time consegue responder "a busca esta boa?" e
 
 Dependencias: Fases 0, 2 e 3.
 
-## 7. Fora de escopo deste roadmap
+## 7. Fase 5 — Fechar o limite arquitetural rag -> embeddings
+
+Encontrado na auditoria de regras arquiteturais de 23/06/2026 (detalhe
+completo em `docs/validacao_arquitetural_modulos_workers.md`, secao
+"Validacao 23/06/2026"): `rag` e a unica relacao entre modulos deste
+projeto que importa classe concreta e excecoes de outro modulo
+(`embeddings`) em vez de so o contrato publico
+(`embeddings/application/public/embedding_service.py`, que o proprio
+docstring declara como "o UNICO arquivo... que outros modulos podem
+importar").
+
+Entregaveis:
+
+- `rag/infrastructure/embeddings_adapters/` novo — adapter que depende so
+  de `EmbeddingService` (`embeddings/application/public/`), traduzindo
+  `EmbeddingServiceUnavailableError`/`EmptyChunkTextError` para uma
+  excecao propria de `rag`;
+- `rag/application/use_cases/search_evidence.py` passa a depender da
+  porta nova, nao de `embeddings.application.use_cases.
+  generate_chunk_embedding.GenerateChunkEmbedding`;
+- `rag/presentation/routes.py` passa a tratar so excecoes de `rag`, nunca
+  `embeddings.domain.exceptions` direto;
+- atualizar a linha `rag -> embeddings` em
+  `docs/validacao_mensagens_interacoes_modulos.md` (ja marcada com nota de
+  nao-conformidade, ver lá) para refletir o contrato correto apos o fix.
+
+Criterio de pronto:
+
+```txt
+rag so importa de embeddings.application.public (EmbeddingService e
+VectorRepository); nenhum arquivo de rag importa
+embeddings.application.use_cases nem embeddings.domain.exceptions direto.
+```
+
+Dependencias: nenhuma. Risco baixo — e refatoracao de fronteira, sem mudar
+comportamento observavel (`SearchEvidence.search()` continua devolvendo o
+mesmo resultado).
+
+## 8. Fora de escopo deste roadmap
 
 ```txt
 DeepEval em CI — entra quando existir pipeline de CI (P2 do roadmap
@@ -181,7 +260,7 @@ Autenticacao, CORS, rate limiting, deploy — P2 de producao, fora do
 escopo de "qualidade do pipeline existente".
 ```
 
-## 8. Ordem resumida
+## 9. Ordem resumida
 
 ```txt
 Fase 0 (observabilidade)  ----\
@@ -190,9 +269,18 @@ Fase 1 (fix recommendations) --/
 
 Fase 2 (baseline Ragas) -> Fase 3 (BM25, so se Fase 2 justificar)
                           -> Fase 4 (fechamento e dashboards)
+
+Fase 5 (fix arquitetural rag->embeddings) -- independente, pode rodar em
+                                              paralelo com qualquer fase
 ```
 
-## 9. Referencias
+Para a ordem de implementacao que cruza isto com os itens de produto (P1
+do `docs/roadmap_produto_final.md`) e as secoes "Tecnologias candidatas"
+de cada modulo, ver `docs/roadmap_produto_final.md`, secao "Ordem de
+implementacao recomendada" — este documento aqui cobre so qualidade do
+pipeline existente, nao features novas de produto.
+
+## 10. Referencias
 
 ```txt
 docs/diagnostico_fraquezas_e_tecnologias_recomendadas.md  — diagnostico completo
@@ -200,7 +288,9 @@ docs/rag/rag_v3_busca_hibrida.md                          — decisao Postgres F
 docs/rag/rag_v4_reranking.md                              — Cohere Rerank atual
 docs/rag/roadmap_rag.md                                   — RAG V5 (avaliacao)
 docs/recommendations/roadmap_recommendations.md
+docs/validacao_arquitetural_modulos_workers.md            — violacao rag->embeddings (Fase 5)
 apps/api/src/modules/recommendations/domain/policies.py
 apps/api/src/modules/rag/infrastructure/database/postgres_lexical_search_repository.py
 apps/api/src/modules/rag/application/ports.py
+apps/api/src/modules/rag/application/use_cases/search_evidence.py
 ```

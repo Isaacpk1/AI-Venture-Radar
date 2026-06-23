@@ -22,7 +22,7 @@ metadados especificos para conhecimento tecnico NVIDIA.
 | Versao | Status | Objetivo |
 |---|---|---|
 | NVIDIA Knowledge V1 | Implementado | Catalogo inicial de tecnologias |
-| NVIDIA Knowledge V2 | Em andamento | Ingestao de fontes oficiais |
+| NVIDIA Knowledge V2 | Entregue (20/20 fontes processadas, 17/20 com conteudo) | Ingestao de fontes oficiais |
 | NVIDIA Knowledge V3 | Futuro | Metadados tecnicos |
 | NVIDIA Knowledge V4 | Futuro | Busca por caso de uso |
 
@@ -116,13 +116,17 @@ submissao do registry para Orchestration V2 entregue
 worker automatico de advance entregue (workers/orchestration_worker/)
 primeira validacao real ponta a ponta entregue (2/8 fontes P0; ver
   docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md)
-restante do lote P0 + P1/P2 pendente
+P0+P1+P2 completo: 20/20 fontes processadas, 17/20 com conteudo disponivel
+  (ver CLAUDE.md, secao "Recent validation")
 ```
 
-O worker/dispatcher de `url_ingestion_jobs` ja esta entregue. A proxima acao
-real e validar as seis fontes P0 restantes com workers limpos, executar P1/P2
-e registrar taxa de sucesso, erros por dominio, custo e qualidade de
-recuperacao.
+**Atualizacao 23/06/2026:** o "restante do lote P0 + P1/P2" que esta secao
+listava como pendente ja foi concluido (`CLAUDE.md` confirma 20/20 fontes
+processadas). Restam 3 gaps sem fix de codigo possivel agora:
+`nvidia-nim-docs` e `monai-docs` (DNS intermitente do lado Windows, fora do
+alcance de uma correcao de codigo), `rapids-docs` (esgotou BS4/Trafilatura/
+Playwright — precisaria de Firecrawl real, ver secao de tecnologias
+candidatas abaixo).
 
 Fundacao entregue:
 
@@ -187,3 +191,18 @@ Entregaveis:
 - perguntar em linguagem natural;
 - recuperar tecnologias NVIDIA relevantes;
 - explicar fonte e motivo da recuperacao.
+
+---
+
+## Tecnologias candidatas (auditoria de codigo, 23/06/2026)
+
+| Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
+|---|---|---|---|
+| `rapids-docs` esgotou BS4/Trafilatura/Playwright (gap conhecido, sem fix de codigo possivel com as estrategias atuais) | implementar o client real do Firecrawl em `scraping` (hoje so comentado, ver roadmap do modulo `scraping`) como ultimo fallback pago | Fecha o ultimo gap corrigivel por codigo do V2 | Medio — depende da entrega de Firecrawl em `scraping`, nao e' trabalho deste modulo |
+| Catalogo (`catalog_data.py`) e registry (`source_data.py`) sao 100% estaticos em codigo, sem checagem se a URL oficial ainda existe | script periodico simples de health-check (HTTP HEAD/GET) nas URLs do `NvidiaKnowledgeSourceRegistry`, logando (via `shared/logging`, ja existente) fontes que pararam de responder | Pre-requisito de qualidade para V3 (metadados tecnicos) — nao adianta mapear metadados de uma fonte que ja saiu do ar | Baixo — script simples, sem lib nova |
+| V3 (metadados tecnicos) ainda nao tem nenhum mecanismo de extracao definido | reusar o Extraction Agent (`agents` V8) — ja extrai dados estruturados de evidencias via Gemini com schema Pydantic — em vez de escrever um parser novo so para documentacao NVIDIA | NVIDIA Knowledge V3 | Medio — e' reuso de contrato publico ja existente, nao tech nova |
+
+Nao subir um scheduler dedicado (Airflow/Celery beat) so para o health-check
+periodico: o projeto ja tem Dramatiq+Redis para tudo que precisa rodar
+assincrono; um script simples disparado por cron do sistema operacional (ou
+um actor Dramatiq com `cron`-like delay) resolve sem infra nova.

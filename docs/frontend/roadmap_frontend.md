@@ -194,3 +194,25 @@ V1 -> V2 -> V3 -> V4 -> V5
 V1 e V2 formam o primeiro MVP visual. V3 melhora a operacao diaria. V4 cria a
 camada de BI. V5 entra junto com os requisitos de autenticacao, revisao humana
 e exportacao que tambem dependem de evolucoes no backend.
+
+---
+
+## Tecnologias candidatas (auditoria de codigo, 23/06/2026)
+
+Confirmado: nenhum arquivo `.test.`/`.spec.` existe em `apps/web/` hoje. O
+primeiro teste manual no navegador ja encontrou um bug real — violacao de
+Rules of Hooks em `features/startups/startup-details.tsx` (`useMutation`
+chamado depois de um `return` condicional), que trava a pagina de resultado
+da analise. E' exatamente o tipo de bug que um teste de render pega antes de
+chegar em produção.
+
+| Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
+|---|---|---|---|
+| Zero testes automatizados; 1 bug real de Rules of Hooks ja confirmado em produção local | `Vitest` + `React Testing Library` (compativel com React 19; mais rapido que Jest, sem precisar de Babel transform extra com Next.js) | Deveria furar a fila e entrar **dentro da V3**, nao esperar a V5 | Medio — configuracao inicial + testes de render para as paginas/componentes existentes (`StartupDetails`, `JobStatusPanel`, `UrlSubmissionForm`) |
+| Sem Prettier — so ESLint configurado, formatacao manual | `prettier` + `eslint-config-prettier` (libs padrao do ecossistema Next.js, zero infra nova) | Qualidade de codigo, baixo risco | Trivial |
+
+Nao adotar um framework de teste e2e pesado (Playwright/Cypress) ainda: o
+ganho imediato e' cobrir render/hooks dos componentes existentes (onde o bug
+real apareceu), nao fluxos de navegador completos — e2e fica melhor
+posicionado junto da V3 (paginas de listagem/historico), quando houver mais
+fluxo para cobrir.

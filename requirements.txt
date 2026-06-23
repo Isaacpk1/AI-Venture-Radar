@@ -33,3 +33,6 @@ cohere>=5.0,<6
 # Observabilidade de LLM (tracing/custo/latencia via Langfuse self-hosted)
 langfuse>=4,<5
 
+# Avaliacao de qualidade do RAG (Fase 2, baseline ragas_eval opt-in)
+ragas>=0.4,<0.5
+

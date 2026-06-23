@@ -143,3 +143,30 @@ Entregaveis:
 - score de confianca por campo;
 - trilha de evidencias;
 - suporte a revisao humana futura.
+
+---
+
+## Tecnologias candidatas (auditoria de codigo, 23/06/2026)
+
+Confirmado em `application/use_cases/create_startup.py`: nao existe nenhuma
+checagem de duplicidade antes de criar um `Startup` novo. Duas URLs
+diferentes sobre a mesma empresa (ex: site institucional + pagina de
+imprensa) criam dois registros `Startup` distintos, cada um com seu proprio
+conjunto parcial de evidencias/recomendacoes/briefing.
+
+| Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
+|---|---|---|---|
+| Sem dedup multi-fonte — mesma empresa por 2 URLs = 2 `Startup` | `rapidfuzz` (lib pequena, sem infra nova) para comparar `name`/`website_url` contra startups existentes antes de criar uma nova; abaixo de um limiar de similaridade, associar evidencia ao registro existente em vez de criar outro | Startups V4 (Auditoria e confianca) | Medio — nova checagem em `CreateStartup`, sem mudar o schema |
+| `founders`/`customers`/`funding_*` nao tem origem nem confianca por campo | nenhuma lib nova: e' modelagem de dados (coluna `field_provenance`/`field_confidence` JSONB, populada quando `ExtractionTrigger` grava) | Startups V4 (Auditoria e confianca) | Medio — migration + ajuste no `Startup.update()` |
+
+Nao adotar uma ferramenta de entity resolution pesada (ex: Dedupe.io,
+Splink): o volume hoje (startups criadas via URL unica) nao justifica
+infraestrutura de match probabilistico em lote — `rapidfuzz` resolve o caso
+real (comparar 1 startup nova contra a base existente) com biblioteca leve.
+
+Relacionado (campo vazio, nao duplicidade): quando `founders`/
+`funding_stage`/`customers` ficam vazios porque a evidencia raspada nunca
+mencionou isso, a tecnologia candidata e' uma chain de busca automatica por
+mais URLs — desenhada em `docs/orchestration/roadmap_orchestration.md`
+("Chain de enriquecimento por busca") e `docs/agents/roadmap_agentes.md`
+(Search Planner Agent), nao neste documento.

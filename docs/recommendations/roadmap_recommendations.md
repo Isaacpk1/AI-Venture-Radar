@@ -58,10 +58,14 @@ RAG V3 - busca hibrida
 RAG V4 - reranking
 ```
 
-Pre-requisito ainda pendente:
+Pre-requisito que era pendente, ja desbloqueado em 23/06/2026:
 
 ```txt
-NVIDIA Knowledge V2 - documentacao NVIDIA real ingerida e recuperavel
+NVIDIA Knowledge V2 - 20/20 fontes processadas, 17/20 com conteudo
+recuperavel via /rag/search (ver CLAUDE.md, secao "Recent validation", e
+docs/nvidia_knowledge/roadmap_nvidia_knowledge.md). Os 3 gaps restantes
+(nvidia-nim-docs, monai-docs, rapids-docs) nao bloqueiam o restante do
+catalogo.
 ```
 
 Entregaveis:
@@ -126,3 +130,23 @@ aprovar/rejeitar recomendacoes
 registrar comentarios
 usar feedback para avaliacao futura
 ```
+
+---
+
+## Tecnologias candidatas (auditoria de codigo, 23/06/2026)
+
+Confirmado em `domain/policies.py`: `match_technologies()` so faz keyword
+matching com word boundary (fix de 23/06/2026); a justificativa gerada e'
+um template fixo ("keywords matched. Use case: X."), nunca fundamentada em
+conteudo real.
+
+| Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
+|---|---|---|---|
+| Justificativa e' template fixo, sem citar conteudo NVIDIA real | chamar `rag/application/public/question_answerer.py` (contrato ja existe, usado pelo NVIDIA RAG Agent V10) filtrado por `source_type="nvidia_knowledge"` para fundamentar a justificativa de cada recomendacao com citacoes reais | Recommendations V2 (Recomendacao com RAG) | Medio — integracao de contrato publico ja existente, zero tech nova |
+| `match_technologies()` so encontra startups cujo texto bate keyword; setor fora do catalogo (ex: termos em portugues sem alias) nunca aparece | usar o `VectorRepository` (`embeddings/application/public/`, ja existe) para buscar tecnologias por similaridade semantica quando o keyword match nao encontrar nada, como complemento (nao substituto) da regra deterministica | Recommendations V2/V4 | Medio — reuso de contrato publico, sem infra nova |
+| Sem versionamento — `generate()` deleta e recria a cada chamada | guardar `generated_at`/numero de geracao por chamada (modelagem de dados, sem lib nova) | Pre-requisito leve para V5 (Feedback humano) — precisa saber a qual geracao um feedback se refere | Baixo |
+
+Nao trocar `match_technologies()` por um motor de ML/classificador
+treinado: o volume de dados (poucas dezenas de tecnologias no catalogo) nao
+justifica treinamento; busca semantica via embeddings ja existentes resolve
+o caso real sem nova infraestrutura.

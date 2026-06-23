@@ -27,7 +27,7 @@ responder perguntas sobre startups com base em evidencias citaveis
 | RAG V2 | Implementado | Resposta com citacoes |
 | RAG V3 | Implementado | Busca hibrida (vetorial + lexical, RRF) |
 | RAG V4 | Implementado | Reranking (Cohere Rerank) |
-| RAG V5 | Futuro | Avaliacao de qualidade |
+| RAG V5 | Parcial (baseline Ragas medida) | Avaliacao de qualidade |
 
 ---
 
@@ -147,9 +147,49 @@ Documento da entrega: `docs/rag/rag_v4_reranking.md`.
 
 ## RAG V5 - Avaliacao
 
+Status:
+
+```txt
+parcial — baseline de qualidade medida em 23/06/2026 (ver atualizacao
+abaixo); dataset golden completo e regressao automatica continuam futuros
+```
+
 Entregaveis:
 
 - dataset fixo de perguntas;
 - avaliacao de citacoes;
 - avaliacao de resposta sem alucinacao;
 - regressao de prompt.
+
+**Atualizacao 23/06/2026:** a Fase 2 de
+`docs/roadmap_evolucao_tecnica_mvp.md` ja entregou a primeira parte desta
+V5 — `tests/integration/test_ragas_quality_baseline.py` (opt-in via
+`RUN_RAGAS_EVAL=1`), 12 perguntas sobre conteudo real do NVIDIA Knowledge
+V2, com numero medido:
+
+```txt
+faithfulness        0.92
+answer_relevancy    0.86
+context_precision   0.90
+context_recall      0.67
+```
+
+`context_recall` (0.67) e' o mais baixo dos 4 — e' o numero que decide a
+Fase 3 daquele roadmap (BM25/`pg_search` so entra se uma mudanca de busca
+melhorar esse numero de forma medida). Falta ainda: dataset crescer com
+mais fontes do NVIDIA Knowledge V2 (hoje so 2/8 P0 validadas), e regressao
+de prompt automatica (essa parte continua futura, depende de CI existir).
+
+---
+
+## Tecnologias candidatas (auditoria de codigo, 23/06/2026)
+
+| Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
+|---|---|---|---|
+| `context_recall` (0.67) e' o gargalo medido da V5; busca lexical usa `to_tsvector('simple')`, sem stemming ("treinar" != "treinamento") | avaliar `pg_search` (ParadeDB) como extensao Postgres para BM25 nativo — so depois de confirmar que o gargalo e' lexical, nao retrieval vetorial; decisao contra `rank-bm25` (Python) ja tomada e documentada em V3 acima | Fase 3 de `docs/roadmap_evolucao_tecnica_mvp.md` | Alto — troca de imagem Postgres + migration + reindexacao |
+| Modelo do Cohere Rerank fixo em codigo (`rerank-v3.5`) | extrair para `Settings` (`COHERE_RERANK_MODEL`, default `rerank-v3.5`) | Fase 4 de `docs/roadmap_evolucao_tecnica_mvp.md` | Trivial |
+| Filtro de busca so por `source_type`, nada por startup/data/categoria | estender `LexicalSearchRepository`/`VectorRepository` com filtros estruturados adicionais (sem lib nova, so mais parametros de query) | V3.5 mencionada acima ("busca filtrada") | Medio |
+
+Nao reabrir `rank-bm25` (Python): exigiria carregar todos os chunks em
+memoria a cada busca, contradizendo a regra de Postgres como fonte da
+verdade — decisao ja tomada e ainda valida.

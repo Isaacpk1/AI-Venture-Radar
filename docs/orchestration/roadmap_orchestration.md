@@ -122,3 +122,53 @@ Entregaveis:
 
 - notificar quando um `AnalysisJob` terminar (webhook ou e-mail);
 - relatorio de execucoes em lote.
+
+---
+
+## Tecnologias candidatas (auditoria de codigo, 23/06/2026)
+
+Confirmado em `application/use_cases/advance_url_ingestion_job.py`: a etapa
+`ANALYZING` roda create/associate `Startup` -> attach evidence ->
+try_extract/try_classify -> recommendations -> briefing numa unica
+entrega; se falhar no meio, o job inteiro vai para `failed` (terminal, sem
+retry granular) mesmo que os primeiros passos tenham funcionado.
+
+| Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
+|---|---|---|---|
+| `ANALYZING` falha por completo mesmo quando so o ultimo sub-passo (ex: briefing) deu erro | mais campos de progresso na propria tabela `url_ingestion_jobs` (ja existe `startup_id`/`evidence_attached`/`recommendation_count`/`briefing_id` como guardas de idempotencia parcial) — registrar explicitamente qual sub-passo falhou para o retry pular os ja concluidos | Orchestration V3 (Retomada de jobs falhados) | Medio — migration pequena + logica em `advance_url_ingestion_job.py`, sem infra nova |
+| Frontend so descobre conclusao via polling (`GET /url-ingestion/jobs/{id}` a cada 3s) | nenhuma tecnologia nova necessaria agora: webhook simples (POST de callback) resolve o caso de uso da V4 sem precisar de WebSocket/SSE, ja que o consumidor e' o proprio backend do frontend (BFF), nao o navegador direto | Orchestration V4 (Notificacoes) | Baixo |
+
+Nao adotar uma fila de eventos nova (Kafka, RabbitMQ, Redis Streams) para
+notificar etapas: o projeto ja usa Dramatiq+Redis para todo o assincrono, e
+a propria fila `url_ingestion` ja funciona como o loop de polling
+(`UrlIngestionStillProcessingError` + reentrega). Adicionar um barramento de
+eventos resolveria um problema de latencia que ainda nao foi medido como
+real, e contradiria a regra 8 do `CLAUDE.md` ("construir so o que e
+necessario agora").
+
+### Chain de enriquecimento por busca (discutido em 23/06/2026)
+
+Pergunta original: depois de raspar uma URL e extrair o perfil da startup,
+campos como `founders` muitas vezes ficam vazios porque a pagina raspada
+nunca mencionou isso. Hoje `AdvanceUrlIngestionJob` roda `try_extract` uma
+unica vez e para — se o campo nao estava na evidencia, fica vazio para
+sempre, sem nova tentativa.
+
+Confirmado o que falta (ver tambem `docs/agents/roadmap_agentes.md`, secao
+do Search Planner Agent): o Search Planner Agent (V3) ja sabe transformar
+um objetivo em queries de busca, mas (a) nao tem client de busca real para
+virar query em URL, e (b) nunca e chamado automaticamente — so pela fila
+generica `agent_runs`.
+
+| Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
+|---|---|---|---|
+| `try_extract` roda uma vez; campo vazio fica vazio para sempre | depois de `try_extract` na etapa `ANALYZING`, checar se `founders`/`funding_stage`/`customers` continuam vazios; se sim, chamar o Search Planner Agent + o `SearchExecutorPort` novo (Tavily, ver roadmap de `agents`) para achar 1-2 URLs candidatas (ex: LinkedIn, Crunchbase, pagina `/about`/`/team` do mesmo dominio) | Nova capacidade de orchestration, complementar ao P1 #4 do `docs/roadmap_produto_final.md` | Alto — novo `ScrapingJob` associado ao mesmo `startup_id`, nova chamada de agente, novo round de `try_extract` quando a evidencia chegar |
+| Risco de loop sem fim se a busca nunca achar o dado | limite explicito de 1-2 rounds de enriquecimento por `startup_id` (campo novo em `url_ingestion_jobs`, ex: `enrichment_rounds`), mesma disciplina de `max_iterations` que todo agente do projeto ja segue | Mesma feature acima | Baixo (so um contador + guarda) |
+
+Custo real desta feature: cada round gasta 1 chamada Gemini (Search
+Planner) + 1 chamada de API de busca (Tavily) + 1 scraping completo + 1
+nova chamada de extracao (Gemini) — caro o suficiente para so disparar
+quando o campo faltante de fato muda o score de uma recomendacao (ex:
+`founders`/`funding_stage`, nao qualquer campo). Por isso esta feature
+fica depois das fases mais baratas no `docs/roadmap_evolucao_tecnica_mvp.md`
+(ver Fase 7).

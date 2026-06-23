@@ -132,3 +132,21 @@ Entregaveis:
 - ranquear oportunidades;
 - gerar sumario para lote;
 - destacar oportunidades de alto fit com NVIDIA.
+
+---
+
+## Tecnologias candidatas (auditoria de codigo, 23/06/2026)
+
+Confirmado em `domain/policies.py::build_briefing_markdown()`: a saida e'
+Markdown puro, sem nenhum import de biblioteca de exportacao (reportlab,
+weasyprint, etc.) — exportar hoje exige copiar o Markdown manualmente.
+
+| Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
+|---|---|---|---|
+| Saida so em Markdown, sem exportacao visual | `weasyprint` + Jinja2 (libs leves, sem servico externo) para HTML -> PDF a partir do mesmo Markdown gerado por `build_briefing_markdown()` | Briefing V3 (Exportacao) | Medio |
+| Reescrita de prosa do Briefing Agent V12 ja tem fallback contra perda de URL no Markdown — exportacao precisa do mesmo cuidado | validacao pos-render: extrair URLs do PDF gerado e comparar contra as do Markdown original antes de servir o arquivo, mesmo espirito do fallback que V12 ja aplica | Briefing V3, junto do item acima | Baixo — reusa a logica de extracao de URL que V12 ja tem |
+
+Nao adotar um servico externo de geracao de PDF (ex: API paga de
+PDF-as-a-service): `weasyprint` roda no mesmo processo Python, sem
+dependencia de rede nova, e o volume (1 briefing por vez, sob demanda) nao
+justifica um servico separado.
