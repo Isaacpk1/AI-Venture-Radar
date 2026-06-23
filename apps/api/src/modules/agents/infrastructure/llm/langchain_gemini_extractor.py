@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+from apps.api.src.shared.observability import get_langfuse_callbacks
+
 from apps.api.src.modules.agents.application.dto import (
     ExtractionInput,
     ExtractionResult,
@@ -31,6 +33,8 @@ class LangChainGeminiExtractionResponse(BaseModel):
     funding_stage: ExtractedFundingStage
     funding_amount_usd: float | None = None
     customers: list[str] = Field(default_factory=list, max_length=20)
+    sector: str | None = Field(default=None, max_length=80)
+    description: str | None = Field(default=None, max_length=500)
 
 
 class LangChainGeminiExtractor(ExtractionService):
@@ -70,7 +74,9 @@ class LangChainGeminiExtractor(ExtractionService):
         messages = self._build_messages(extraction_input)
 
         try:
-            parsed = await self.structured_model.ainvoke(messages)
+            parsed = await self.structured_model.ainvoke(
+                messages, config={"callbacks": get_langfuse_callbacks()}
+            )
         except (ValidationError, ValueError, TypeError) as error:
             raise AgentExtractionError(
                 "Gemini devolveu uma resposta de extracao invalida."
@@ -90,6 +96,8 @@ class LangChainGeminiExtractor(ExtractionService):
             funding_stage=parsed.funding_stage,
             funding_amount_usd=parsed.funding_amount_usd,
             customers=parsed.customers,
+            sector=parsed.sector,
+            description=parsed.description,
         )
 
     def _build_messages(
@@ -112,7 +120,16 @@ class LangChainGeminiExtractor(ExtractionService):
                 "dado que nao esteja escrito no texto. Quando um dado nao for "
                 "mencionado, devolva lista vazia (founders/customers), "
                 "'unknown' (funding_stage) ou null (funding_amount_usd) — nao "
-                "tente adivinhar."
+                "tente adivinhar.\n\n"
+                "Alem disso, escreva 'sector' (rotulo curto de categoria, ex. "
+                "'Data Analytics', 'Healthcare AI', 'DevTools') e 'description' "
+                "(1-2 frases resumindo o produto). Os dois campos SEMPRE em "
+                "ingles, mesmo que as evidencias estejam em outro idioma — isso "
+                "e so para casar com o vocabulario do catalogo de tecnologias "
+                "NVIDIA, nao e traducao do texto original. Baseie-se somente no "
+                "que as evidencias realmente descrevem; se nao houver sinal "
+                "suficiente para um resumo confiavel, devolva null em vez de "
+                "generico ou inventado."
             )
         )
 

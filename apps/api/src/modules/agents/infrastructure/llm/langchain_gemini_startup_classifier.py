@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+from apps.api.src.shared.observability import get_langfuse_callbacks
+
 from apps.api.src.modules.agents.application.dto import (
     StartupClassificationInput,
     StartupClassificationResult,
@@ -68,7 +70,9 @@ class LangChainGeminiStartupClassifier(StartupClassifierService):
         messages = self._build_messages(classification_input)
 
         try:
-            parsed = await self.structured_model.ainvoke(messages)
+            parsed = await self.structured_model.ainvoke(
+                messages, config={"callbacks": get_langfuse_callbacks()}
+            )
         except (ValidationError, ValueError, TypeError) as error:
             raise AgentClassificationError(
                 "Gemini devolveu uma resposta de classificacao invalida."

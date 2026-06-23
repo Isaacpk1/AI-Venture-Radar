@@ -67,6 +67,7 @@ class GenerateRecommendations(RecommendationGenerator):
         matches = match_technologies(
             sector=profile.sector,
             description=profile.description,
+            ai_maturity_level=profile.ai_maturity_level,
             evidence_signals=evidence_signals,
             technologies=candidates,
         )

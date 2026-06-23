@@ -23,11 +23,15 @@ from apps.api.src.modules.startups.domain.exceptions import (
 
 
 class ExtractStartupProfile(ExtractionTrigger):
-    """Extrai founders/funding/customers de uma startup via Extraction Agent.
+    """Extrai founders/funding/customers/sector/description via Extraction Agent.
 
-    Cada chamada repassa todas as evidencias atuais e sobrescreve os
-    campos extraidos anteriormente - mesma semantica de
-    ``ClassifyStartup.classify()``, sem merge incremental.
+    Cada chamada repassa todas as evidencias atuais e sobrescreve
+    founders/funding/customers - mesma semantica de
+    ``ClassifyStartup.classify()``, sem merge incremental. sector/description
+    sao exceção: ``Startup.update()`` so escreve quando o valor vem
+    diferente de ``None``, e o agente devolve ``None`` quando a evidencia
+    nao tem sinal suficiente para um resumo confiavel - entao um resultado
+    de baixa confianca nao apaga um valor bom de uma rodada anterior.
     """
 
     def __init__(
@@ -80,6 +84,8 @@ class ExtractStartupProfile(ExtractionTrigger):
                 funding_stage=outcome.funding_stage,
                 funding_amount_usd=outcome.funding_amount_usd,
                 customers=outcome.customers,
+                sector=outcome.sector,
+                description=outcome.description,
             )
             await uow.startup_repository.save(startup)
             await uow.commit()

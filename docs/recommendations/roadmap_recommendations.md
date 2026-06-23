@@ -42,7 +42,8 @@ Limite atual:
 
 ```txt
 nao usa RAG NVIDIA
-nao usa Startup.ai_maturity_level no scoring
+ usa `Startup.ai_maturity_level` como bonus controlado para candidatos com
+ sinal deterministico (entregue em 23/06/2026)
 nao gera prioridade/complexidade/proxima acao
 ```
 
@@ -70,7 +71,7 @@ consultar evidencias da startup
 consultar conhecimento NVIDIA via RAG
 montar contexto
 gerar recomendacao com citacoes
-usar `Startup.ai_maturity_level` como sinal de scoring
+usar RAG NVIDIA com citacoes para enriquecer a justificativa
 ```
 
 ---

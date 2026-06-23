@@ -4,10 +4,16 @@ from uuid import UUID
 
 import dramatiq
 
+from apps.api.src.modules.embeddings.domain.exceptions import (
+    EmbeddingJobPartiallyFailedError,
+)
 from apps.api.src.modules.embeddings.factories.embeddings_factory import (
     EmbeddingsFactory,
 )
 from apps.api.src.shared.queue.dramatiq_broker import broker
+from apps.api.src.shared.logging import get_logger, log_job
+
+logger = get_logger(__name__)
 
 
 @dramatiq.actor(
@@ -24,5 +30,11 @@ async def execute_embedding_job(job_id: str) -> None:
     levanta uma excecao para o Dramatiq reentregar a mensagem.
     """
 
-    use_case = EmbeddingsFactory.create_execute_embedding_job()
-    await use_case.execute(job_id=UUID(job_id))
+    with log_job(
+        logger,
+        "embedding job",
+        expected_retry_exceptions=(EmbeddingJobPartiallyFailedError,),
+        job_id=job_id,
+    ):
+        use_case = EmbeddingsFactory.create_execute_embedding_job()
+        await use_case.execute(job_id=UUID(job_id))

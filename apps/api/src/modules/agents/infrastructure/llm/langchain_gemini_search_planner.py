@@ -12,6 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+from apps.api.src.shared.observability import get_langfuse_callbacks
+
 from apps.api.src.modules.agents.application.dto import (
     SearchPlanInput,
     SearchPlanResult,
@@ -89,7 +91,9 @@ class LangChainGeminiSearchPlanner(SearchPlanningService):
         messages = self._build_messages(plan_input)
 
         try:
-            parsed = await self.structured_model.ainvoke(messages)
+            parsed = await self.structured_model.ainvoke(
+                messages, config={"callbacks": get_langfuse_callbacks()}
+            )
         except (ValidationError, ValueError, TypeError) as error:
             raise AgentPlanningError(
                 "Gemini devolveu um plano de busca invalido."

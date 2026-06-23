@@ -143,3 +143,80 @@ def test_results_are_sorted_by_score_descending() -> None:
 
     scores = [result.score for result in results]
     assert scores == sorted(scores, reverse=True)
+
+
+def test_operational_aliases_match_ai_infrastructure_signals() -> None:
+    results = match_technologies(
+        sector="AI infrastructure",
+        description="",
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=uuid4(),
+                text="train fine-tune and deploy serverless inference workloads at scale",
+            )
+        ],
+        technologies=CATALOG,
+    )
+
+    slugs = [result.technology.slug for result in results]
+    assert "nvidia-nim" in slugs
+    assert "nvidia-nemo" in slugs
+
+
+def test_ai_native_bonus_can_promote_a_relevant_candidate() -> None:
+    results = match_technologies(
+        sector=None,
+        description=None,
+        ai_maturity_level="ai_native",
+        evidence_signals=[EvidenceSignal(evidence_id=uuid4(), text="fine-tune models")],
+        technologies=[NEMO],
+    )
+
+    assert results[0].technology.slug == "nvidia-nemo"
+    assert results[0].score == 0.27
+
+
+def test_word_boundary_avoids_cross_language_false_positives() -> None:
+    """Reproduz o bug real encontrado com https://dadosfera.com.br: o texto
+    raspado em portugues continha "agentes"/"agente de ia" e "escale com ia",
+    que batiam por substring puro nas keywords em ingles "agent" e no alias
+    "scale" de "throughput" sem nenhuma relacao semantica real.
+    """
+
+    results = match_technologies(
+        sector=None,
+        description=None,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=uuid4(),
+                text=(
+                    "seu proprio agente de ia interpreta perguntas. agentes "
+                    "autonomos com acesso a base de conhecimento. organize, "
+                    "otimize e escale com ia."
+                ),
+            )
+        ],
+        technologies=CATALOG,
+    )
+
+    assert results == []
+
+
+def test_word_boundary_still_matches_real_standalone_keywords() -> None:
+    evidence_id = uuid4()
+    results = match_technologies(
+        sector=None,
+        description=None,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=evidence_id,
+                text="we are building an llm-based ai agent platform for enterprise teams",
+            )
+        ],
+        technologies=[NEMO],
+    )
+
+    assert len(results) == 1
+    assert results[0].technology.slug == "nvidia-nemo"
+    assert "agent" in results[0].matched_keywords
+    assert "llm" in results[0].matched_keywords

@@ -41,6 +41,11 @@ class StartupsModuleProfileSource(StartupProfileSource):
         return StartupProfileSnapshot(
             sector=profile.startup.sector,
             description=profile.startup.description,
+            ai_maturity_level=(
+                profile.startup.ai_maturity_level.value
+                if profile.startup.ai_maturity_level is not None
+                else None
+            ),
             evidences=tuple(
                 EvidenceSnapshot(
                     evidence_id=evidence.id,

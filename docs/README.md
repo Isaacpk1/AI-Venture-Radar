@@ -24,6 +24,8 @@ docs/roadmap_produto_final.md
 | 4 | `docs/validacao_arquitetural_modulos_workers.md` | Validacao de modulos, workers e contratos |
 | 5 | `docs/validacao_mensagens_interacoes_modulos.md` | Como os modulos conversam |
 | 6 | `docs/roadmap_produto_final.md` | Backlog priorizado para fechar o produto |
+| 7 | `docs/frontend/nextjs_arquitetura.md` | Arquitetura e plano de inicio do frontend Next.js |
+| 8 | `docs/frontend/roadmap_frontend.md` | Versoes e entregas planejadas do frontend |
 
 ---
 

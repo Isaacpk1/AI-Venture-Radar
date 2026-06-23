@@ -40,6 +40,7 @@ class StartupProfileSnapshot:
     sector: str | None
     description: str | None
     evidences: tuple[EvidenceSnapshot, ...]
+    ai_maturity_level: str | None = None
 
 
 @dataclass(frozen=True)

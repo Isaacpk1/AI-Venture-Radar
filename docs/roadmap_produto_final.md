@@ -39,6 +39,9 @@ operacao manual entre as etapas. Atingido.
 
 ### 2. Frontend operacional
 
+Arquitetura definida em `docs/frontend/nextjs_arquitetura.md`.
+Roadmap versionado em `docs/frontend/roadmap_frontend.md`.
+
 Telas minimas:
 
 - submissao de URL e criacao manual de startup;
@@ -62,7 +65,7 @@ incluindo startups e jobs de URL, para suportar essas telas.
 ### 4. Recommendations V2/V4
 
 - buscar contexto NVIDIA via RAG com citacoes;
-- incorporar `ai_maturity_level` ao score;
+- aprofundar o uso de `ai_maturity_level` no score (bonus deterministico inicial entregue);
 - adicionar prioridade, confianca, complexidade, proxima acao e trade-offs;
 - separar justificativa de negocio da justificativa tecnica;
 - integrar Recommendation Agent V11 ao caminho principal quando aplicavel.

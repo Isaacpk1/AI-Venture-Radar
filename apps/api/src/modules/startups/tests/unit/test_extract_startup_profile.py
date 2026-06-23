@@ -84,6 +84,47 @@ async def test_extract_startup_profile_persists_outcome() -> None:
 
 
 @pytest.mark.anyio
+async def test_extract_startup_profile_persists_sector_and_description() -> None:
+    uow = _make_uow()
+    startup = Startup(name="Dadosfera")
+    await uow.startup_repository.save(startup)
+
+    outcome = ExtractionOutcome(
+        sector="Data Analytics",
+        description="Data platform with an AI agent that answers questions in natural language.",
+    )
+    extractor = FakeExtractionPort(outcome)
+
+    use_case = ExtractStartupProfile(lambda: uow, extractor)
+    view = await use_case.execute(
+        ExtractStartupProfileInput(startup_id=startup.id)
+    )
+
+    assert view.sector == "Data Analytics"
+    assert view.description == (
+        "Data platform with an AI agent that answers questions in natural language."
+    )
+
+
+@pytest.mark.anyio
+async def test_extract_startup_profile_does_not_erase_sector_when_outcome_has_none() -> None:
+    uow = _make_uow()
+    startup = Startup(name="Acme AI", sector="LLM customer service", description="Existing description")
+    await uow.startup_repository.save(startup)
+
+    outcome = ExtractionOutcome(founders=["Ana Silva"])
+    extractor = FakeExtractionPort(outcome)
+
+    use_case = ExtractStartupProfile(lambda: uow, extractor)
+    view = await use_case.execute(
+        ExtractStartupProfileInput(startup_id=startup.id)
+    )
+
+    assert view.sector == "LLM customer service"
+    assert view.description == "Existing description"
+
+
+@pytest.mark.anyio
 async def test_extract_startup_profile_raises_when_startup_missing() -> None:
     uow = _make_uow()
     extractor = FakeExtractionPort(ExtractionOutcome())

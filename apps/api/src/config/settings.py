@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     gemini_embedding_model: str = "models/gemini-embedding-001"
     cohere_api_key: str = ""
 
+    # Observability
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_host: str = ""
+
     # Runtime
     environment: str = "development"
     log_level: str = "INFO"

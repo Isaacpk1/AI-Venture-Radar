@@ -1,0 +1,72 @@
+export type UrlIngestionStatus = "pending" | "scraping" | "ingesting" | "embedding" | "analyzing" | "completed" | "failed";
+
+export type UrlIngestionJob = {
+  id: string;
+  url: string;
+  source_type: string;
+  status: UrlIngestionStatus;
+  scraping_job_id: string | null;
+  scraping_result_id: string | null;
+  ingestion_job_id: string | null;
+  document_id: string | null;
+  embedding_job_id: string | null;
+  startup_id: string | null;
+  recommendation_count: number | null;
+  briefing_id: string | null;
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+};
+
+export type CreateUrlIngestionJobInput = { url: string; startup_id?: string };
+
+export type Startup = {
+  id: string;
+  name: string;
+  website_url: string | null;
+  description: string | null;
+  sector: string | null;
+  country: string | null;
+  ai_maturity_level: string | null;
+  classification_reason: string | null;
+  classified_at: string | null;
+  founders: string[];
+  funding_stage: string | null;
+  funding_amount_usd: number | null;
+  customers: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type StartupEvidence = {
+  id: string;
+  startup_id: string;
+  scraping_result_id: string;
+  source_url: string;
+  evidence_type: string;
+  title: string | null;
+  confidence_score: number | null;
+  notes: string | null;
+  created_at: string;
+};
+
+export type Recommendation = {
+  id: string;
+  startup_id: string;
+  technology_slug: string;
+  technology_name: string;
+  category: string;
+  score: number;
+  justification: string;
+  matched_keywords: string[];
+  evidence_ids: string[];
+  created_at: string;
+};
+
+export type Briefing = {
+  id: string;
+  startup_id: string;
+  content: string;
+  generated_at: string;
+};

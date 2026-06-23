@@ -17,6 +17,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import Runnable
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+from apps.api.src.shared.observability import get_langfuse_callbacks
+
 from apps.api.src.modules.agents.application.ports import BriefingProseRewriterPort
 from apps.api.src.modules.agents.domain.exceptions import AgentBriefingError
 
@@ -67,7 +69,9 @@ class LangChainGeminiBriefingProseRewriter(BriefingProseRewriterPort):
         messages = self._build_messages(content)
 
         try:
-            parsed = await self.structured_model.ainvoke(messages)
+            parsed = await self.structured_model.ainvoke(
+                messages, config={"callbacks": get_langfuse_callbacks()}
+            )
         except (ValidationError, ValueError, TypeError) as error:
             raise AgentBriefingError(
                 "Gemini devolveu uma resposta de reescrita invalida."

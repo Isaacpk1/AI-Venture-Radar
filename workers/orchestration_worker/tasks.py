@@ -4,10 +4,16 @@ from uuid import UUID
 
 import dramatiq
 
+from apps.api.src.modules.orchestration.domain.exceptions import (
+    UrlIngestionStillProcessingError,
+)
 from apps.api.src.modules.orchestration.factories.orchestration_factory import (
     OrchestrationFactory,
 )
 from apps.api.src.shared.queue.dramatiq_broker import broker
+from apps.api.src.shared.logging import get_logger, log_job
+
+logger = get_logger(__name__)
 
 
 @dramatiq.actor(
@@ -31,5 +37,11 @@ async def advance_url_ingestion_job(job_id: str) -> None:
     Embeddings V4).
     """
 
-    use_case = OrchestrationFactory.create_advance_url_ingestion_job()
-    await use_case.execute(job_id=UUID(job_id))
+    with log_job(
+        logger,
+        "url ingestion job advance",
+        expected_retry_exceptions=(UrlIngestionStillProcessingError,),
+        job_id=job_id,
+    ):
+        use_case = OrchestrationFactory.create_advance_url_ingestion_job()
+        await use_case.execute(job_id=UUID(job_id))

@@ -11,6 +11,9 @@ from apps.api.src.shared.queue.dramatiq_broker import (
     broker,
 )
 from apps.api.src.modules.agents.factories.agents_factory import AgentsFactory
+from apps.api.src.shared.logging import get_logger, log_job
+
+logger = get_logger(__name__)
 
 
 @dramatiq.actor(
@@ -25,5 +28,6 @@ async def execute_agent_job(run_id: str) -> None:
     prompt, validacao semantica ou regras de negocio.
     """
 
-    use_case = AgentsFactory.create_execute_agent_job()
-    await use_case.execute(run_id=UUID(run_id))
+    with log_job(logger, "agent run", agent_run_id=run_id):
+        use_case = AgentsFactory.create_execute_agent_job()
+        await use_case.execute(run_id=UUID(run_id))

@@ -25,6 +25,10 @@ __pycache__/
 # Virtual environment
 venv/
 
+# Node.js / Next.js
+node_modules/
+.next/
+
 # Local editor and operating-system files
 .vscode/
 .idea/

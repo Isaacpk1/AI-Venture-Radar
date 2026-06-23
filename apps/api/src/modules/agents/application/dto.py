@@ -156,6 +156,8 @@ class ExtractionResult:
     funding_stage: ExtractedFundingStage
     funding_amount_usd: float | None
     customers: list[str]
+    sector: str | None = None
+    description: str | None = None
 
 
 @dataclass(frozen=True)

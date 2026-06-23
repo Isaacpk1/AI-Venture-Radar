@@ -41,9 +41,12 @@ from apps.api.src.modules.orchestration.domain.exceptions import (
     UrlIngestionJobNotFoundError,
     UrlIngestionStillProcessingError,
 )
+from apps.api.src.shared.logging import bind_context, get_logger
 
 STARTUP_EVIDENCE_SOURCE_TYPE = "startup_evidence"
 MAX_EVIDENCE_TEXT_CHARS = 8000
+
+logger = get_logger(__name__)
 
 
 def _derive_startup_name(*, title: str | None, url: str) -> str:
@@ -76,91 +79,122 @@ class AdvanceUrlIngestionJob:
     async def execute(self, *, job_id: UUID) -> None:
         job = await self._get(job_id)
 
-        if job.status is UrlIngestionJobStatus.PENDING:
-            scraping_job_id = await self._scraping_port.submit(
-                job.url, source_type=job.source_type
+        with bind_context(job_id=str(job_id)):
+            logger.info(
+                "advancing url ingestion job", extra={"status": job.status.value}
             )
-            job.start_scraping(scraping_job_id)
-            await self._save(job)
-            raise UrlIngestionStillProcessingError("Scraping submetido.")
 
-        if job.status is UrlIngestionJobStatus.SCRAPING:
-            assert job.scraping_job_id is not None
-            status = await self._scraping_port.get_status(job.scraping_job_id)
-            if status.is_failed:
-                job.fail(status.error_message or "Scraping falhou.")
+            if job.status is UrlIngestionJobStatus.PENDING:
+                scraping_job_id = await self._scraping_port.submit(
+                    job.url, source_type=job.source_type
+                )
+                job.start_scraping(scraping_job_id)
                 await self._save(job)
-                return
-            if not status.is_done:
-                raise UrlIngestionStillProcessingError("Scraping em andamento.")
+                raise UrlIngestionStillProcessingError("Scraping submetido.")
 
-            assert status.result_id is not None
-            ingestion_job_id = await self._ingestion_port.submit(
-                status.result_id,
-                source_type=job.source_type,
-            )
-            job.start_ingesting(
-                scraping_result_id=status.result_id,
-                ingestion_job_id=ingestion_job_id,
-            )
-            await self._save(job)
-            raise UrlIngestionStillProcessingError("Ingestion submetido.")
+            if job.status is UrlIngestionJobStatus.SCRAPING:
+                assert job.scraping_job_id is not None
+                status = await self._scraping_port.get_status(job.scraping_job_id)
+                if status.is_failed:
+                    logger.warning(
+                        "scraping failed, failing url ingestion job",
+                        extra={"reason": status.error_message},
+                    )
+                    job.fail(status.error_message or "Scraping falhou.")
+                    await self._save(job)
+                    return
+                if not status.is_done:
+                    raise UrlIngestionStillProcessingError("Scraping em andamento.")
 
-        if job.status is UrlIngestionJobStatus.INGESTING:
-            assert job.ingestion_job_id is not None
-            status = await self._ingestion_port.get_status(job.ingestion_job_id)
-            if status.is_failed:
-                job.fail(status.error_message or "Ingestion falhou.")
+                assert status.result_id is not None
+                ingestion_job_id = await self._ingestion_port.submit(
+                    status.result_id,
+                    source_type=job.source_type,
+                )
+                job.start_ingesting(
+                    scraping_result_id=status.result_id,
+                    ingestion_job_id=ingestion_job_id,
+                )
                 await self._save(job)
-                return
-            if not status.is_done:
-                raise UrlIngestionStillProcessingError("Ingestion em andamento.")
+                raise UrlIngestionStillProcessingError("Ingestion submetido.")
 
-            assert status.result_id is not None
-            embedding_job_id = await self._embeddings_port.submit(status.result_id)
-            job.start_embedding(
-                document_id=status.result_id,
-                embedding_job_id=embedding_job_id,
-            )
-            await self._save(job)
-            raise UrlIngestionStillProcessingError("Embedding submetido.")
+            if job.status is UrlIngestionJobStatus.INGESTING:
+                assert job.ingestion_job_id is not None
+                status = await self._ingestion_port.get_status(job.ingestion_job_id)
+                if status.is_failed:
+                    logger.warning(
+                        "ingestion failed, failing url ingestion job",
+                        extra={"reason": status.error_message},
+                    )
+                    job.fail(status.error_message or "Ingestion falhou.")
+                    await self._save(job)
+                    return
+                if not status.is_done:
+                    raise UrlIngestionStillProcessingError("Ingestion em andamento.")
 
-        if job.status is UrlIngestionJobStatus.EMBEDDING:
-            assert job.embedding_job_id is not None
-            status = await self._embeddings_port.get_status(job.embedding_job_id)
-            if status.is_failed:
-                job.fail(status.error_message or "Embedding falhou.")
+                assert status.result_id is not None
+                embedding_job_id = await self._embeddings_port.submit(
+                    status.result_id
+                )
+                job.start_embedding(
+                    document_id=status.result_id,
+                    embedding_job_id=embedding_job_id,
+                )
                 await self._save(job)
-                return
-            if not status.is_done:
-                raise UrlIngestionStillProcessingError("Embedding em andamento.")
+                raise UrlIngestionStillProcessingError("Embedding submetido.")
 
-            if job.source_type != STARTUP_EVIDENCE_SOURCE_TYPE:
+            if job.status is UrlIngestionJobStatus.EMBEDDING:
+                assert job.embedding_job_id is not None
+                status = await self._embeddings_port.get_status(job.embedding_job_id)
+                if status.is_failed:
+                    logger.warning(
+                        "embedding failed, failing url ingestion job",
+                        extra={"reason": status.error_message},
+                    )
+                    job.fail(status.error_message or "Embedding falhou.")
+                    await self._save(job)
+                    return
+                if not status.is_done:
+                    raise UrlIngestionStillProcessingError("Embedding em andamento.")
+
+                if job.source_type != STARTUP_EVIDENCE_SOURCE_TYPE:
+                    job.complete()
+                    await self._save(job)
+                    return
+
+                job.start_analyzing()
+                await self._save(job)
+                raise UrlIngestionStillProcessingError(
+                    "Embedding concluido, iniciando analise."
+                )
+
+            if job.status is UrlIngestionJobStatus.ANALYZING:
+                assert job.scraping_result_id is not None
+                try:
+                    await self._run_analysis(job)
+                except Exception as error:
+                    logger.warning(
+                        "analysis failed, failing url ingestion job",
+                        extra={"reason": str(error)},
+                    )
+                    job.fail(str(error))
+                    await self._save(job)
+                    return
+
                 job.complete()
                 await self._save(job)
+                logger.info(
+                    "url ingestion job completed",
+                    extra={
+                        "startup_id": str(job.startup_id),
+                        "recommendation_count": job.recommendation_count,
+                        "briefing_id": str(job.briefing_id),
+                    },
+                )
                 return
 
-            job.start_analyzing()
-            await self._save(job)
-            raise UrlIngestionStillProcessingError(
-                "Embedding concluido, iniciando analise."
-            )
-
-        if job.status is UrlIngestionJobStatus.ANALYZING:
-            assert job.scraping_result_id is not None
-            try:
-                await self._run_analysis(job)
-            except Exception as error:
-                job.fail(str(error))
-                await self._save(job)
-                return
-
-            job.complete()
-            await self._save(job)
+            # COMPLETED/FAILED: estado terminal, nada a fazer.
             return
-
-        # COMPLETED/FAILED: estado terminal, nada a fazer.
-        return
 
     async def _run_analysis(self, job: UrlIngestionJob) -> None:
         assert job.scraping_result_id is not None
@@ -177,32 +211,50 @@ class AdvanceUrlIngestionJob:
             )
             job.link_startup(startup_id)
             await self._save(job)
+            logger.info(
+                "startup created from url ingestion job",
+                extra={"startup_id": str(startup_id)},
+            )
 
         assert job.startup_id is not None
 
-        if not job.evidence_attached:
-            notes = content.clean_text[:MAX_EVIDENCE_TEXT_CHARS] if content else None
-            title = content.title if content else None
-            await self._startups_port.attach_evidence(
-                startup_id=job.startup_id,
-                scraping_result_id=job.scraping_result_id,
-                source_url=job.url,
-                title=title,
-                notes=notes,
+        with bind_context(startup_id=str(job.startup_id)):
+            if not job.evidence_attached:
+                notes = (
+                    content.clean_text[:MAX_EVIDENCE_TEXT_CHARS] if content else None
+                )
+                title = content.title if content else None
+                await self._startups_port.attach_evidence(
+                    startup_id=job.startup_id,
+                    scraping_result_id=job.scraping_result_id,
+                    source_url=job.url,
+                    title=title,
+                    notes=notes,
+                )
+                job.mark_evidence_attached()
+                await self._save(job)
+                logger.info("evidence attached to startup")
+
+            logger.info("running extraction (best-effort)")
+            await self._startups_port.try_extract(job.startup_id)
+
+            logger.info("running classification (best-effort)")
+            await self._startups_port.try_classify(job.startup_id)
+
+            recommendation_count = await self._recommendations_port.generate(
+                job.startup_id
             )
-            job.mark_evidence_attached()
-            await self._save(job)
+            logger.info(
+                "recommendations generated",
+                extra={"recommendation_count": recommendation_count},
+            )
 
-        await self._startups_port.try_extract(job.startup_id)
-        await self._startups_port.try_classify(job.startup_id)
+            briefing_id = await self._briefing_port.generate(job.startup_id)
+            logger.info("briefing generated", extra={"briefing_id": str(briefing_id)})
 
-        recommendation_count = await self._recommendations_port.generate(
-            job.startup_id
-        )
-        briefing_id = await self._briefing_port.generate(job.startup_id)
-        job.record_analysis_result(
-            recommendation_count=recommendation_count, briefing_id=briefing_id
-        )
+            job.record_analysis_result(
+                recommendation_count=recommendation_count, briefing_id=briefing_id
+            )
 
     async def _get(self, job_id: UUID) -> UrlIngestionJob:
         async with self._uow_factory() as uow:

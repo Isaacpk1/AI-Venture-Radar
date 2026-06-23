@@ -45,6 +45,8 @@ class ExtractionOutcome:
     funding_stage: FundingStage = FundingStage.UNKNOWN
     funding_amount_usd: float | None = None
     customers: list[str] = field(default_factory=list)
+    sector: str | None = None
+    description: str | None = None
 
 
 class ExtractionPort(ABC):

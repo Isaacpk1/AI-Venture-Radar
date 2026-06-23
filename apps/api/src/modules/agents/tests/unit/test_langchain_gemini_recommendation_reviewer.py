@@ -16,13 +16,13 @@ class FakeStructuredModel:
         self.response = response
         self.received_messages = None
 
-    async def ainvoke(self, messages):
+    async def ainvoke(self, messages, config=None):
         self.received_messages = messages
         return self.response
 
 
 class FailingStructuredModel:
-    async def ainvoke(self, messages):
+    async def ainvoke(self, messages, config=None):
         raise RuntimeError("Gemini timeout simulado")
 
 

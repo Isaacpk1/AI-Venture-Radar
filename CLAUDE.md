@@ -36,16 +36,21 @@ briefing and recommendations end to end automatically.
 Pending:
 
 ```txt
-Frontend
+Frontend (apps/web existe localmente com V1+V2, ainda nao commitado/
+documentado formalmente nesta secao - ver docs/frontend/)
 Auth
-Production observability
-Recommendations V2/V4 - incorporate ai_maturity_level into the score (Startup.ai_maturity_level exists since Startups V3/Agents V9, but match_technologies() still ignores it)
+Production observability (foundation exists: shared/logging + shared/
+observability + Langfuse self-hosted via infra/docker-compose.yml,
+mas sem metricas/alertas/retencao de producao)
+Recommendations V2/V4 - aprofundar ai_maturity_level no score (bonus
+deterministico inicial entregue 23/06/2026 - ver match_technologies()),
+RAG com citacoes, prioridade/confianca/complexidade ainda faltam
 ```
 
 Recent validation:
 
 ```txt
-457 passed (Postgres/Redis/Qdrant locais ativos)
+474 passed (Postgres/Redis/Qdrant locais ativos)
 Integration tests are skipped explicitly when local Postgres/Redis/Qdrant
 are not reachable; with infra active, they run normally.
 
@@ -59,6 +64,28 @@ See docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md.
 Known unresolved: intermittent hostname resolution failures from the
 Windows-side Python process (not WSL) for some domains — environment
 networking issue, not a code bug.
+
+Recommendations bug found and fixed testing the real URL flow end-to-end
+(https://dadosfera.com.br): match_technologies() used substring puro sem
+word boundary, casando "agent" dentro de "agentes" (portugues) e "scale"
+dentro de "escale" via alias - 5 recomendacoes saiam todas em 27% por
+coincidencia linguistica, nao sinal real. Corrigido com regex \b...\b;
+Extraction Agent (agents) ganhou sector/description (sempre em ingles,
+para casar com o vocabulario do catalogo NVIDIA), antes nunca escritos
+pelo fluxo automatico de URL. Validado: mesma URL agora produz 2
+recomendacoes com scores diferenciados (43%/27%) em vez de 5 uniformes.
+Ver docs/diagnostico_fraquezas_e_tecnologias_recomendadas.md e
+docs/roadmap_evolucao_tecnica_mvp.md.
+
+Observabilidade: shared/logging/ (logger JSON + bind_context() via
+contextvars + log_job(), aplicado nos 5 workers e em
+AdvanceUrlIngestionJob) e shared/observability/ (get_langfuse_callbacks(),
+plugado nos 7 clients LangChain/Gemini) sao codigo novo e real - antes
+desta entrega, 1 unico arquivo em todo apps/api/src/modules/ usava
+logging, e nenhuma chamada LLM tinha tracing. Langfuse self-hosted (v3,
+6 servicos: web/worker/postgres/clickhouse/redis/minio) roda via
+infra/docker-compose.yml; validado com trace real capturado de uma
+chamada de extracao Gemini.
 ```
 
 Next recommended implementation:
@@ -76,17 +103,19 @@ ExtractionTrigger, ClassificationTrigger) so orchestration never reaches
 into startups' internals. See
 docs/orchestration/orchestration_v2_jornada_completa.md.
 
-Remaining P0/P1 from docs/roadmap_produto_final.md: Frontend (P0 #2);
-finish NVIDIA Knowledge V2's remaining P0/P1/P2 sources (P1 #3);
-Recommendations V2/V4 — incorporate ai_maturity_level into the score,
-add priority/confidence/complexity, integrate Recommendation Agent V11
-into the main path (P1 #4); Briefing export + human review, integrate
-Briefing Agent V12 (P1 #5). None of Agents V10/V11/V12 has a synchronous
-consumer yet — reachable only via the generic `agent_runs` queue; the
+Remaining P0/P1 from docs/roadmap_produto_final.md: commit/sync frontend
+(apps/web V1+V2 exist locally, P0 #2); finish NVIDIA Knowledge V2's
+remaining P0/P1/P2 sources (P1 #3); Recommendations V2/V4 — RAG context
+with citations, priority/confidence/complexity, integrate Recommendation
+Agent V11 into the main path (P1 #4); Briefing export + human review,
+integrate Briefing Agent V12 (P1 #5). None of Agents V10/V11/V12 has a
+synchronous consumer yet — reachable only via the generic `agent_runs`
+queue; the
 automatic orchestration flow uses the deterministic
-recommendations/briefing generators (V1), not the agents. P2 (auth,
-observability, CI/CD, deploy) and P3 (case differentiator, demo) remain
-fully open.
+recommendations/briefing generators (V1), not the agents. P2 observability
+has a real foundation now (structured logging + Langfuse tracing, see
+"Recent validation" above); auth, CI/CD and deploy remain fully open. P3
+(case differentiator, demo) remains fully open.
 ```
 
 Relevant docs:
@@ -245,7 +274,9 @@ apps/
     database/
       relational/       ← SQLAlchemy async session, Base
       vector/           ← Qdrant client
-    shared/             ← logger, errors, auth, observability, queue/dramatiq_broker.py
+    shared/             ← logging/ (logger JSON + bind_context + log_job),
+                          observability/ (get_langfuse_callbacks),
+                          queue/dramatiq_broker.py; errors/auth ainda nao existem
     config/             ← all env-var loading
   web/src/              ← Next.js frontend
 workers/                ← separate processes; thin delegators only
@@ -730,6 +761,14 @@ Extensao feita durante a entrega do Orchestration V1 (continua V1):
 - `GenerateRecommendations` passou a implementar o contrato direto; `execute()` agora delega para `generate()`
 - `RecommendationsFactory.create_recommendation_generator()`
 
+Extensao feita em 23/06/2026 (bug fix, continua V1 — ver
+`docs/diagnostico_fraquezas_e_tecnologias_recomendadas.md`):
+- `ai_maturity_level` passou a entrar no score (`AI_NATIVE_SCORE_BONUS = 0.1`, ja existia desde a extensao anterior, mas estava ausente do Pending da `CLAUDE.md`)
+- Bug real encontrado testando `https://dadosfera.com.br`: `match_technologies()` usava substring puro (`keyword in text`), casando `"agent"` dentro de `"agentes"` (portugues) e o alias `"scale"` dentro de `"escale"` — todas as recomendacoes saiam em 27% por coincidencia linguistica. Corrigido com regex `\b...\b` (`_contains_term()`); alias `"scale"` solto removido de `KEYWORD_ALIASES["throughput"]`
+- `startups`/`agents`: Extraction Agent (V8) ganhou `sector`/`description` no schema estruturado (sempre em ingles, para casar com o catalogo NVIDIA) — antes, startups criadas pelo fluxo automatico de URL nunca tinham esses campos preenchidos (`orchestration` so usava o `clean_text` para o `name`)
+- Validado: mesma URL, antes 5 recomendacoes uniformes em 27%, depois 2 recomendacoes com scores diferenciados (43%/27%)
+- Testes: +5 unit (2 `match_technologies`, 2 `extract_startup_profile`, 1 `extraction_graph`)
+
 ---
 
 ### Briefing module
@@ -947,25 +986,25 @@ url_ingestion_jobs      orquestracao URL -> scraping -> ingestion -> embeddings 
 | Modulo | Testes | Ultima verificacao |
 |---|---|---|
 | scraping | 134 | 2026-06-22 |
-| agents | 97 unit + 1 integracao | 2026-06-22 |
+| agents | 99 unit + 1 integracao | 2026-06-23 |
 | ingestion | 33 unit + 1 integracao | 2026-06-21 |
 | embeddings | 56 unit + 2 integracao | 2026-06-21 |
-| startups | 33 unit + 1 integracao | 2026-06-23 |
+| startups | 36 unit + 1 integracao | 2026-06-23 |
 | rag | 17 unit + 1 integracao | 2026-06-22 |
 | nvidia_knowledge | 15 unit | 2026-06-22 |
-| recommendations | 19 unit + 1 integracao | 2026-06-21 |
+| recommendations | 24 unit + 1 integracao | 2026-06-23 |
 | briefing | 15 unit + 1 integracao | 2026-06-21 |
-| orchestration | 22 unit + 2 integracao | 2026-06-23 |
-| **Total** | **457 passed, 2 warnings (Postgres/Redis/Qdrant ativos durante a verificacao)** | **2026-06-23** |
+| orchestration | 24 unit + 2 integracao | 2026-06-23 |
+| shared | 10 unit (logging + observability, novo) | 2026-06-23 |
+| **Total** | **474 passed, 2 warnings (Postgres/Redis/Qdrant ativos durante a verificacao)** | **2026-06-23** |
 
 Nota: as linhas `ingestion`, `embeddings`, `rag`, `nvidia_knowledge`,
-`recommendations`, `briefing` nao foram reconferidas nesta verificacao —
-refletem a ultima contagem conhecida, nao necessariamente o numero exato
-apos as entregas mais recentes. `scraping`, `agents`, `startups`,
-`orchestration` e o `Total` foram medidos de novo nas entregas mais
-recentes (3 correcoes de scraping + modelo de embedding, Orchestration V2
-worker, Agents V10, Agents V11, Agents V12, Orchestration V2 jornada
-completa).
+`briefing` nao foram reconferidas nesta verificacao — refletem a ultima
+contagem conhecida, nao necessariamente o numero exato apos as entregas
+mais recentes. `scraping`, `agents`, `startups`, `recommendations`,
+`orchestration`, `shared` e o `Total` foram medidos de novo nesta entrega
+(fix de matching/extraction em recommendations+startups+agents, logging
+estruturado + Langfuse em shared, instrumentacao em orchestration).
 
 Comando para verificar:
 ```bash
@@ -1179,9 +1218,16 @@ FIRECRAWL_API_KEY
 LLM_API_KEY          ← Gemini API key
 GEMINI_EMBEDDING_MODEL   ← modelo de embedding (embeddings V2), default models/text-embedding-004
 COHERE_API_KEY       ← reranking RAG V4 (Cohere Rerank); opcional, sem ela busca segue sem reranking
+LANGFUSE_PUBLIC_KEY  ← tracing de LLM (shared/observability); opcional, sem ela chamadas seguem sem tracing
+LANGFUSE_SECRET_KEY
+LANGFUSE_HOST        ← URL do Langfuse self-hosted, default http://localhost:3300 (infra/docker-compose.yml)
 ENVIRONMENT
 LOG_LEVEL
 ```
+
+Variaveis do stack Langfuse self-hosted (infra/.env, nao a raiz - project
+directory do `docker compose -f infra/docker-compose.yml` e' `infra/`):
+ver `infra/.env.example`.
 
 ---
 

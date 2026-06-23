@@ -63,4 +63,6 @@ class AgentsExtractor(ExtractionPort):
             funding_stage=funding_stage,
             funding_amount_usd=agents_result.funding_amount_usd,
             customers=agents_result.customers,
+            sector=agents_result.sector,
+            description=agents_result.description,
         )

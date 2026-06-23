@@ -59,6 +59,26 @@ async def test_graph_returns_extraction_result() -> None:
 
 
 @pytest.mark.anyio
+async def test_graph_returns_sector_and_description_in_english() -> None:
+    expected = ExtractionResult(
+        founders=[],
+        funding_stage=ExtractedFundingStage.UNKNOWN,
+        funding_amount_usd=None,
+        customers=[],
+        sector="Data Analytics",
+        description="Data platform with an AI agent for natural language queries.",
+    )
+    graph = ExtractionGraph(extractor=FakeExtractor(expected))
+
+    result = await graph.extract(make_input())
+
+    assert result.sector == "Data Analytics"
+    assert result.description == (
+        "Data platform with an AI agent for natural language queries."
+    )
+
+
+@pytest.mark.anyio
 async def test_graph_preserves_unknown_funding_when_not_mentioned() -> None:
     expected = ExtractionResult(
         founders=[],
