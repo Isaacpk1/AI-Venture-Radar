@@ -75,6 +75,24 @@ class StartupView:
 
 
 @dataclass
+class ListStartupsInput:
+    page: int = 1
+    page_size: int = 20
+    query: str | None = None
+    sector: str | None = None
+    country: str | None = None
+    ai_maturity_level: AiMaturityLevel | None = None
+
+
+@dataclass
+class StartupPageView:
+    items: list[StartupView]
+    total: int
+    page: int
+    page_size: int
+
+
+@dataclass
 class StartupEvidenceView:
     id: UUID
     startup_id: UUID

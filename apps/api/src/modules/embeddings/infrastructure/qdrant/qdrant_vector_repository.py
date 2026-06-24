@@ -25,6 +25,9 @@ from apps.api.src.modules.embeddings.application.dto import (
 from apps.api.src.modules.embeddings.application.public.vector_repository import (
     VectorRepository,
 )
+from apps.api.src.modules.embeddings.domain.exceptions import (
+    EmbeddingCollectionSchemaMismatchError,
+)
 
 
 class QdrantVectorRepository(VectorRepository):
@@ -35,7 +38,7 @@ class QdrantVectorRepository(VectorRepository):
         self._collection_name = collection_name
 
     async def upsert(self, record: ChunkEmbeddingRecord) -> None:
-        await self._ensure_collection(record.dimension)
+        await self._ensure_collection(record.dimension, record.model_name)
         await self._client.upsert(
             collection_name=self._collection_name,
             points=[
@@ -112,10 +115,39 @@ class QdrantVectorRepository(VectorRepository):
             ]
         )
 
-    async def _ensure_collection(self, dimension: int) -> None:
-        if await self._client.collection_exists(self._collection_name):
+    async def _ensure_collection(self, dimension: int, model_name: str) -> None:
+        if not await self._client.collection_exists(self._collection_name):
+            await self._client.create_collection(
+                collection_name=self._collection_name,
+                vectors_config=VectorParams(size=dimension, distance=Distance.COSINE),
+                metadata={
+                    "embedding_dimension": dimension,
+                    "embedding_model_name": model_name,
+                },
+            )
             return
-        await self._client.create_collection(
-            collection_name=self._collection_name,
-            vectors_config=VectorParams(size=dimension, distance=Distance.COSINE),
-        )
+
+        collection = await self._client.get_collection(self._collection_name)
+        vectors = collection.config.params.vectors
+        collection_dimension = getattr(vectors, "size", None)
+        metadata = collection.config.metadata or {}
+        collection_model_name = metadata.get("embedding_model_name")
+
+        if collection_dimension != dimension:
+            raise EmbeddingCollectionSchemaMismatchError(
+                "A colecao Qdrant usa dimensao "
+                f"{collection_dimension}, mas o modelo {model_name!r} gerou "
+                f"dimensao {dimension}. Crie ou reindexe uma colecao compativel."
+            )
+        if collection_model_name is None:
+            raise EmbeddingCollectionSchemaMismatchError(
+                "A colecao Qdrant existente nao declara o modelo de embedding. "
+                "Reindexe os vetores em uma colecao com metadata de schema antes "
+                "de continuar a gravar."
+            )
+        if collection_model_name != model_name:
+            raise EmbeddingCollectionSchemaMismatchError(
+                "A colecao Qdrant usa o modelo "
+                f"{collection_model_name!r}, mas a escrita usa {model_name!r}. "
+                "Crie ou reindexe uma colecao compativel."
+            )

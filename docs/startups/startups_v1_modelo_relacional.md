@@ -59,6 +59,7 @@ ListStartupEvidences
 
 ```txt
 POST   /startups
+GET    /startups?page=1&page_size=20&query=&sector=&country=&ai_maturity_level=
 GET    /startups/{startup_id}
 PATCH  /startups/{startup_id}
 POST   /startups/{startup_id}/evidences

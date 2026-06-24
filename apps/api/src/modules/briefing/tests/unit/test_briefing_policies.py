@@ -106,3 +106,32 @@ def test_build_briefing_markdown_handles_empty_evidence_and_recommendations() ->
     assert "Nenhuma evidencia aprovada registrada." in content
     assert "Nenhuma recomendacao gerada ainda." in content
     assert "Nenhum risco identificado." in content
+
+
+def test_build_briefing_markdown_includes_nvidia_context_when_provided() -> None:
+    content = build_briefing_markdown(
+        startup=STARTUP,
+        evidences=[EVIDENCE],
+        recommendations=[RECOMMENDATION],
+        risks=[],
+        next_actions=["Acao de exemplo."],
+        nvidia_context="NVIDIA NIM e NeMo aceleram atendimento via LLM. Fontes: https://nvidia.com/nim.",
+    )
+
+    assert "## Contexto NVIDIA" in content
+    assert "NVIDIA NIM e NeMo aceleram atendimento via LLM." in content
+    # secao aparece entre Recomendacoes NVIDIA e Riscos, nessa ordem
+    assert content.index("## Recomendacoes NVIDIA") < content.index("## Contexto NVIDIA")
+    assert content.index("## Contexto NVIDIA") < content.index("## Riscos")
+
+
+def test_build_briefing_markdown_omits_nvidia_context_when_absent() -> None:
+    content = build_briefing_markdown(
+        startup=STARTUP,
+        evidences=[EVIDENCE],
+        recommendations=[RECOMMENDATION],
+        risks=[],
+        next_actions=["Acao de exemplo."],
+    )
+
+    assert "## Contexto NVIDIA" not in content

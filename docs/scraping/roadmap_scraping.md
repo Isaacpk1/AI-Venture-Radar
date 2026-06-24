@@ -67,3 +67,74 @@ decisao do usuario. Efeito colateral corrigido de graca: reenviar a mesma
 URL hoje em dia podia falhar com `DuplicateScrapingContentError` (unique
 constraint em `content_hash`) se o conteudo viesse byte-identico; o cache
 evita chegar nesse caminho.
+
+---
+
+## Descoberta de startups ("Radar" de verdade) — DECIDIDO em 23/06/2026
+
+```txt
+docs/decisoes_pendentes.md, secao 4 — "vou colocar isso o teto acho valido
+pensarmos para demo algo gratuito, somente provar que o projeto consegue
+fazer"
+```
+
+Hoje toda `Startup` nasce de uma URL submetida manualmente. Decidido
+construir um mecanismo de descoberta automatica, com teto de custo
+**zero/gratuito** (sem API paga) e proposito explicito de **provar o
+conceito pra demo**, nao virar um crawler de produção.
+
+As fontes fornecidas se dividem em 2 tipos com desenho tecnico diferente:
+
+**Descoberta de startups novas** (hubs/diretorios — cada um lista MUITAS
+startups, exige um passo extra de extrair links individuais antes de
+alimentar o pipeline existente — diferente do
+`NvidiaKnowledgeSourceRegistry`, que ja aponta direto pra URL final):
+
+```txt
+StartSe          https://www.startse.com/
+Distrito          https://distrito.me/
+Latitud           https://www.latitud.com/
+Cubo Itau         https://cubo.network/
+ACE Startups      https://acestartups.com.br/
+Endeavor Brasil   https://endeavor.org.br/
+Abstartups        https://abstartups.com.br/
+Bossa Invest      https://bossainvest.com/
+Anjos do Brasil   https://www.anjosdobrasil.net/
+Darwin Startups   https://www.darwinstartups.com/
+Liga Ventures     https://liga.ventures/
+WOW Aceleradora   https://www.wow.ac/
+InovAtiva Brasil  https://www.inovativabrasil.com.br/
+100 Open Startups https://www.openstartups.net/
+```
+
+**Enriquecimento de startup ja conhecida** (nao descobrem startup nova; ja
+encaixam na "chain de enriquecimento" do Search Planner Agent, ver
+`docs/agents/roadmap_agentes.md` e `docs/orchestration/roadmap_orchestration.md`):
+
+```txt
+site oficial da startup
+blog oficial da startup
+pagina de carreiras da startup
+perfis publicos de founders
+```
+
+Entregaveis (descoberta, escopo de demo — gratuito, prova de conceito):
+
+- extrator de links por hub: cada um dos 14 hubs provavelmente tem
+  estrutura de HTML diferente — viavel comecar com 2-3 hubs (ex:
+  Abstartups, InovAtiva Brasil, que tendem a ter listagem mais simples) em
+  vez dos 14 de uma vez;
+- cada link extraido entra no pipeline existente
+  (`CreateScrapingJob`/`url_ingestion_jobs`) exatamente como uma URL
+  submetida manualmente — nenhuma mudanca no pipeline de scraping/
+  ingestion/embeddings/analise, so a origem da URL muda;
+- teto de custo diario (ex: "no maximo N startups novas descobertas por
+  dia") — decisao consciente antes de ligar, nao depois (ver
+  `docs/decisoes_pendentes.md`, secao 4);
+- sem API de busca paga (Tavily etc.) nesta entrega — fica reservada pra
+  chain de enriquecimento (que e' sobre startup ja conhecida, escopo
+  diferente).
+
+Pendente: desenhar o extrator de links por hub antes de declarar isso
+implementavel de verdade — heterogeneo por site, nao e' so "reusar o
+registry da NVIDIA Knowledge" 1:1.

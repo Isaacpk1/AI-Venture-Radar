@@ -1,6 +1,11 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    # Trocado de postgres:16-alpine para a imagem oficial do ParadeDB em
+    # 23/06/2026 (Fase 3 de docs/roadmap_evolucao_tecnica_mvp.md — BM25
+    # nativo via pg_search). pg_search nao tem binario pra Alpine (musl),
+    # so Debian/Ubuntu/RHEL/macOS — esta imagem e' Debian-based, mesma
+    # versao major do Postgres (16) pra manter compatibilidade de dados.
+    image: paradedb/paradedb:latest-pg16
     container_name: ai_radar_postgres
     restart: unless-stopped
     stop_grace_period: 10s

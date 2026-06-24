@@ -132,14 +132,18 @@ evidencias citaveis.
 Confirmado em `infrastructure/gemini/gemini_embedding_provider.py` e
 `infrastructure/qdrant/qdrant_vector_repository.py`: o modelo ja trocou uma
 vez (`models/text-embedding-004` -> `models/gemini-embedding-001`, ver
-extensao da V4 no `CLAUDE.md`) sem nenhum campo de versao gravado no Qdrant
-— vetores antigos e novos convivem na mesma colecao sem distincao.
+extensao da V4 no `CLAUDE.md`) sem quebrar nada so porque a colecao estava
+vazia na hora. `model_name` ja fica gravado no payload do Qdrant desde a
+V3, mas **nunca e usado como guarda** — nada impede um upsert futuro com
+dimensao incompativel de quebrar a colecao se isso acontecer de novo com
+dados existentes.
 
 | Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
 |---|---|---|---|
-| Troca de modelo de embedding nao deixa rastro no vetor armazenado | gravar `embedding_model` no payload do Qdrant a cada upsert (campo novo, sem lib nova) | Base para uma futura V6 de migracao de modelo sem busca quebrada | Baixo |
+| `model_name` ja fica salvo no Qdrant mas nunca e usado como guarda contra mismatch de dimensao | **DECIDIDO em 23/06/2026** (`docs/decisoes_pendentes.md`, secao 3): validar a dimensao do vetor contra a dimensao ja existente na colecao antes do upsert, levantando erro de dominio claro em vez de deixar o Qdrant rejeitar silenciosamente; gravar `embedding_model` esperado da colecao em algum lugar consultavel (config ou Postgres) pra detectar o mismatch antes de tentar escrever | Protege contra a proxima troca de modelo | Baixo — checagem antes do upsert, sem lib nova |
 | Chunk identico (mesmo `content_hash`) e reembeddido do zero se o job rodar de novo | cache por `content_hash` do chunk antes de chamar o provider — pula a chamada Gemini se o hash ja tem vetor salvo — **concluido em 23/06/2026** | Reduz custo de API, complementa a V5 (metricas) | Baixo — so consulta antes de gerar |
 | Tokens de entrada sao estimados (`estimate_input_tokens()`), nao o uso real reportado pela API | usar o uso real de tokens que a resposta do LangChain/Gemini ja retorna (`usage_metadata`), em vez da heuristica | Fecha o gap que a V5 ja deixou registrado como limite conhecido | Baixo — dado ja vem na resposta, falta so ler e logar (via `shared/logging`, Fase 0 ja entregue) |
+| Payload do Qdrant (`source_url`/`source_type`) duplica dado do Postgres sem mecanismo de propagacao se a evidencia for editada depois | **DECIDIDO em 23/06/2026**: mecanismo de sincronia (ex: reupsert do payload quando `Document`/`ScrapingResult` mudar) — baixo risco pratico hoje (nao existe fluxo de edicao de evidencia ainda), mas decidido proteger preventivamente | Consistencia Qdrant<->Postgres | Baixo-Medio |
 
 Nao adotar embeddings locais (Hugging Face/sentence-transformers) nem trocar
 de provider agora: o ponto fraco real e observabilidade/cache em torno do

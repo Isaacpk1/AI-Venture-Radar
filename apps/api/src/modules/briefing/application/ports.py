@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 
 from apps.api.src.modules.briefing.application.dto import (
+    GroundedContext,
     RecommendationSnapshot,
     StartupProfileSnapshot,
 )
@@ -29,3 +30,19 @@ class RecommendationsSource(ABC):
     @abstractmethod
     async def list_by_startup(self, startup_id: UUID) -> list[RecommendationSnapshot]:
         """Lista as recomendacoes mais recentes da startup."""
+
+
+class NvidiaContextGrounder(ABC):
+    """Fundamenta o briefing com uma sintese de setor sobre conteudo NVIDIA real.
+
+    Best-effort por desenho, mesmo espirito de
+    ``recommendations.application.ports.NvidiaKnowledgeGrounder``:
+    implementacoes nunca levantam excecao, devolvem ``None`` quando a
+    fundamentacao nao for possivel - quem chama omite a secao no briefing.
+    """
+
+    @abstractmethod
+    async def ground(
+        self, sector: str | None, technology_names: tuple[str, ...]
+    ) -> GroundedContext | None:
+        """Busca conteudo NVIDIA real relevante para o setor/tecnologias."""

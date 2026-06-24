@@ -6,22 +6,21 @@ executivo.
 
 ## Estado do produto
 
-O backend modular esta funcional e coberto por testes. O produto final ainda
-esta em construcao: faltam a jornada unica iniciada por URL, frontend,
-enriquecimento do motor de recomendacoes e requisitos de producao.
+O backend modular e o primeiro MVP visual estao funcionais e cobertos por
+testes. O produto final ainda esta em construcao: faltam historico de
+analises, enriquecimento do motor de recomendacoes e requisitos de producao.
 
-Fluxo entregue parcialmente:
-
-```txt
-URL -> scraping -> ingestion -> embeddings -> RAG
-startup existente -> recommendations -> briefing
-```
-
-Fluxo alvo:
+Fluxo entregue:
 
 ```txt
 URL -> scraping -> ingestion -> embeddings -> criar/associar startup
--> extract -> classify -> recommendations -> briefing -> revisao/exportacao
+-> extract -> classify -> recommendations -> briefing
+```
+
+Evolucao alvo:
+
+```txt
+historico/listagem -> revisao/exportacao -> hardening de producao
 ```
 
 ## Inicio rapido de desenvolvimento

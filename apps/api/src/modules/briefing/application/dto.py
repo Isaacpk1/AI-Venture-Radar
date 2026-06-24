@@ -55,3 +55,11 @@ class RecommendationSnapshot:
     category: str
     score: float
     justification: str
+
+
+@dataclass(frozen=True)
+class GroundedContext:
+    """Sintese de setor fundamentada em conteudo NVIDIA real, via RAG."""
+
+    text: str
+    citation_urls: tuple[str, ...]

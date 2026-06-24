@@ -8,6 +8,7 @@ import pytest
 from apps.api.src.modules.startups.application.dto import (
     AddStartupEvidenceInput,
     CreateStartupInput,
+    ListStartupsInput,
     UpdateStartupInput,
 )
 from apps.api.src.modules.startups.application.unit_of_work import StartupsUnitOfWork
@@ -21,11 +22,18 @@ from apps.api.src.modules.startups.application.use_cases.get_startup import GetS
 from apps.api.src.modules.startups.application.use_cases.list_startup_evidences import (
     ListStartupEvidences,
 )
+from apps.api.src.modules.startups.application.use_cases.list_startups import (
+    ListStartups,
+)
 from apps.api.src.modules.startups.application.use_cases.update_startup import (
     UpdateStartup,
 )
 from apps.api.src.modules.startups.domain.entities import Startup, StartupEvidence
-from apps.api.src.modules.startups.domain.enums import FundingStage, StartupEvidenceType
+from apps.api.src.modules.startups.domain.enums import (
+    AiMaturityLevel,
+    FundingStage,
+    StartupEvidenceType,
+)
 from apps.api.src.modules.startups.domain.exceptions import StartupNotFoundError
 from apps.api.src.modules.startups.domain.repositories import (
     StartupEvidenceRepository,
@@ -42,6 +50,36 @@ class FakeStartupRepository(StartupRepository):
 
     async def get_by_id(self, startup_id: UUID) -> Startup | None:
         return self.items.get(startup_id)
+
+    async def list_page(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        query: str | None = None,
+        sector: str | None = None,
+        country: str | None = None,
+        ai_maturity_level=None,
+    ) -> tuple[list[Startup], int]:
+        startups = list(self.items.values())
+        if query:
+            term = query.lower()
+            startups = [
+                startup
+                for startup in startups
+                if term in startup.name.lower()
+                or term in (startup.description or "").lower()
+            ]
+        if sector:
+            startups = [s for s in startups if s.sector and s.sector.lower() == sector.lower()]
+        if country:
+            startups = [s for s in startups if s.country and s.country.lower() == country.lower()]
+        if ai_maturity_level:
+            startups = [s for s in startups if s.ai_maturity_level is ai_maturity_level]
+        startups.sort(key=lambda startup: (startup.updated_at, startup.id), reverse=True)
+        total = len(startups)
+        start = (page - 1) * page_size
+        return startups[start : start + page_size], total
 
 
 class FakeEvidenceRepository(StartupEvidenceRepository):
@@ -141,6 +179,31 @@ async def test_get_startup_raises_when_missing() -> None:
 
     with pytest.raises(StartupNotFoundError):
         await GetStartup(lambda: uow).execute(startup_id=uuid4())
+
+
+@pytest.mark.anyio
+async def test_list_startups_filters_and_paginates_portfolio() -> None:
+    uow = _make_uow()
+    alpha = Startup(name="Alpha AI", sector="Healthcare", country="BR")
+    alpha.classify(AiMaturityLevel.AI_NATIVE, "Modelo proprio")
+    beta = Startup(name="Beta Cloud", sector="Infrastructure", country="US")
+    gamma = Startup(name="Gamma AI", sector="Healthcare", country="BR")
+    for startup in (alpha, beta, gamma):
+        await uow.startup_repository.save(startup)
+
+    page = await ListStartups(lambda: uow).execute(
+        ListStartupsInput(
+            page=1,
+            page_size=1,
+            query="ai",
+            sector="healthcare",
+            country="br",
+            ai_maturity_level=AiMaturityLevel.AI_NATIVE,
+        )
+    )
+
+    assert page.total == 1
+    assert page.items[0].id == alpha.id
 
 
 @pytest.mark.anyio

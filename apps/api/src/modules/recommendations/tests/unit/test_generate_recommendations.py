@@ -8,11 +8,13 @@ import pytest
 from apps.api.src.modules.recommendations.application.dto import (
     EvidenceSnapshot,
     GenerateRecommendationsInput,
+    GroundedJustification,
     NvidiaTechnologySnapshot,
     StartupProfileSnapshot,
 )
 from apps.api.src.modules.recommendations.application.ports import (
     NvidiaCatalogSource,
+    NvidiaKnowledgeGrounder,
     StartupProfileSource,
 )
 from apps.api.src.modules.recommendations.application.unit_of_work import (
@@ -84,6 +86,18 @@ class FakeRecommendationRepository(RecommendationRepository):
         recommendation = self.items.get(recommendation_id)
         if recommendation is not None:
             recommendation.justification = justification
+
+
+class FakeGrounder(NvidiaKnowledgeGrounder):
+    def __init__(self, result: GroundedJustification | None) -> None:
+        self._result = result
+        self.calls: list[tuple[str, str]] = []
+
+    async def ground(
+        self, technology_name: str, use_case: str
+    ) -> GroundedJustification | None:
+        self.calls.append((technology_name, use_case))
+        return self._result
 
 
 class FakeUoW(RecommendationsUnitOfWork):
@@ -200,3 +214,58 @@ async def test_generate_recommendations_tracks_evidence_ids() -> None:
 
     assert len(views) == 1
     assert views[0].evidence_ids == [evidence_id]
+
+
+@pytest.mark.anyio
+async def test_generate_recommendations_uses_grounded_justification_when_available() -> None:
+    startup_id = uuid4()
+    repository = FakeRecommendationRepository()
+    uow = FakeUoW(repository)
+    profile_source = FakeProfileSource(
+        StartupProfileSnapshot(
+            sector="LLM and generative AI",
+            description="Provides inference API with simple deployment as microservice.",
+            evidences=(),
+        )
+    )
+    catalog_source = FakeCatalogSource([NIM_SNAPSHOT])
+    grounded = GroundedJustification(
+        text="NVIDIA NIM acelera a inferencia de LLMs em producao.",
+        citation_urls=("https://nvidia.com/nim",),
+    )
+    grounder = FakeGrounder(grounded)
+
+    use_case = GenerateRecommendations(
+        lambda: uow, profile_source, catalog_source, grounder=grounder
+    )
+    views = await use_case.execute(GenerateRecommendationsInput(startup_id=startup_id))
+
+    assert len(views) == 1
+    assert "NVIDIA NIM acelera a inferencia" in views[0].justification
+    assert "https://nvidia.com/nim" in views[0].justification
+    assert grounder.calls == [("NVIDIA NIM", "servir LLMs em producao")]
+
+
+@pytest.mark.anyio
+async def test_generate_recommendations_falls_back_to_template_when_grounder_returns_none() -> None:
+    startup_id = uuid4()
+    repository = FakeRecommendationRepository()
+    uow = FakeUoW(repository)
+    profile_source = FakeProfileSource(
+        StartupProfileSnapshot(
+            sector="LLM and generative AI",
+            description="Provides inference API with simple deployment as microservice.",
+            evidences=(),
+        )
+    )
+    catalog_source = FakeCatalogSource([NIM_SNAPSHOT])
+    grounder = FakeGrounder(None)
+
+    use_case = GenerateRecommendations(
+        lambda: uow, profile_source, catalog_source, grounder=grounder
+    )
+    views = await use_case.execute(GenerateRecommendationsInput(startup_id=startup_id))
+
+    assert len(views) == 1
+    assert "Evidencias e perfil mencionam:" in views[0].justification
+    assert grounder.calls == [("NVIDIA NIM", "servir LLMs em producao")]

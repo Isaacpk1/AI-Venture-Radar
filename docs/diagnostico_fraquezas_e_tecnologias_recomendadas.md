@@ -139,11 +139,11 @@ o que mudou entre duas rodadas.
 ### 2.6 Frontend — construido, sem rede de seguranca
 
 ```txt
-apps/web existe (Frontend V1+V2), mas nenhum arquivo .test./.spec. em
-todo o diretorio. O primeiro teste manual no navegador encontrou um bug
-real de Rules of Hooks (StartupDetails chamava useMutation depois de
-returns condicionais) que travava a pagina de resultado da analise —
-exatamente o tipo de bug que um teste de render pegaria.
+apps/web possui Frontend V1+V2 e a fundacao de testes: Vitest + React Testing
+Library, com 13 testes cobrindo os componentes do MVP e o portfolio. A afirmacao
+anterior sobre um bug de Rules of Hooks em `StartupDetails` foi reavaliada e
+removida: os hooks sempre estiveram antes dos returns condicionais. Ainda
+faltam testes das rotas BFF e dos fluxos futuros de listagem/revisao.
 ```
 
 ### 2.7 Dados de startup e NVIDIA Knowledge (resumo, ja documentado em outros docs)

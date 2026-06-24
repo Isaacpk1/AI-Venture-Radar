@@ -1,5 +1,7 @@
 """Composicao das dependencias concretas do modulo briefing."""
 
+from apps.api.src.config.settings import get_settings
+from apps.api.src.modules.briefing.application.ports import NvidiaContextGrounder
 from apps.api.src.modules.briefing.application.use_cases.generate_briefing import (
     GenerateBriefing,
 )
@@ -21,12 +23,16 @@ from apps.api.src.modules.briefing.application.use_cases.update_briefing_content
 from apps.api.src.modules.briefing.infrastructure.database.postgres_unit_of_work import (
     PostgresBriefingsUnitOfWork,
 )
+from apps.api.src.modules.briefing.infrastructure.rag_adapters.nvidia_context_grounder_adapter import (
+    RagNvidiaContextGrounder,
+)
 from apps.api.src.modules.briefing.infrastructure.recommendations_adapters.recommendations_adapter import (
     RecommendationsModuleSource,
 )
 from apps.api.src.modules.briefing.infrastructure.startups_adapters.startup_profile_adapter import (
     StartupsModuleProfileSource,
 )
+from apps.api.src.modules.rag.factories.rag_factory import RagFactory
 from apps.api.src.modules.recommendations.factories.recommendations_factory import (
     RecommendationsFactory,
 )
@@ -35,6 +41,14 @@ from apps.api.src.modules.startups.factories.startups_factory import StartupsFac
 
 class BriefingFactory:
     """Ponto de composicao do modulo briefing."""
+
+    @staticmethod
+    def create_nvidia_context_grounder() -> NvidiaContextGrounder | None:
+        """Sem `GEMINI_API_KEY`, devolve `None` - sem fundamentacao via RAG."""
+
+        if not get_settings().gemini_api_key:
+            return None
+        return RagNvidiaContextGrounder(RagFactory.create_question_answerer())
 
     @staticmethod
     def create_generate_briefing() -> GenerateBriefing:
@@ -48,6 +62,7 @@ class BriefingFactory:
             PostgresBriefingsUnitOfWork,
             profile_source,
             recommendations_source,
+            grounder=BriefingFactory.create_nvidia_context_grounder(),
         )
 
     @staticmethod
@@ -70,6 +85,7 @@ class BriefingFactory:
             PostgresBriefingsUnitOfWork,
             profile_source,
             recommendations_source,
+            grounder=BriefingFactory.create_nvidia_context_grounder(),
         )
 
     @staticmethod

@@ -3,7 +3,7 @@
 Este indice mostra como ler a documentacao atual sem cair em notas historicas
 antigas.
 
-Fonte de verdade operacional em 22/06/2026:
+Fonte de verdade operacional em 23/06/2026:
 
 ```txt
 docs/diagnostico_case_original_e_novas_prioridades.md
@@ -37,12 +37,12 @@ docs/roadmap_produto_final.md
 | agents | Agents V12 | `docs/agents/` |
 | ingestion | Ingestion V1 + worker | `docs/ingestion/` |
 | embeddings | Embeddings V5 + worker | `docs/embeddings/` |
-| startups | Startups V3 | `docs/startups/` |
+| startups | Startups V3 + listagem paginada | `docs/startups/` |
 | rag | RAG V4 | `docs/rag/` |
 | nvidia_knowledge | NVIDIA Knowledge V1 expandido + V2 source registry + url_ingestion_jobs | `docs/nvidia_knowledge/` |
 | recommendations | Recommendations V1 | `docs/recommendations/` |
 | briefing | Briefing V1 | `docs/briefing/` |
-| orchestration | Orchestration V1 + V2 parcial | `docs/orchestration/` |
+| orchestration | Orchestration V1 + V2 completa | `docs/orchestration/` |
 
 ---
 
@@ -54,7 +54,7 @@ docs/roadmap_produto_final.md
 | Sistema multiagente LangGraph | Completo: 8/8 agentes implementados |
 | RAG NVIDIA com busca hibrida + reranking | Completo |
 | Motor de recomendacao | Parcial: V1 deterministico entregue |
-| Interface web | Nao iniciado |
+| Interface web | V1+V2 entregues; historico e revisao pendentes |
 | Diferencial do projeto | Candidatos mapeados, decisao pendente |
 
 ---
@@ -62,11 +62,10 @@ docs/roadmap_produto_final.md
 ## Proxima Ordem Recomendada
 
 ```txt
-1. Fechar Orchestration V2 da URL ate briefing
-2. Construir o frontend sobre esse fluxo
-3. Completar a base NVIDIA real e enriquecer recommendations
-4. Revisao humana e exportacao
-5. Hardening: auth, observabilidade, CI/CD e deploy
+1. Completar a base NVIDIA real e enriquecer recommendations
+2. Construir historico/listagem no frontend
+3. Revisao humana e exportacao
+4. Hardening: auth, observabilidade, CI/CD e deploy
 ```
 
 Observacao: o MVP backend macro ja existe. O que falta agora e aderencia total

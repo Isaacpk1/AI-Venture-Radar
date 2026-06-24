@@ -10,9 +10,10 @@ export default function HomePage() {
       <p className="mt-6 max-w-2xl text-lg leading-8 text-[var(--muted)]">
         Coletamos evidencias, estruturamos o perfil da startup, classificamos a maturidade em IA e geramos recomendacoes e briefing executivo.
       </p>
-      <Link className="mt-10 inline-flex rounded-md bg-[var(--accent)] px-5 py-3 font-semibold text-[#07111f]" href="/analyze">
-        Comecar uma analise
-      </Link>
+      <div className="mt-10 flex flex-wrap gap-3">
+        <Link className="inline-flex rounded-md bg-[var(--accent)] px-5 py-3 font-semibold text-[#07111f]" href="/analyze">Comecar uma analise</Link>
+        <Link className="inline-flex rounded-md border border-[var(--surface-border)] px-5 py-3 font-semibold" href="/startups">Ver portfolio</Link>
+      </div>
     </main>
   );
 }

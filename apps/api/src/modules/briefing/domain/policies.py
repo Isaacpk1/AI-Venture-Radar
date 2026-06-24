@@ -94,8 +94,15 @@ def build_briefing_markdown(
     recommendations: list[RecommendationItem],
     risks: list[str],
     next_actions: list[str],
+    nvidia_context: str | None = None,
 ) -> str:
-    """Monta o briefing executivo em Markdown a partir de dados estruturados."""
+    """Monta o briefing executivo em Markdown a partir de dados estruturados.
+
+    ``nvidia_context`` e' texto ja formatado (citacoes embutidas como texto
+    plano) vindo de uma fundamentacao via RAG best-effort feita por quem
+    chama - a funcao continua pura, sem I/O; quando ``None`` (sem
+    `GEMINI_API_KEY` ou sem evidencia suficiente), a secao e' omitida.
+    """
 
     lines = [f"# Briefing Executivo — {startup.name}", "", "## Resumo"]
 
@@ -125,6 +132,9 @@ def build_briefing_markdown(
             )
     else:
         lines.append("- Nenhuma recomendacao gerada ainda.")
+
+    if nvidia_context:
+        lines += ["", "## Contexto NVIDIA", nvidia_context]
 
     lines += ["", "## Riscos"]
     if risks:

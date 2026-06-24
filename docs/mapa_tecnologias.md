@@ -49,6 +49,7 @@ tecnologia entra, nunca em `domain/`.
 | Trafilatura | `infrastructure/scrapers/` | Em uso | Isola conteudo principal em paginas densas (artigos, docs tecnicos) |
 | httpx (Gemini via HTTP direto) | `infrastructure/semantic_validators/` | Em uso | Validacao semantica leve (LLM_REVIEW) sem trazer LangChain so para isso |
 | Firecrawl | — | Candidata (so comentada hoje, `FIRECRAWL_API_KEY` existe em `Settings` sem uso) | Ultimo fallback pago para paginas que esgotam BS4/Playwright/Trafilatura (ex: `rapids-docs` no NVIDIA Knowledge V2) — ver `docs/scraping/roadmap_scraping.md` |
+| Extrator de links por hub (sem lib nova, BS4/Trafilatura ja resolvem) | novo, reusa o pipeline existente (`CreateScrapingJob`) so trocando a origem da URL | Decidida (23/06/2026), gratuito/demo | Descoberta de startups novas via 14 hubs (StartSe, Distrito, Endeavor, etc.) — ver `docs/scraping/roadmap_scraping.md`, "Descoberta de startups" |
 
 ---
 
@@ -88,10 +89,9 @@ tecnologia entra, nunca em `domain/`.
 
 | Tecnologia | Camada | Status | Por que |
 |---|---|---|---|
-| PostgreSQL full-text search (`to_tsvector`/`ts_rank`) | `infrastructure/database/postgres_lexical_search_repository.py` | Em uso | Busca lexical sem carregar chunks em memoria Python (decisao deliberada contra `rank-bm25`) |
+| `pg_search` (ParadeDB, BM25 nativo) | `infra/docker-compose.yml` (imagem `paradedb/paradedb:latest-pg16`) + `infrastructure/database/postgres_lexical_search_repository.py` | Em uso (substituiu `to_tsvector`/`ts_rank` em 23/06/2026) | `context_recall` medido em 0.67 nao foi considerado bom o suficiente — sem carregar chunks em memoria Python (decisao deliberada contra `rank-bm25`) — ver Fase 3 de `docs/roadmap_evolucao_tecnica_mvp.md` |
 | Cohere (`cohere.AsyncClient.rerank`) | `infrastructure/reranking/` | Em uso | Reordena candidatos por relevancia; degrada graciosamente sem `COHERE_API_KEY` |
 | Ragas | `tests/integration/test_ragas_quality_baseline.py` | Em uso (opt-in via `RUN_RAGAS_EVAL=1`) | Mede faithfulness/relevancy/precision/recall contra conteudo real do NVIDIA Knowledge |
-| `pg_search` (ParadeDB) | troca de imagem Postgres + nova `LexicalSearchRepository` | Candidata, bloqueada por medicao | So entra se `context_recall` (hoje 0.67) confirmar que `ts_rank` e o gargalo — ver Fase 3 de `docs/roadmap_evolucao_tecnica_mvp.md` |
 
 ---
 
@@ -110,7 +110,7 @@ tecnologia entra, nunca em `domain/`.
 | Tecnologia | Camada | Status | Por que |
 |---|---|---|---|
 | (sem lib externa) | `application/use_cases/`, `domain/entities.py` | Em uso | Modelo relacional + casos de uso simples |
-| `rapidfuzz` | `application/use_cases/create_startup.py` | Candidata | Dedup leve por nome/website antes de criar `Startup` duplicada — sem infra de entity resolution pesada (Dedupe.io/Splink), volume nao justifica — ver `docs/startups/roadmap_startups.md` |
+| `rapidfuzz` | `application/use_cases/create_startup.py` | Decidida (23/06/2026), falta calibrar limiar | Dedup leve por nome/website antes de criar `Startup` duplicada — sem infra de entity resolution pesada (Dedupe.io/Splink), volume nao justifica — ver `docs/startups/roadmap_startups.md` |
 
 ---
 
@@ -150,7 +150,9 @@ tecnologia entra, nunca em `domain/`.
 | React 19 + TypeScript | `apps/web/features/`, `lib/api/` | Em uso | Componentes e tipos compartilhados com o contrato HTTP do backend |
 | TanStack Query | `providers/query-provider.tsx` | Em uso | Polling de jobs or (`/jobs/[jobId]`) sem reimplementar cache/retry |
 | Tailwind CSS | estilo de toda `apps/web/` | Em uso | Utilitarios de CSS, sem framework de componentes adicional |
-| Vitest + React Testing Library | novo, `apps/web/**/*.test.tsx` | Candidata, prioridade alta | Zero testes hoje; 1 bug real de Rules of Hooks ja confirmado em `StartupDetails` — ver `docs/frontend/roadmap_frontend.md` |
+| Vitest + React Testing Library | `apps/web/**/*.test.tsx` | Em uso | 13 testes cobrem `UrlSubmissionForm`, `JobStatusPanel`, `StartupDetails` e `StartupPortfolio` |
+| recharts | novo, componente de grafico na V4 | Decidida (23/06/2026) | 2 graficos simples (distribuicao de maturidade de IA, top tecnologias NVIDIA) — ver `docs/frontend/roadmap_frontend.md` |
+| `/rag/answer` (reuso, sem tech nova) | novo componente de chat na V3 | Candidata | Chatbot sobre a base NVIDIA Knowledge — contrato publico de `rag` ja existe com citacoes, so falta UI |
 
 ---
 

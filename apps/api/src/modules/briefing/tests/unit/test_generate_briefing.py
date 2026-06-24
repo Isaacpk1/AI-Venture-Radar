@@ -8,11 +8,13 @@ import pytest
 from apps.api.src.modules.briefing.application.dto import (
     EvidenceSnapshot,
     GenerateBriefingInput,
+    GroundedContext,
     RecommendationSnapshot,
     StartupProfileSnapshot,
     StartupSnapshot,
 )
 from apps.api.src.modules.briefing.application.ports import (
+    NvidiaContextGrounder,
     RecommendationsSource,
     StartupProfileSource,
 )
@@ -81,6 +83,18 @@ class FakeBriefingRepository(BriefingRepository):
         briefing = self.items.get(briefing_id)
         if briefing is not None:
             briefing.content = content
+
+
+class FakeGrounder(NvidiaContextGrounder):
+    def __init__(self, result: GroundedContext | None) -> None:
+        self._result = result
+        self.calls: list[tuple[str | None, tuple[str, ...]]] = []
+
+    async def ground(
+        self, sector: str | None, technology_names: tuple[str, ...]
+    ) -> GroundedContext | None:
+        self.calls.append((sector, technology_names))
+        return self._result
 
 
 class FakeUoW(BriefingsUnitOfWork):
@@ -175,3 +189,58 @@ async def test_generate_briefing_propagates_unavailable_profile() -> None:
 
     with pytest.raises(StartupProfileUnavailableError):
         await use_case.execute(GenerateBriefingInput(startup_id=uuid4()))
+
+
+@pytest.mark.anyio
+async def test_generate_briefing_includes_nvidia_context_when_grounder_succeeds() -> None:
+    startup_id = uuid4()
+    repository = FakeBriefingRepository()
+    uow = FakeUoW(repository)
+    profile_source = FakeProfileSource(
+        StartupProfileSnapshot(startup=STARTUP_SNAPSHOT, evidences=())
+    )
+    recommendations_source = FakeRecommendationsSource(
+        [
+            RecommendationSnapshot(
+                technology_name="NVIDIA NIM",
+                category="model_serving",
+                score=0.8,
+                justification="Evidencias mencionam llm e inference.",
+            )
+        ]
+    )
+    grounded = GroundedContext(
+        text="NVIDIA NIM e NeMo aceleram atendimento via LLM no setor.",
+        citation_urls=("https://nvidia.com/nim",),
+    )
+    grounder = FakeGrounder(grounded)
+
+    use_case = GenerateBriefing(
+        lambda: uow, profile_source, recommendations_source, grounder=grounder
+    )
+    view = await use_case.execute(GenerateBriefingInput(startup_id=startup_id))
+
+    assert "## Contexto NVIDIA" in view.content
+    assert "NVIDIA NIM e NeMo aceleram atendimento" in view.content
+    assert "https://nvidia.com/nim" in view.content
+    assert grounder.calls == [(STARTUP_SNAPSHOT.sector, ("NVIDIA NIM",))]
+
+
+@pytest.mark.anyio
+async def test_generate_briefing_omits_nvidia_context_without_recommendations() -> None:
+    startup_id = uuid4()
+    repository = FakeBriefingRepository()
+    uow = FakeUoW(repository)
+    profile_source = FakeProfileSource(
+        StartupProfileSnapshot(startup=STARTUP_SNAPSHOT, evidences=())
+    )
+    recommendations_source = FakeRecommendationsSource([])
+    grounder = FakeGrounder(GroundedContext(text="nunca deveria chamar", citation_urls=()))
+
+    use_case = GenerateBriefing(
+        lambda: uow, profile_source, recommendations_source, grounder=grounder
+    )
+    view = await use_case.execute(GenerateBriefingInput(startup_id=startup_id))
+
+    assert "## Contexto NVIDIA" not in view.content
+    assert grounder.calls == []

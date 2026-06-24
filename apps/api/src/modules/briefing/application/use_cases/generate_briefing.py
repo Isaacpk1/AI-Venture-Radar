@@ -7,6 +7,7 @@ from apps.api.src.modules.briefing.application.dto import (
     GenerateBriefingInput,
 )
 from apps.api.src.modules.briefing.application.ports import (
+    NvidiaContextGrounder,
     RecommendationsSource,
     StartupProfileSource,
 )
@@ -40,10 +41,12 @@ class GenerateBriefing(BriefingGenerator):
         uow_factory: BriefingsUnitOfWorkFactory,
         profile_source: StartupProfileSource,
         recommendations_source: RecommendationsSource,
+        grounder: NvidiaContextGrounder | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._profile_source = profile_source
         self._recommendations_source = recommendations_source
+        self._grounder = grounder
 
     async def generate(self, startup_id: UUID) -> BriefingView:
         profile = await self._profile_source.get_profile(startup_id)
@@ -77,6 +80,8 @@ class GenerateBriefing(BriefingGenerator):
             for recommendation in recommendation_snapshots
         ]
 
+        nvidia_context = await self._ground_context(startup.sector, recommendations)
+
         risks = assess_risks(evidences, recommendations)
         next_actions = suggest_next_actions(recommendations)
         content = build_briefing_markdown(
@@ -85,6 +90,7 @@ class GenerateBriefing(BriefingGenerator):
             recommendations=recommendations,
             risks=risks,
             next_actions=next_actions,
+            nvidia_context=nvidia_context,
         )
 
         briefing = Briefing(startup_id=startup_id, content=content)
@@ -98,6 +104,26 @@ class GenerateBriefing(BriefingGenerator):
 
     async def execute(self, briefing_input: GenerateBriefingInput) -> BriefingView:
         return await self.generate(briefing_input.startup_id)
+
+    async def _ground_context(
+        self, sector: str | None, recommendations: list[RecommendationItem]
+    ) -> str | None:
+        """Sintese de setor via RAG, best-effort (1 chamada, nao por tecnologia).
+
+        Sem grounder configurado ou sem recomendacao nenhuma (nada pra
+        sintetizar), pula a chamada de rede inteiramente.
+        """
+
+        if self._grounder is None or not recommendations:
+            return None
+
+        technology_names = tuple(r.technology_name for r in recommendations)
+        grounded = await self._grounder.ground(sector, technology_names)
+        if grounded is None:
+            return None
+
+        sources = ", ".join(grounded.citation_urls)
+        return f"{grounded.text} Fontes: {sources}."
 
 
 def to_briefing_view(briefing: Briefing) -> BriefingView:

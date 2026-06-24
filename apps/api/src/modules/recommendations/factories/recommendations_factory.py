@@ -1,7 +1,12 @@
 """Composicao das dependencias concretas do modulo recommendations."""
 
+from apps.api.src.config.settings import get_settings
 from apps.api.src.modules.nvidia_knowledge.factories.nvidia_knowledge_factory import (
     NvidiaKnowledgeFactory,
+)
+from apps.api.src.modules.rag.factories.rag_factory import RagFactory
+from apps.api.src.modules.recommendations.application.ports import (
+    NvidiaKnowledgeGrounder,
 )
 from apps.api.src.modules.recommendations.application.use_cases.generate_recommendations import (
     GenerateRecommendations,
@@ -30,6 +35,9 @@ from apps.api.src.modules.recommendations.infrastructure.database.postgres_unit_
 from apps.api.src.modules.recommendations.infrastructure.nvidia_adapters.nvidia_catalog_adapter import (
     NvidiaKnowledgeCatalogAdapter,
 )
+from apps.api.src.modules.recommendations.infrastructure.rag_adapters.nvidia_knowledge_grounder_adapter import (
+    RagNvidiaKnowledgeGrounder,
+)
 from apps.api.src.modules.recommendations.infrastructure.startups_adapters.startup_profile_adapter import (
     StartupsModuleProfileSource,
 )
@@ -38,6 +46,14 @@ from apps.api.src.modules.startups.factories.startups_factory import StartupsFac
 
 class RecommendationsFactory:
     """Ponto de composicao do modulo recommendations."""
+
+    @staticmethod
+    def create_nvidia_knowledge_grounder() -> NvidiaKnowledgeGrounder | None:
+        """Sem `GEMINI_API_KEY`, devolve `None` - sem fundamentacao via RAG."""
+
+        if not get_settings().gemini_api_key:
+            return None
+        return RagNvidiaKnowledgeGrounder(RagFactory.create_question_answerer())
 
     @staticmethod
     def create_generate_recommendations() -> GenerateRecommendations:
@@ -51,6 +67,7 @@ class RecommendationsFactory:
             PostgresRecommendationsUnitOfWork,
             profile_source,
             catalog_source,
+            grounder=RecommendationsFactory.create_nvidia_knowledge_grounder(),
         )
 
     @staticmethod
@@ -81,4 +98,5 @@ class RecommendationsFactory:
             PostgresRecommendationsUnitOfWork,
             profile_source,
             catalog_source,
+            grounder=RecommendationsFactory.create_nvidia_knowledge_grounder(),
         )

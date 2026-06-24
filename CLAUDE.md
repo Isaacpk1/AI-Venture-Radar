@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
-## Authoritative Current State (2026-06-23)
+## Authoritative Current State (2026-06-24)
 
 Use this section as the source of truth when older historical sections below
 disagree.
@@ -20,8 +20,8 @@ Startups V2 + V3 (slices iniciais: campos estruturados + classificacao de maturi
 RAG V4 (busca hibrida + reranking)
 NVIDIA Knowledge V1
 NVIDIA Knowledge V2 foundation + source registry + P0+P1+P2 complete (20/20 sources processed, 17/20 with retrievable content)
-Recommendations V1
-Briefing V1
+Recommendations V1 + V2 (RAG grounding via NVIDIA Knowledge, com fallback deterministico)
+Briefing V1 (+ extensao de RAG grounding, mesmo padrao de Recommendations V2)
 Orchestration V1 + V2 completa (URL bruta -> scraping -> ingestion -> embeddings -> startup -> evidencia -> extract -> classify -> recommendations -> briefing, sem operacao manual entre etapas) + orchestration_worker automatico
 ```
 
@@ -37,15 +37,21 @@ Pending:
 
 ```txt
 Frontend V3-V5 (V1+V2 entregues e commitados, ver secao "Frontend module"
-do Module version history e docs/frontend/roadmap_frontend.md; falta
-historico/listagem paginada (V3), painel BI (V4) e revisao humana/auth (V5))
+do Module version history e docs/frontend/roadmap_frontend.md; V3 ganhou
+sua primeira fatia em 24/06/2026 - GET /startups paginado com filtros +
+pagina /startups - mas historico global de jobs, chatbot sobre NVIDIA
+Knowledge, badge de fit, evidencia clicavel e export ainda faltam; painel
+BI (V4) e revisao humana/auth (V5) seguem fora)
 Auth
 Production observability (foundation exists: shared/logging + shared/
 observability + Langfuse self-hosted via infra/docker-compose.yml,
 mas sem metricas/alertas/retencao de producao)
-Recommendations V2/V4 - aprofundar ai_maturity_level no score (bonus
-deterministico inicial entregue 23/06/2026 - ver match_technologies()),
-RAG com citacoes, prioridade/confianca/complexidade ainda faltam
+Recommendations V2/V4 - RAG com citacoes ENTREGUE em 24/06/2026 (ver
+secao "Recommendations module"); aprofundar ai_maturity_level no score
+(bonus deterministico inicial entregue 23/06/2026 - ver
+match_technologies()), prioridade/confianca/complexidade ainda faltam
+rapidfuzz para dedup de startups por nome/website (Startups V4) -
+decisao tomada, falta calibrar limiar de similaridade e implementar
 ```
 
 Recent validation:
@@ -97,6 +103,22 @@ corrigido: `link_farm` sem fallback de estrategia
 navegacao densa em links (ex. TensorRT-LLM) — corrigido, validado
 (BS4 -> fallback -> Trafilatura -> accept).
 
+Recommendation Agent (V11) e Briefing Agent (V12) ligados ao caminho
+sincrono de producao (23/06/2026), fechando P1 #4/#5 do
+docs/roadmap_produto_final.md: `orchestration` chama os agentes quando
+`GEMINI_API_KEY` esta configurada, com fallback para os geradores V1 sem
+a chave. Achado real durante a implementacao: os dois agentes ja
+chamavam o gerador determinístico (que persiste) e DEPOIS reescreviam o
+resultado so em memoria — a melhoria do LLM nunca chegava ao banco.
+Corrigido com 2 contratos publicos novos
+(`RecommendationJustificationUpdater` em recommendations,
+`BriefingContentUpdater` em briefing) chamados por um node novo em cada
+grafo, logo antes do finalize. `BriefingAgentResult` ganhou o campo
+`briefing_id` para propagar o id do briefing atualizado de volta a
+orchestration. NVIDIA RAG Agent (V10) ficou de fora — sem ponto de
+integracao natural (nenhum dos outros 2 grafos o chama como sub-tool
+hoje). Ver docs/agents/roadmap_agentes.md.
+
 Fase 6 do roadmap_evolucao_tecnica_mvp.md concluida (23/06/2026): dois
 caches por content_hash/URL para reduzir custo redundante. Embeddings —
 `EmbeddingJobChunkRepository.find_completed_by_content_hash()` +
@@ -130,10 +152,54 @@ tratava citations vazio como erro (HTTP 502) em vez de resposta valida
 "evidencia insuficiente" — toda pergunta sem boa evidencia quebrava
 `/rag/answer` em produção; corrigido em langchain_gemini_answer_generator.py.
 
+Fase 3 do roadmap_evolucao_tecnica_mvp.md concluida (23/06/2026): 0.67
+foi considerado fraco o suficiente pra justificar a troca. Busca lexical
+trocou `to_tsvector('simple')`/`ts_rank` por **BM25 nativo** via extensao
+`pg_search` (ParadeDB) — `PostgresLexicalSearchRepository` reescrito pro
+operador `@@@` + `paradedb.score()`, mesmo contrato
+(`LexicalSearchRepository`), `fuse_rankings()` (RRF) e `SearchEvidence`
+inalterados. Exigiu trocar a imagem do Postgres em
+infra/docker-compose.yml (`postgres:16-alpine` ->
+`paradedb/paradedb:latest-pg16` — pg_search nao tem binario pra
+Alpine/musl). Risco real tratado antes da troca: o banco usava collation
+`en_US.utf8` (dependente de libc); reaproveitar o mesmo volume Docker
+trocando so a imagem arriscava corromper indices de texto silenciosamente
+(musl -> glibc). Resolvido com `pg_dump`/`pg_restore` num volume novo, em
+vez de troca direta no mesmo volume. Migration `b3f6e91c7d45`. Verificado:
+suite completa (500 passed, 1 skipped) + teste de integracao existente da
+busca lexical (texto em portugues) passando sem reescrita. Pendente:
+medir `context_recall` real pos-troca via Ragas (`RUN_RAGAS_EVAL=1`,
+custo real de API) contra o baseline 0.67 — fica pra quando o usuario
+decidir rodar. Ver docs/rag/roadmap_rag.md (extensao da V3).
+
+RAG grounding em recommendations e briefing concluido (24/06/2026,
+decidido em 23/06/2026 — docs/decisoes_pendentes.md secao 2): 2 ports
+novos (`NvidiaKnowledgeGrounder` em recommendations,
+`NvidiaContextGrounder` em briefing) + adapters
+(`RagNvidiaKnowledgeGrounder`/`RagNvidiaContextGrounder`,
+`infrastructure/rag_adapters/` em cada modulo) chamam
+`rag/application/public/question_answerer.py` filtrado por
+`source_type=nvidia_knowledge`. Em recommendations, 1 chamada RAG em
+paralelo por tecnologia candidata (`asyncio.gather`) substitui a
+justificativa-template por texto com citacoes reais; em briefing, 1
+chamada agregada para todas as tecnologias recomendadas gera uma secao
+"Contexto NVIDIA" nova no Markdown. Best-effort nos dois: sem
+`GEMINI_API_KEY` ou sem citacao real (`RagAnswerView.citations` vazio),
+cai pro comportamento deterministico de antes, sem erro. Ver
+docs/recommendations/recommendations_v2_rag_grounding.md e a extensao
+registrada em docs/briefing/roadmap_briefing.md.
+
+Frontend V3, primeira fatia, entregue (24/06/2026): `ListStartups`
+(`startups/application/use_cases/`) + `GET /startups` paginado com busca
+textual e filtros (setor/pais/maturidade de IA) + pagina `/startups`
+(`startup-portfolio.tsx`) no frontend. Historico de jobs, chatbot sobre
+NVIDIA Knowledge, badge de fit e evidencia clicavel continuam fora desta
+fatia.
+
 Next recommended implementation:
 
 ```txt
-Orchestration V2 P0 #1 (docs/roadmap_produto_final.md) is now closed:
+Orchestration V2 P0 #1 (docs/roadmap_produto_final.md) is closed:
 AdvanceUrlIngestionJob gained an ANALYZING status between EMBEDDING and
 COMPLETED that runs, in a single synchronous pass, create/associate
 Startup -> attach evidence -> try_extract/try_classify (best-effort) ->
@@ -145,23 +211,33 @@ ExtractionTrigger, ClassificationTrigger) so orchestration never reaches
 into startups' internals. See
 docs/orchestration/orchestration_v2_jornada_completa.md.
 
-Remaining P0/P1 from docs/roadmap_produto_final.md: Frontend V3-V5 (V1+V2
-are entregue and committed, P0 #2 is now mostly closed — see "Frontend
-module" above; missing pieces are paginated history/listing, BI panel and
-human review/auth); NVIDIA Knowledge V2 P0/P1/P2 sources are now complete
-(20/20 processed, 17/20 with content — P1 #3 closed except the 3 known
-gaps with no code fix available, see roadmap_nvidia_knowledge.md);
-Recommendations V2/V4 — RAG context with citations, priority/confidence/
-complexity, integrate Recommendation Agent V11 into the main path (P1 #4);
-Briefing export + human review, integrate Briefing Agent V12 (P1 #5).
-None of Agents V10/V11/V12 has a synchronous consumer yet — reachable
-only via the generic `agent_runs` queue; the automatic orchestration flow
-uses the deterministic recommendations/briefing generators (V1), not the
-agents (see docs/agents/roadmap_agentes.md, "Tecnologias candidatas", for
-the concrete adapter pattern to close this). P2 observability has a real
-foundation now (structured logging + Langfuse tracing, see "Recent
-validation" above); auth, CI/CD and deploy remain fully open. P3 (case
-differentiator, demo) remains fully open.
+Closed since then (23-24/06/2026, see "Recent validation" above for the
+detail behind each): Recommendation Agent V11 and Briefing Agent V12 now
+have a real synchronous consumer inside orchestration, with results
+persisted back to the DB (P1 #4/#5); BM25 via `pg_search` replaced the
+GIN full-text index in `rag`; Recommendations V2 and the Briefing V1
+extension both ground their output in real NVIDIA Knowledge content via
+RAG, with citations and a deterministic fallback when no context is
+recoverable; Qdrant gained a model/dimension schema guard; the frontend
+gained Vitest/RTL coverage and its first Frontend V3 slice (paginated
+startup portfolio via `GET /startups`).
+
+Remaining, in the order decided in docs/roadmap_produto_final.md
+("Ordem de implementacao recomendada") and docs/decisoes_pendentes.md:
+rapidfuzz dedup for startups by name/website (decided, similarity
+threshold still needs calibrating with real examples before
+implementing); the rest of Frontend V3 (global job history, chatbot over
+NVIDIA Knowledge, fit badge, clickable evidence, export); free-source
+startup discovery (StartSe, Distrito, Endeavor etc., zero budget,
+docs/scraping/roadmap_scraping.md); Frontend V4 (Recharts charts,
+comparison, batch queue — needs new aggregate backend endpoints). NVIDIA
+RAG Agent (V10) deliberately has no sub-tool consumer — decided, not to
+be revisited (RAG grounding in recommendations/briefing already covers
+the same need via a different path). P2 (auth, CI/CD, deploy, Qdrant
+backup) is explicitly out of scope: this project stays a case/demo, not
+a production target (decided 23/06/2026, docs/decisoes_pendentes.md sec.
+1). P3 (case differentiator) remains fully open — the only undecided
+question left in docs/decisoes_pendentes.md.
 ```
 
 Relevant docs:
@@ -482,7 +558,7 @@ O que a V11 entregou:
 - Revisao em lote: uma chamada Gemini por startup (nao uma por recomendacao), julgando ambiguidade e reescrevendo a justificativa em linguagem de negocio de todos os candidatos mantidos
 - `AgentType.RECOMMENDATION` wired em `ExecuteAgentJob`/`ResumeAgentJob`; `AgentsFactory.create_recommendation_agent_service()` segue a mesma regra dos outros agentes (sem `GEMINI_API_KEY`, devolve `None`)
 - Import circular descoberto e corrigido: `agents -> recommendations -> startups -> agents` (`startups_factory.py` ja importa `AgentsFactory` para os adapters V8/V9); resolvido com import lazy de `RecommendationsFactory` dentro do metodo da factory, mesmo padrao de `nvidia_knowledge_factory.py` chamando `orchestration`
-- Sem consumidor sincrono dedicado ainda; acionavel pela fila generica `agent_runs` com `agent_type=recommendation`
+- Sem consumidor sincrono dedicado nesta entrega; acionavel pela fila generica `agent_runs` com `agent_type=recommendation` (consumidor real chegou em 23/06/2026, ver extensao abaixo)
 - Testes: 13 unit (+2 adapter, +9 reviewer, +2 grafo)
 
 Documento da entrega: `docs/agents/agents_v11_recommendation_agent.md`.
@@ -496,10 +572,31 @@ implementados a partir desta entrega):
 - Fallback seguro em codigo (nao confiado so ao prompt, regra 9): extrai todas as URLs do Markdown deterministico, e se a reescrita do LLM perder alguma, devolve o Markdown original inalterado — mesmo espirito do "code-enforced override" do Recommendation Agent (V11), aplicado dentro da porta, nao no grafo
 - `AgentType.BRIEFING` wired em `ExecuteAgentJob`/`ResumeAgentJob`; `AgentsFactory.create_briefing_agent_service()` segue a mesma regra dos outros agentes (sem `GEMINI_API_KEY`, devolve `None`)
 - Import lazy de `BriefingFactory` dentro do metodo da factory (mesmo ciclo `agents -> briefing -> startups -> agents` do Recommendation Agent, corrigido preventivamente)
-- Sem consumidor sincrono dedicado ainda; acionavel pela fila generica `agent_runs` com `agent_type=briefing`
+- Sem consumidor sincrono dedicado nesta entrega; acionavel pela fila generica `agent_runs` com `agent_type=briefing` (consumidor real chegou em 23/06/2026, ver extensao abaixo)
 - Testes: 10 unit (+2 adapter, +7 rewriter, +1 grafo)
 
 Documento da entrega: `docs/agents/agents_v12_briefing_agent.md`.
+
+Extensao feita em 23/06/2026 (continua V12 — consumidor sincrono real
+para Recommendation Agent V11 e Briefing Agent V12, fecha P1 #4/#5 do
+`docs/roadmap_produto_final.md`):
+- `orchestration` passou a chamar os dois agentes direto
+  (`RecommendationsModulePort`/`BriefingModulePort` ganharam
+  `agent_service` opcional), com fallback para os geradores V1 sem
+  `GEMINI_API_KEY` — mesmo padrao de `try_extract`/`try_classify`
+- Achado real: os dois agentes ja chamavam o gerador determinístico (que
+  persiste) e DEPOIS reescreviam o resultado so em memoria — a melhoria
+  do LLM nunca voltava ao banco. Corrigido com 2 contratos publicos novos
+  (`RecommendationJustificationUpdater`, `BriefingContentUpdater`) +
+  `RecommendationToolPort.update_justifications()` e
+  `BriefingToolPort.update_content()` novos, chamados por um node novo em
+  cada grafo (`persist_reviewed_candidates`, `persist_rewritten_content`)
+  logo antes do `finalize`
+- `BriefingAgentResult` ganhou o campo `briefing_id` (precisava propagar
+  o id do briefing atualizado de volta para `orchestration`, que so tinha
+  o conteudo antes)
+- Testes: +16 (3 recommendations, 3 briefing, 4 adapters de agents, 6
+  orchestration)
 
 O que a V6 entregou:
 - `PostgresCheckpointer` em `infrastructure/checkpoints/` wraps `AsyncPostgresSaver` (lazy init)
@@ -625,6 +722,19 @@ Gemini, devolvia 404 em `embedContent`) para `models/gemini-embedding-001`
 colecao Qdrant local estava vazia. Ver
 `docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md`.
 
+Extensao feita em 24/06/2026 (continua V4 — protecao de schema decidida
+em 23/06/2026, `docs/decisoes_pendentes.md`, lacuna 3 de
+`docs/lacunas_do_projeto.md`): `model_name`/dimensao ficavam so no
+payload de cada ponto, sem guarda — trocar o modelo de embedding de novo
+com dados existentes podia quebrar a colecao silenciosamente num upsert
+incompativel. `EmbeddingCollectionSchemaMismatchError` (`domain/exceptions.py`)
+nova; `_ensure_collection()` (`infrastructure/qdrant/`) passa a gravar
+`embedding_dimension`/`embedding_model_name` na metadata da colecao na
+criacao, e a recusar upserts numa colecao existente cuja dimensao nao
+bate, cujo modelo nao bate, ou que nao tem essa metadata (colecao legada
+criada antes desta entrega). Testes: 61 -> 64 unit (+3,
+`test_qdrant_collection_schema.py`).
+
 ---
 
 ### Startups module
@@ -687,6 +797,20 @@ de `StartupProfileReader`, ver
 - Testes: +6 unit (1 `create_startup`, 1 `attach_evidence`, 2
   `try_extract`, 2 `try_classify`)
 
+Extensao feita em 24/06/2026 (continua V3, nao e' nova versao — primeira
+fatia do Frontend V3, ver `docs/frontend/roadmap_frontend.md` e
+`docs/roadmap_produto_final.md` secao 2):
+- `StartupRepository.list_page()` (abstrato + Postgres) — filtros por
+  `query` (ILIKE em `name`/`description`), `sector`, `country`,
+  `ai_maturity_level`, ordenado por `updated_at desc`, com `count()`
+  separado pro total
+- `ListStartups` (use case) + DTOs `ListStartupsInput`/`StartupPageView`
+- `GET /startups` (paginado, `page`/`page_size` com limites via `Query`)
+  + `StartupPageResponse`
+- `StartupsFactory.create_list_startups()`
+- Testes: +1 unit (`test_list_startups_filters_and_paginates_portfolio`,
+  cobre os 4 filtros e paginacao numa unica chamada)
+
 ---
 
 ### RAG module
@@ -708,6 +832,31 @@ O que V3 entregou:
 - Pool de candidatos `max(limit*4, 20)` antes de fundir/rerankar
 - Migration `8d84cba84a02`: indice GIN de expressao em `chunks`
 - Mudanca de comportamento: `EvidenceChunkView.score` agora e o score RRF, nao mais o cosine score puro do Qdrant
+
+Extensao feita em 23/06/2026 (continua V3, nao e' nova versao — Fase 3 de
+`docs/roadmap_evolucao_tecnica_mvp.md`, decidida apos o baseline Ragas
+medir `context_recall` 0.67):
+- `to_tsvector('simple')`/`ts_rank` trocado por **BM25 nativo** via
+  extensao `pg_search` (ParadeDB) — `PostgresLexicalSearchRepository`
+  reescrito pro operador `@@@` + `paradedb.score()`; contrato
+  (`LexicalSearchRepository`), `fuse_rankings()` (RRF) e `SearchEvidence`
+  inalterados
+- Imagem do Postgres trocada em `infra/docker-compose.yml`:
+  `postgres:16-alpine` -> `paradedb/paradedb:latest-pg16` — `pg_search`
+  nao tem binario pra Alpine/musl
+- Risco real tratado antes da troca: banco usava collation `en_US.utf8`
+  (dependente de libc); imagem antiga e' musl, a do ParadeDB e' glibc —
+  reaproveitar o mesmo volume Docker trocando so a imagem arriscava
+  corromper indices de texto. Resolvido com `pg_dump`/`pg_restore` num
+  volume novo, nao troca direta
+- Migration `b3f6e91c7d45`: drop do indice GIN antigo + `CREATE EXTENSION
+  pg_search` + `CREATE INDEX ix_chunks_bm25 ... USING bm25 (id, text)`
+- Verificado: suite completa (500 passed, 1 skipped) + teste de
+  integracao existente da busca lexical (texto em portugues) passando
+  sem reescrita
+- Pendente: medir `context_recall` real pos-troca via Ragas
+  (`RUN_RAGAS_EVAL=1`, custo real de API) contra o baseline 0.67 — fica
+  pra quando o usuario decidir rodar
 
 O que V4 entregou:
 - `CohereReranker` (`infrastructure/reranking/`) — `cohere.AsyncClient.rerank()`, `COHERE_API_KEY` (ja existia em `Settings`, nunca usada) finalmente em uso
@@ -779,12 +928,12 @@ Documento: `docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md
 | Versao | Status | O que foi entregue |
 |---|---|---|
 | V1 | Entregue | Regras deterministicas: cruzamento perfil da startup x catalogo NVIDIA |
-| V2 | Futuro | Recomendacao com RAG |
+| V2 | Entregue (24/06/2026) | Recomendacao com RAG |
 | V3 | Futuro | Agent Recommendation |
 | V4 | Futuro | Ranking e confianca |
 | V5 | Futuro | Feedback humano |
 
-**Versao atual: V1**
+**Versao atual: V2**
 
 O que a V1 entregou:
 - `Recommendation` (`domain/entities.py`) — tecnologia recomendada, score (0-1), justificativa, `matched_keywords` e `evidence_ids` para rastreabilidade
@@ -819,6 +968,26 @@ Extensao feita em 23/06/2026 (bug fix, continua V1 — ver
 - Validado: mesma URL, antes 5 recomendacoes uniformes em 27%, depois 2 recomendacoes com scores diferenciados (43%/27%)
 - Testes: +5 unit (2 `match_technologies`, 2 `extract_startup_profile`, 1 `extraction_graph`)
 
+Extensao feita em 23/06/2026 (continua V1 — ligar o Recommendation Agent
+V11 ao caminho principal, fecha P1 #4 do `docs/roadmap_produto_final.md`):
+- `Recommendation.update_justification()` (`domain/entities.py`) — metodo novo, valida nao-vazio
+- `RecommendationRepository.update_justification()` (abstrato + Postgres) — `save()` so insere, nao dava para reusar para update pontual
+- Contrato publico novo `RecommendationJustificationUpdater` (`application/public/`), implementado por `UpdateRecommendationJustifications` (casa por `technology_slug`, ignora slugs nao encontrados)
+- `RecommendationsFactory.create_recommendation_justification_updater()`
+- Testes: +3 unit
+
+O que a V2 entregou (24/06/2026 — decidido em 23/06/2026,
+`docs/decisoes_pendentes.md` secao 2: "vale fazer, junto com a mesma
+decisao para `briefing`"):
+- Porta nova `NvidiaKnowledgeGrounder` (`application/ports.py`) — best-effort por desenho, nunca levanta excecao, devolve `None` sem `GEMINI_API_KEY`/sem citacao real
+- `RagNvidiaKnowledgeGrounder` (`infrastructure/rag_adapters/`) — implementa a porta chamando `rag/application/public/question_answerer.py` filtrado por `source_type="nvidia_knowledge"`; so importa `application/public/`+`application/dto.py` de `rag`, nada de `domain`/`infrastructure`
+- `GenerateRecommendations` ganha `grounder` opcional no `__init__`; para cada candidato do `match_technologies()` (motor deterministico inalterado), 1 chamada RAG em paralelo (`asyncio.gather`) — justificativa fundamentada com citacoes reais quando disponivel, fallback pro template V1 quando nao
+- `RecommendationsFactory.create_nvidia_knowledge_grounder()` segue a mesma regra de degradacao dos agentes/adapters que dependem de `GEMINI_API_KEY`: sem a chave, `grounder=None`
+- Limite conhecido: `ground()` recebe so `technology_name`+`use_case` (generico por tecnologia), nao o texto especifico de evidencia da startup — duas startups recomendadas pra mesma tecnologia recebem a mesma fundamentacao RAG; sem cache de chamada (repete custo de API se a mesma tecnologia for recomendada de novo)
+- Testes: 26 -> 31 unit (+5: 3 adapter + 2 caso de uso)
+
+Documento da entrega: `docs/recommendations/recommendations_v2_rag_grounding.md`.
+
 ---
 
 ### Briefing module
@@ -852,6 +1021,26 @@ Extensao feita durante a entrega do Orchestration V1 (continua V1):
 - Novo contrato publico `BriefingGenerator` (`application/public/briefing_generator.py`) com `generate(startup_id)`
 - `GenerateBriefing` passou a implementar o contrato direto; `execute()` agora delega para `generate()`
 - `BriefingFactory.create_briefing_generator()`
+
+Extensao feita em 23/06/2026 (continua V1 — ligar o Briefing Agent V12 ao
+caminho principal, fecha P1 #5 do `docs/roadmap_produto_final.md`):
+- `Briefing.update_content()` (`domain/entities.py`) — metodo novo, valida nao-vazio
+- `BriefingRepository.update_content()` (abstrato + Postgres) — `save()` so insere, nao dava para reusar para update pontual
+- Contrato publico novo `BriefingContentUpdater` (`application/public/`), implementado por `UpdateBriefingContent` (atualiza o briefing mais recente da startup, levanta `BriefingNotFoundError` se nao houver nenhum)
+- `BriefingFactory.create_briefing_content_updater()`
+- Testes: +3 unit
+
+Extensao feita em 24/06/2026 (continua V1, mesma decisao de
+`docs/decisoes_pendentes.md` secao 2 que entregou Recommendations V2 —
+"quero isso junto, e' uma arma poderosa"):
+- Porta nova `NvidiaContextGrounder` (`application/ports.py`) + DTO `GroundedContext` — mesmo espirito best-effort de `NvidiaKnowledgeGrounder` em `recommendations`
+- `RagNvidiaContextGrounder` (`infrastructure/rag_adapters/`) — chama `rag/application/public/question_answerer.py` filtrado por `source_type="nvidia_knowledge"`, 1 chamada agregada para todas as tecnologias recomendadas (diferente de `recommendations`, que faz 1 chamada por tecnologia — briefing precisa de uma sintese de setor unica, nao uma por item)
+- `build_briefing_markdown()` (`domain/policies.py`) ganha parametro opcional `nvidia_context: str | None`; quando presente, insere secao nova "## Contexto NVIDIA" entre "Recomendacoes NVIDIA" e "Riscos" — funcao continua pura, sem I/O (o `GenerateBriefing` busca o contexto via RAG antes de chamar a policy)
+- `GenerateBriefing` ganha `grounder` opcional; pula a chamada de rede inteiramente quando nao ha recomendacao nenhuma pra sintetizar
+- `BriefingFactory.create_nvidia_context_grounder()` segue a mesma regra de degradacao: sem `GEMINI_API_KEY`, `grounder=None`
+- Testes: 18 -> 27 unit (+9: 2 policy, 2 caso de uso, 5 adapter)
+
+Documento: extensao registrada em `docs/briefing/roadmap_briefing.md` (sem doc dedicado — mesmo padrao de outras extensoes de V1).
 
 ---
 
@@ -982,7 +1171,7 @@ Documento da entrega: `docs/orchestration/orchestration_v2_jornada_completa.md`.
 |---|---|---|
 | V1 | Entregue | Fundacao Next.js e jornada URL -> job |
 | V2 | Entregue | Resultado da startup: evidencias, recomendacoes e briefing |
-| V3 | Futuro | Operacao e historico de analises |
+| V3 | Em andamento | Portfolio de startups entregue; filtros e historico de jobs pendentes |
 | V4 | Futuro | Painel BI de oportunidades |
 | V5 | Futuro | Revisao humana, auth e colaboracao |
 
@@ -1005,12 +1194,21 @@ link para a fonte, recomendacoes NVIDIA com score/keywords/justificativa,
 e visualizador de briefing em Markdown. Acoes de refazer
 extract/classify/recommendations/briefing ficam para V3.
 
-Gap conhecido (nao corrigido nesta entrega, so documentado): `apps/web` nao
-tem nenhum arquivo de teste (`.test.`/`.spec.`) hoje. Um teste manual no
-navegador encontrou um bug real de Rules of Hooks em `StartupDetails`
-(`useMutation` chamado depois de um return condicional) que trava a pagina
-de resultado da analise — ver `docs/frontend/roadmap_frontend.md` para a
-tecnologia candidata a resolver isso (Vitest + React Testing Library).
+Cobertura inicial entregue em 23/06/2026: Vitest + React Testing Library
+validam `UrlSubmissionForm`, `JobStatusPanel`, `StartupDetails` e
+`StartupPortfolio` (13 testes).
+O proximo passo e ampliar a cobertura para as rotas BFF e para o fluxo de
+historico planejado na V3.
+
+**Correcao em 23/06/2026:** entradas anteriores deste arquivo (e de
+`docs/roadmap_produto_final.md`/`docs/lacunas_do_projeto.md`) afirmavam um
+"bug real confirmado de Rules of Hooks em `StartupDetails`". Lendo o
+arquivo na integra agora, isso esta errado — `useMutation`/`useQueries`/
+`useQueryClient` sao chamados todos antes de qualquer `return` condicional,
+sem violacao. Confirmado tambem por `git log`: o arquivo nunca recebeu
+correcao desse tipo. A afirmacao original nunca foi verificada lendo o
+codigo direto antes de ser propagada por varios documentos — registrado
+aqui pra nao repetir o erro.
 
 Documentos: `docs/frontend/nextjs_arquitetura.md`,
 `docs/frontend/roadmap_frontend.md`.
@@ -1042,8 +1240,9 @@ Documentos: `docs/frontend/nextjs_arquitetura.md`,
 | `5b6c7d8e9f01` | 2026-06-22 | Cria `url_ingestion_jobs` para Orchestration V2 |
 | `7d4f2a9c6e83` | 2026-06-22 | Adiciona `source_type` em scraping_jobs para preservar origem desde a coleta |
 | `4c8a1f6e9b2d` | 2026-06-23 | Adiciona `startup_id`/`evidence_attached`/`recommendation_count`/`briefing_id` em url_ingestion_jobs (Orchestration V2 jornada completa) |
+| `b3f6e91c7d45` | 2026-06-23 | Troca indice GIN de full-text search por BM25 nativo (`pg_search`) em chunks (RAG V3, extensao) |
 
-**Head atual: `4c8a1f6e9b2d`**
+**Head atual: `b3f6e91c7d45`**
 
 ### Tabelas existentes
 
@@ -1077,17 +1276,17 @@ url_ingestion_jobs      orquestracao URL -> scraping -> ingestion -> embeddings 
 | Modulo | Testes | Ultima verificacao |
 |---|---|---|
 | scraping | 132 unit + 6 integracao | 2026-06-23 |
-| agents | 98 unit + 1 integracao | 2026-06-23 |
+| agents | 102 unit + 1 integracao | 2026-06-23 |
 | ingestion | 37 unit + 1 integracao | 2026-06-23 |
 | embeddings | 61 unit + 3 integracao | 2026-06-23 |
 | startups | 35 unit + 1 integracao | 2026-06-23 |
 | rag | 19 unit + 2 integracao | 2026-06-23 |
 | nvidia_knowledge | 15 unit | 2026-06-23 |
-| recommendations | 23 unit + 1 integracao | 2026-06-23 |
-| briefing | 15 unit + 1 integracao | 2026-06-23 |
-| orchestration | 22 unit + 2 integracao | 2026-06-23 |
+| recommendations | 26 unit + 1 integracao | 2026-06-23 |
+| briefing | 18 unit + 1 integracao | 2026-06-23 |
+| orchestration | 28 unit + 2 integracao | 2026-06-23 |
 | shared | 10 unit (logging + observability) | 2026-06-23 |
-| **Total** | **485 testes coletados** | **2026-06-23** |
+| **Total** | **519 testes coletados** | **2026-06-24** |
 
 Nota: numeros desta tabela vem de `pytest --collect-only -q` por modulo
 (nao exige Postgres/Redis/Qdrant vivos, so confirma quantos testes existem
@@ -1295,7 +1494,7 @@ pytest -k "test_acceptance_policy_rejects_captcha" -v
 # Run DB migrations
 alembic upgrade head
 
-# Current migration head: 4c8a1f6e9b2d (url_ingestion_jobs analysis fields)
+# Current migration head: b3f6e91c7d45 (chunks bm25 index, pg_search)
 ```
 
 ---
@@ -1399,5 +1598,7 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Diagnostico de fraquezas e tecnologias recomendadas (transversal) | `docs/diagnostico_fraquezas_e_tecnologias_recomendadas.md` |
 | Roadmap de evolucao tecnica do MVP (execucao do diagnostico acima) | `docs/roadmap_evolucao_tecnica_mvp.md` |
 | Mapa de tecnologias (onde cada uma e usada/sera usada e por que) | `docs/mapa_tecnologias.md` |
+| Decisoes pendentes (garfos ainda nao resolvidos, pra pensar antes de programar) | `docs/decisoes_pendentes.md` |
+| Lacunas do projeto (inventario consolidado, verificado no codigo) | `docs/lacunas_do_projeto.md` |
 | Validacao arquitetural (modulos/workers, inclui violacoes encontradas) | `docs/validacao_arquitetural_modulos_workers.md` |
 | Validacao de mensagens e interacoes entre modulos | `docs/validacao_mensagens_interacoes_modulos.md` |

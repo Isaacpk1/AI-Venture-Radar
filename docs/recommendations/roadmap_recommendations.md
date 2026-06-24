@@ -10,7 +10,7 @@ NVIDIA para gerar recomendacoes explicaveis.
 | Versao | Status | Objetivo |
 |---|---|---|
 | Recommendations V1 | Implementado | Regras deterministicas iniciais |
-| Recommendations V2 | Futuro | Recomendacao com RAG |
+| Recommendations V2 | Implementado (24/06/2026) | Recomendacao com RAG |
 | Recommendations V3 | Futuro (agente entregue em Agents V11) | Agent Recommendation |
 | Recommendations V4 | Futuro | Ranking, confianca e acao sugerida |
 | Recommendations V5 | Futuro | Feedback humano |
@@ -51,6 +51,23 @@ nao gera prioridade/complexidade/proxima acao
 
 ## Recommendations V2 - Recomendacao com RAG
 
+**Decidido em 23/06/2026** (`docs/decisoes_pendentes.md`, secao 2): vale
+fazer, junto com a mesma decisao para `briefing`.
+
+**Implementado em 24/06/2026:** `NvidiaKnowledgeGrounder`
+(`application/ports.py`) + adapter `RagNvidiaKnowledgeGrounder`
+(`infrastructure/rag_adapters/`) chamam
+`rag/application/public/question_answerer.py` filtrado por
+`source_type="nvidia_knowledge"`, 1 chamada em paralelo por tecnologia
+candidata (`asyncio.gather`), e substituem a justificativa-template por
+texto fundamentado com citacoes reais quando ha contexto recuperavel.
+Best-effort: sem `GEMINI_API_KEY` ou sem citacao real, cai pro template
+deterministico de V1 (sem erro). Ver
+`docs/recommendations/recommendations_v2_rag_grounding.md` para o
+detalhamento completo, incluindo limites conhecidos desta entrega
+(nao usa evidencia especifica da startup como query, sem cache de
+chamada RAG).
+
 Pre-requisitos ja entregues:
 
 ```txt
@@ -71,11 +88,12 @@ catalogo.
 Entregaveis:
 
 ```txt
-consultar evidencias da startup
-consultar conhecimento NVIDIA via RAG
-montar contexto
-gerar recomendacao com citacoes
-usar RAG NVIDIA com citacoes para enriquecer a justificativa
+consultar conhecimento NVIDIA via RAG               - entregue
+montar contexto                                     - entregue (delegado ao RagQuestionAnswerer)
+gerar recomendacao com citacoes                     - entregue
+usar RAG NVIDIA com citacoes para enriquecer a justificativa  - entregue
+consultar evidencias especificas da startup como query do RAG - NAO entregue,
+  ver limite conhecido em recommendations_v2_rag_grounding.md secao 5
 ```
 
 ---
@@ -142,7 +160,7 @@ conteudo real.
 
 | Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
 |---|---|---|---|
-| Justificativa e' template fixo, sem citar conteudo NVIDIA real | chamar `rag/application/public/question_answerer.py` (contrato ja existe, usado pelo NVIDIA RAG Agent V10) filtrado por `source_type="nvidia_knowledge"` para fundamentar a justificativa de cada recomendacao com citacoes reais | Recommendations V2 (Recomendacao com RAG) | Medio — integracao de contrato publico ja existente, zero tech nova |
+| Justificativa e' template fixo, sem citar conteudo NVIDIA real | chamar `rag/application/public/question_answerer.py` (contrato ja existe, usado pelo NVIDIA RAG Agent V10) filtrado por `source_type="nvidia_knowledge"` para fundamentar a justificativa de cada recomendacao com citacoes reais — **CONCLUIDO em 24/06/2026** (ver `recommendations_v2_rag_grounding.md`) | Recommendations V2 (Recomendacao com RAG) | Medio — integracao de contrato publico ja existente, zero tech nova |
 | `match_technologies()` so encontra startups cujo texto bate keyword; setor fora do catalogo (ex: termos em portugues sem alias) nunca aparece | usar o `VectorRepository` (`embeddings/application/public/`, ja existe) para buscar tecnologias por similaridade semantica quando o keyword match nao encontrar nada, como complemento (nao substituto) da regra deterministica | Recommendations V2/V4 | Medio — reuso de contrato publico, sem infra nova |
 | Sem versionamento — `generate()` deleta e recria a cada chamada | guardar `generated_at`/numero de geracao por chamada (modelagem de dados, sem lib nova) | Pre-requisito leve para V5 (Feedback humano) — precisa saber a qual geracao um feedback se refere | Baixo |
 

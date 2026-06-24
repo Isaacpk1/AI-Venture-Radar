@@ -32,8 +32,11 @@ chama factory/use case.
 | recommendations | nvidia_knowledge | `NvidiaTechnologyCatalog` |
 | briefing | recommendations | `RecommendationsReader` |
 | briefing | startups | `StartupProfileReader` |
-| orchestration | recommendations | `RecommendationGenerator` |
-| orchestration | briefing | `BriefingGenerator` |
+| orchestration | recommendations | `RecommendationGenerator`, `RecommendationJustificationUpdater` |
+| orchestration | briefing | `BriefingGenerator`, `BriefingContentUpdater` |
+| orchestration | agents | `RecommendationAgentService`, `BriefingAgentService` (23/06/2026) |
+| agents | recommendations | `RecommendationGenerator`, `RecommendationJustificationUpdater` |
+| agents | briefing | `BriefingGenerator`, `BriefingContentUpdater` |
 
 ✅ **Corrigido em 23/06/2026:** a linha `rag -> embeddings` chegou a ficar
 fora de conformidade (listava `GenerateChunkEmbedding`, classe concreta de
@@ -52,6 +55,7 @@ e `docs/roadmap_evolucao_tecnica_mvp.md` (Fase 5).
 
 ```txt
 POST /startups
+GET  /startups?page=1&page_size=20
 POST /startups/{id}/extract
 POST /startups/{id}/classify
 POST /rag/answer

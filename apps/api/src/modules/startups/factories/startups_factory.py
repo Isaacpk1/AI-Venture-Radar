@@ -20,6 +20,9 @@ from apps.api.src.modules.startups.application.use_cases.get_startup_profile imp
 from apps.api.src.modules.startups.application.use_cases.list_startup_evidences import (
     ListStartupEvidences,
 )
+from apps.api.src.modules.startups.application.use_cases.list_startups import (
+    ListStartups,
+)
 from apps.api.src.modules.startups.application.use_cases.update_startup import (
     UpdateStartup,
 )
@@ -44,6 +47,10 @@ class StartupsFactory:
     @staticmethod
     def create_get_startup() -> GetStartup:
         return GetStartup(PostgresStartupsUnitOfWork)
+
+    @staticmethod
+    def create_list_startups() -> ListStartups:
+        return ListStartups(PostgresStartupsUnitOfWork)
 
     @staticmethod
     def create_update_startup() -> UpdateStartup:

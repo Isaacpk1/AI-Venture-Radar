@@ -45,6 +45,7 @@ busca, extracao estruturada e classificacao de maturidade em IA.
 /ingestion/jobs
 /embeddings/jobs
 /startups
+/startups?page=1&page_size=20&query=&sector=&country=&ai_maturity_level=
 /startups/{startup_id}/evidences
 /startups/{startup_id}/extract
 /startups/{startup_id}/classify
@@ -85,6 +86,7 @@ f77998c46d08  campos estruturados em startups
 5b6c7d8e9f01  url_ingestion_jobs para Orchestration V2
 7d4f2a9c6e83  source_type em scraping_jobs para preservar origem desde a coleta
 4c8a1f6e9b2d  startup_id/evidence_attached/recommendation_count/briefing_id em url_ingestion_jobs (Orchestration V2 jornada completa)
+b3f6e91c7d45  indice BM25 (`pg_search`) em chunks para busca lexical (RAG V3)
 ```
 
 Tabelas principais:
@@ -105,13 +107,14 @@ url_ingestion_jobs
 
 ## Testes
 
-Validacao registrada em `CLAUDE.md`:
+Validacao executada em 23/06/2026:
 
 ```txt
-457 passed
+Backend: 518 passed, 1 skipped (`pytest -q`)
+Frontend: 13 passed (`npm test`)
 ```
 
-A suite total agora marca dependencias de integracao como `skip` explicito
+A suite Python marca dependencias de integracao como `skip` explicito
 quando a infra local nao esta ativa. Com Postgres/Redis/Qdrant disponiveis,
 esses testes rodam normalmente.
 

@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from apps.api.src.modules.startups.application.dto import (
     StartupEvidenceView,
+    StartupPageView,
     StartupView,
 )
 from apps.api.src.modules.startups.domain.enums import FundingStage, StartupEvidenceType
@@ -108,4 +109,20 @@ class StartupEvidenceResponse(BaseModel):
             confidence_score=view.confidence_score,
             notes=view.notes,
             created_at=view.created_at,
+        )
+
+
+class StartupPageResponse(BaseModel):
+    items: list[StartupResponse]
+    total: int
+    page: int
+    page_size: int
+
+    @classmethod
+    def from_view(cls, view: StartupPageView) -> "StartupPageResponse":
+        return cls(
+            items=[StartupResponse.from_view(item) for item in view.items],
+            total=view.total,
+            page=view.page,
+            page_size=view.page_size,
         )

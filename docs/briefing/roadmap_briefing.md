@@ -60,6 +60,20 @@ o sistema gera um briefing legivel a partir de dados estruturados
 
 Documento da entrega: `docs/briefing/briefing_v1_template_executivo.md`.
 
+**Extensao decidida em 23/06/2026** (`docs/decisoes_pendentes.md`, secao
+2 — "vamos ligar o qdrant com o briefing tambem, quero isso junto, e' uma
+arma poderosa"): `GenerateBriefing` vai passar a consultar
+`rag/application/public/question_answerer.py` (mesmo contrato que
+`recommendations` vai usar, ver `docs/recommendations/roadmap_recommendations.md`
+V2) pra fundamentar o briefing em conteudo NVIDIA real, nao so no que ja
+esta nas evidencias/recomendacoes. Falta implementar — ver "Ordem de
+implementacao recomendada" em `docs/roadmap_produto_final.md`.
+
+**Atualizacao de 24/06/2026:** a extensao foi implementada. O adapter
+`RagNvidiaContextGrounder` chama o contrato publico de RAG filtrado por
+`source_type=nvidia_knowledge`, adiciona citacoes ao briefing quando houver
+contexto e faz fallback para o template deterministico quando nao houver.
+
 ---
 
 ## Briefing V2 - Agente de Briefing

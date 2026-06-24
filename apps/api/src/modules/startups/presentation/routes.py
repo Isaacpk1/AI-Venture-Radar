@@ -2,13 +2,14 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from apps.api.src.modules.startups.application.dto import (
     AddStartupEvidenceInput,
     ClassifyStartupInput,
     CreateStartupInput,
     ExtractStartupProfileInput,
+    ListStartupsInput,
     UpdateStartupInput,
 )
 from apps.api.src.modules.startups.domain.exceptions import (
@@ -17,12 +18,14 @@ from apps.api.src.modules.startups.domain.exceptions import (
     StartupExtractionUnavailableError,
     StartupNotFoundError,
 )
+from apps.api.src.modules.startups.domain.enums import AiMaturityLevel
 from apps.api.src.modules.startups.factories.startups_factory import StartupsFactory
 
 from .schemas import (
     AddStartupEvidenceRequest,
     CreateStartupRequest,
     StartupEvidenceResponse,
+    StartupPageResponse,
     StartupResponse,
     UpdateStartupRequest,
 )
@@ -51,6 +54,31 @@ async def create_startup(body: CreateStartupRequest) -> StartupResponse:
     except InvalidStartupDataError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     return StartupResponse.from_view(view)
+
+
+@router.get("", response_model=StartupPageResponse)
+async def list_startups(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    query: str | None = None,
+    sector: str | None = None,
+    country: str | None = None,
+    ai_maturity_level: AiMaturityLevel | None = None,
+) -> StartupPageResponse:
+    """Lista o portfolio de startups, com filtros para a tela de historico."""
+
+    use_case = StartupsFactory.create_list_startups()
+    view = await use_case.execute(
+        ListStartupsInput(
+            page=page,
+            page_size=page_size,
+            query=query,
+            sector=sector,
+            country=country,
+            ai_maturity_level=ai_maturity_level,
+        )
+    )
+    return StartupPageResponse.from_view(view)
 
 
 @router.get("/{startup_id}", response_model=StartupResponse)

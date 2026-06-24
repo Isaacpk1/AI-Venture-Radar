@@ -13,6 +13,10 @@ class InvalidEmbeddingDimensionError(EmbeddingsError):
     """O vetor gerado nao tem a dimensao esperada."""
 
 
+class EmbeddingCollectionSchemaMismatchError(EmbeddingsError):
+    """A colecao Qdrant nao e compativel com o modelo de embedding atual."""
+
+
 class EmbeddingServiceUnavailableError(EmbeddingsError):
     """O provider de embeddings nao esta configurado (ex: chave de API ausente)."""
 

@@ -1,16 +1,20 @@
 """Adaptador que le `chunks` (de `ingestion`) sem importar internals do modulo.
 
-Usa SQL textual contra a tabela `chunks` para fazer busca lexical
-(full-text search nativo do PostgreSQL), evitando qualquer dependencia
-dos modelos ou repositorios do modulo ingestion. Mesmo padrao de
+Usa SQL textual contra a tabela `chunks` para fazer busca lexical via BM25
+nativo (extensao `pg_search`/ParadeDB), evitando qualquer dependencia dos
+modelos ou repositorios do modulo ingestion. Mesmo padrao de
 `ingestion/infrastructure/database/postgres_scraping_result_reader.py`
 (que le `scraping_results` da mesma forma).
 
-Config `'simple'` (sem stemming/stopwords por idioma) porque o conteudo
-coletado mistura PT-BR e ingles. O indice GIN de expressao criado na
-migration usa a mesma expressao (`to_tsvector('simple', text)`), por isso
-a query abaixo precisa repetir a expressao identica para o planner usar o
-indice.
+Trocado de `to_tsvector('simple')`/`ts_rank` pra BM25 em 23/06/2026 (Fase 3
+de docs/roadmap_evolucao_tecnica_mvp.md — baseline Ragas mediu
+context_recall 0.67, considerado fraco). Indice `ix_chunks_bm25`
+(`USING bm25 (id, text)`) criado na migration `b3f6e91c7d45` — exige a
+extensao `pg_search` e a imagem `paradedb/paradedb:latest-pg16` em
+`infra/docker-compose.yml` (pg_search nao tem binario pra Alpine/musl).
+Operador `@@@` e `paradedb.score()` confirmados testando direto contra um
+container real antes de escrever esta versao (ver
+docs/rag/roadmap_rag.md).
 """
 
 from sqlalchemy import String, bindparam, text
@@ -21,11 +25,10 @@ from apps.api.src.modules.rag.application.dto import LexicalSearchResult
 from apps.api.src.modules.rag.application.ports import LexicalSearchRepository
 
 _QUERY = text("""
-    SELECT c.id, c.document_id,
-           ts_rank(to_tsvector('simple', c.text), websearch_to_tsquery('simple', :query)) AS rank
+    SELECT c.id, c.document_id, paradedb.score(c.id) AS rank
     FROM chunks c
     JOIN documents d ON d.id = c.document_id
-    WHERE to_tsvector('simple', c.text) @@ websearch_to_tsquery('simple', :query)
+    WHERE c.text @@@ :query
       AND (:source_type IS NULL OR d.source_type = :source_type)
     ORDER BY rank DESC
     LIMIT :limit

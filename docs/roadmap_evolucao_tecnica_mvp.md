@@ -154,34 +154,36 @@ deles e about busca, sao sobre geracao de resposta):
   perguntas legitimamente sem boa evidencia a quebrar `/rag/answer` em
   produção em vez de devolver uma resposta honesta.
 
-## 5. Fase 3 — Busca lexical real (BM25 nativo do Postgres)
+## 5. Fase 3 — Busca lexical real (BM25 nativo do Postgres) — CONCLUIDA em 23/06/2026
 
-So entra se a Fase 2 mostrar que o `ts_rank` atual e de fato um
-gargalo de recall. Decisao tecnica ja documentada: nao usar `rank-bm25`
+**Decidido em 23/06/2026** (`docs/decisoes_pendentes.md`, secao 2): a
+Fase 2 mostrou `context_recall` 0.67, e isso foi considerado "nao bom o
+suficiente". Decisao tecnica ja documentada: nao usar `rank-bm25`
 (Python) — exigiria carregar todos os chunks em memoria a cada busca.
 
-Entregaveis:
+Entregue:
 
-- avaliar `pg_search` (ParadeDB) como extensao Postgres — troca de
-  imagem em `infra/docker-compose.yml` (`postgres:16-alpine` ->
-  `paradedb/paradedb` ou instalacao da extensao) e migration para
-  indice BM25 em `chunks`;
-- nova implementacao de `LexicalSearchRepository`
-  (`rag/application/ports.py`) usando o operador de busca BM25 do
-  `pg_search`, mantendo o mesmo contrato — `fuse_rankings()` (RRF) e o
-  caso de uso `SearchEvidence` nao mudam, so a infraestrutura;
-- rodar o mesmo dataset golden da Fase 2 contra a nova implementacao,
-  comparar numero antes/depois.
+- imagem do Postgres trocada em `infra/docker-compose.yml`
+  (`postgres:16-alpine` -> `paradedb/paradedb:latest-pg16`) — `pg_search`
+  nao tem binario pra Alpine/musl; risco de collation (`en_US.utf8`,
+  dependente de libc) tratado com `pg_dump`/`pg_restore` num volume novo,
+  nao troca direta no mesmo volume;
+- migration `b3f6e91c7d45`: drop do indice GIN antigo, `CREATE EXTENSION
+  pg_search`, `CREATE INDEX ix_chunks_bm25 ... USING bm25 (id, text)
+  WITH (key_field='id')`;
+- `PostgresLexicalSearchRepository` reescrito pro operador `@@@` +
+  `paradedb.score()` (sintaxe confirmada testando contra um container
+  real antes de codar) — mesmo contrato (`LexicalSearchRepository`),
+  `fuse_rankings()` (RRF) e `SearchEvidence` inalterados;
+- verificado: suite completa (500 passed, 1 skipped) + teste de
+  integracao existente da busca lexical (texto em portugues) passando
+  contra a implementacao nova, sem precisar reescrever o teste.
 
-Criterio de pronto:
-
-```txt
-metrica do Ragas mostra melhora medida (nao assumida) de recall/
-precisao lexical em relacao a Fase 2, com a busca ainda 100% dentro do
-Postgres.
-```
-
-Dependencias: Fase 2 concluida com numero de baseline.
+Pendente, fora desta entrega: rodar o Ragas (`RUN_RAGAS_EVAL=1`) pra medir
+o `context_recall` real pos-troca contra o baseline 0.67 da Fase 2 — tem
+custo real de API (Gemini 2x por pergunta), fica pra quando o usuario
+decidir rodar. Ver `docs/rag/roadmap_rag.md` (extensao da V3) para o
+detalhe completo da entrega.
 
 ## 6. Fase 4 — Ajustes finos de reranking e fechamento
 

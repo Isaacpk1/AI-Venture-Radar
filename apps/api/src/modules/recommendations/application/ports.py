@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 
 from apps.api.src.modules.recommendations.application.dto import (
+    GroundedJustification,
     NvidiaTechnologySnapshot,
     StartupProfileSnapshot,
 )
@@ -29,3 +30,19 @@ class NvidiaCatalogSource(ABC):
     @abstractmethod
     async def list_technologies(self) -> list[NvidiaTechnologySnapshot]:
         """Lista todas as tecnologias disponiveis para o motor de regras."""
+
+
+class NvidiaKnowledgeGrounder(ABC):
+    """Fundamenta a justificativa de uma recomendacao em conteudo NVIDIA real.
+
+    Best-effort por desenho: implementacoes nunca levantam excecao, devolvem
+    ``None`` quando a fundamentacao nao for possivel (sem API key, sem
+    evidencia suficiente, falha do provedor) - quem chama cai pro template
+    deterministico de hoje nesse caso.
+    """
+
+    @abstractmethod
+    async def ground(
+        self, technology_name: str, use_case: str
+    ) -> GroundedJustification | None:
+        """Busca conteudo NVIDIA real sobre a tecnologia e o caso de uso."""

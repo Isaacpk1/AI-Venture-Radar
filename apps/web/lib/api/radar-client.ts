@@ -1,9 +1,11 @@
 import type {
   Briefing,
   CreateUrlIngestionJobInput,
+  ListStartupsParams,
   Recommendation,
   Startup,
   StartupEvidence,
+  StartupPage,
   UrlIngestionJob,
 } from "./radar-types";
 
@@ -33,6 +35,15 @@ export function getUrlIngestionJob(jobId: string) {
 
 export function getStartup(startupId: string) {
   return request<Startup>(`/api/radar/startups/${startupId}`);
+}
+
+export function listStartups(params: ListStartupsParams = {}) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") search.set(key, String(value));
+  }
+  const suffix = search.size ? `?${search.toString()}` : "";
+  return request<StartupPage>(`/api/radar/startups${suffix}`);
 }
 
 export function getStartupEvidences(startupId: string) {

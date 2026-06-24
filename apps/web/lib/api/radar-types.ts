@@ -39,6 +39,22 @@ export type Startup = {
   updated_at: string;
 };
 
+export type StartupPage = {
+  items: Startup[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+export type ListStartupsParams = {
+  page?: number;
+  page_size?: number;
+  query?: string;
+  sector?: string;
+  country?: string;
+  ai_maturity_level?: string;
+};
+
 export type StartupEvidence = {
   id: string;
   startup_id: string;

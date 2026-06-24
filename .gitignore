@@ -29,6 +29,9 @@ venv/
 node_modules/
 .next/
 
+# Backups locais de Postgres (ex: dump pre-migracao de infra)
+*.dump
+
 # Local editor and operating-system files
 .vscode/
 .idea/

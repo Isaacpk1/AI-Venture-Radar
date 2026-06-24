@@ -290,13 +290,18 @@ agentes LangGraph de fato** (ver diagnostico, secao 8). Ordem seguida:
 direto (mesmo padrao de V8/V9), com fallback para os geradores V1 sem
 `GEMINI_API_KEY`. Detalhe completo na secao "Tecnologias candidatas"
 abaixo. NVIDIA RAG Agent (V10) continua so acionavel pela fila generica
-`agent_runs` — sem ponto de integracao natural ainda (nenhum dos outros 2
-grafos o chama como sub-tool).
+`agent_runs` — **decisao fechada em 23/06/2026**
+(`docs/decisoes_pendentes.md`, secao 6): nao vale redesenhar o grafo pra
+dar um consumidor sincrono a ele. A decisao de ligar RAG direto em
+`recommendations`/`briefing` (ver `docs/recommendations/roadmap_recommendations.md`
+V2) cobre o mesmo proposito ("contexto NVIDIA fundamentado") por um
+caminho mais simples, sem tocar nos grafos ja entregues. V10 fica como
+esta — prova que os 8 agentes do case foram implementados, sem precisar
+de uso real agora.
 
 Trabalho restante fora do Entregavel 2: terminar NVIDIA Knowledge V2
-contra o resto do registry, dar consumidor sincrono real a V10, e o
-Entregavel 5 (Frontend) e 6 (Diferencial), que continuam fora do escopo de
-`agents`.
+contra o resto do registry, e o Entregavel 5 (Frontend) e 6 (Diferencial),
+que continuam fora do escopo de `agents`.
 
 ---
 

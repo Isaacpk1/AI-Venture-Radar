@@ -1,7 +1,7 @@
 # Frontend — Arquitetura Next.js
 
-Atualizado em 23/06/2026. Este documento define como iniciar o frontend do
-NVIDIA Startup AI Radar sem duplicar regras do backend FastAPI.
+Atualizado em 23/06/2026. Este documento registra a arquitetura do frontend
+do NVIDIA Startup AI Radar sem duplicar regras do backend FastAPI.
 
 ## 1. Estagio atual do produto
 
@@ -17,9 +17,9 @@ Esse fluxo e assíncrono e ja retorna um `UrlIngestionJob` consultavel em
 `recommendation_count` e `briefing_id`. A primeira tela deve usar esse contrato
 em vez de conhecer workers, Redis ou Dramatiq.
 
-Validacao atual: 457 testes do backend passam. Nao ha aplicacao Next.js criada
-ainda; `packages/` esta vazio. A proposta abaixo cria o frontend em `apps/web`,
-alinhado ao layout ja previsto em `CLAUDE.md`.
+Validacao atual: 518 testes do backend e 13 testes do frontend passam. A
+aplicacao Next.js ja existe em `apps/web`, alinhada ao layout previsto em
+`CLAUDE.md`; as secoes abaixo descrevem as decisoes que ela implementa.
 
 ## 2. Escolha de arquitetura
 

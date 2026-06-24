@@ -52,3 +52,11 @@ class NvidiaTechnologySnapshot:
     category: str
     use_cases: tuple[str, ...]
     keywords: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class GroundedJustification:
+    """Justificativa fundamentada em conteudo NVIDIA real, via RAG."""
+
+    text: str
+    citation_urls: tuple[str, ...]

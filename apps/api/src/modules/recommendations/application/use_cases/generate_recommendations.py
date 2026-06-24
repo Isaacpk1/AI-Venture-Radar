@@ -1,13 +1,16 @@
 """Caso de uso para gerar recomendacoes NVIDIA para uma startup."""
 
+import asyncio
 from uuid import UUID
 
 from apps.api.src.modules.recommendations.application.dto import (
     GenerateRecommendationsInput,
+    GroundedJustification,
     RecommendationView,
 )
 from apps.api.src.modules.recommendations.application.ports import (
     NvidiaCatalogSource,
+    NvidiaKnowledgeGrounder,
     StartupProfileSource,
 )
 from apps.api.src.modules.recommendations.application.public.recommendation_generator import (
@@ -37,10 +40,12 @@ class GenerateRecommendations(RecommendationGenerator):
         uow_factory: RecommendationsUnitOfWorkFactory,
         profile_source: StartupProfileSource,
         catalog_source: NvidiaCatalogSource,
+        grounder: NvidiaKnowledgeGrounder | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._profile_source = profile_source
         self._catalog_source = catalog_source
+        self._grounder = grounder
 
     async def generate(self, startup_id: UUID) -> list[RecommendationView]:
         profile = await self._profile_source.get_profile(startup_id)
@@ -72,8 +77,10 @@ class GenerateRecommendations(RecommendationGenerator):
             technologies=candidates,
         )
 
+        grounded_results = await self._ground_matches(matches)
         recommendations = [
-            self._to_recommendation(startup_id, match) for match in matches
+            self._to_recommendation(startup_id, match, grounded)
+            for match, grounded in zip(matches, grounded_results, strict=True)
         ]
 
         async with self._uow_factory() as uow:
@@ -89,29 +96,64 @@ class GenerateRecommendations(RecommendationGenerator):
     ) -> list[RecommendationView]:
         return await self.generate(recommendation_input.startup_id)
 
+    async def _ground_matches(
+        self, matches: list[MatchResult]
+    ) -> list[GroundedJustification | None]:
+        """Busca fundamentacao real em paralelo, 1 chamada RAG por match.
+
+        Best-effort: sem grounder configurado, devolve `None` pra cada match
+        sem nenhuma chamada de rede.
+        """
+
+        if self._grounder is None or not matches:
+            return [None] * len(matches)
+
+        return await asyncio.gather(
+            *(
+                self._grounder.ground(match.technology.name, _use_case(match))
+                for match in matches
+            )
+        )
+
     @staticmethod
-    def _to_recommendation(startup_id: UUID, match: MatchResult) -> Recommendation:
+    def _to_recommendation(
+        startup_id: UUID,
+        match: MatchResult,
+        grounded: GroundedJustification | None,
+    ) -> Recommendation:
         return Recommendation(
             startup_id=startup_id,
             technology_slug=match.technology.slug,
             technology_name=match.technology.name,
             category=match.technology.category,
             score=match.score,
-            justification=_build_justification(match),
+            justification=(
+                _build_grounded_justification(grounded)
+                if grounded is not None
+                else _build_justification(match)
+            ),
             matched_keywords=match.matched_keywords,
             evidence_ids=match.evidence_ids,
         )
 
 
-def _build_justification(match: MatchResult) -> str:
-    keywords = ", ".join(match.matched_keywords)
-    use_case = match.technology.use_cases[0] if match.technology.use_cases else (
+def _use_case(match: MatchResult) -> str:
+    return match.technology.use_cases[0] if match.technology.use_cases else (
         match.technology.name
     )
+
+
+def _build_justification(match: MatchResult) -> str:
+    keywords = ", ".join(match.matched_keywords)
     return (
         f"Evidencias e perfil mencionam: {keywords}. "
-        f"{match.technology.name} e indicada para: {use_case}."
+        f"{match.technology.name} e indicada para: {_use_case(match)}."
     )
+
+
+def _build_grounded_justification(grounded: GroundedJustification) -> str:
+    sources = ", ".join(grounded.citation_urls)
+    return f"{grounded.text} Fontes: {sources}."
 
 
 def to_recommendation_view(recommendation: Recommendation) -> RecommendationView:

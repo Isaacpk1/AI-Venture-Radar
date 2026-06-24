@@ -52,6 +52,8 @@ Entregue:
 - casos de uso para criar, buscar e atualizar startup;
 - caso de uso para associar e listar evidencias;
 - rotas HTTP basicas em `/startups`;
+- `GET /startups` paginado, com busca textual e filtros por setor, pais e
+  maturidade de IA, para o portfolio do Frontend V3;
 - testes unitarios e teste de persistencia PostgreSQL.
 
 Documento da entrega: `docs/startups/startups_v1_modelo_relacional.md`.
@@ -156,7 +158,7 @@ conjunto parcial de evidencias/recomendacoes/briefing.
 
 | Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
 |---|---|---|---|
-| Sem dedup multi-fonte — mesma empresa por 2 URLs = 2 `Startup` | `rapidfuzz` (lib pequena, sem infra nova) para comparar `name`/`website_url` contra startups existentes antes de criar uma nova; abaixo de um limiar de similaridade, associar evidencia ao registro existente em vez de criar outro | Startups V4 (Auditoria e confianca) | Medio — nova checagem em `CreateStartup`, sem mudar o schema |
+| Sem dedup multi-fonte — mesma empresa por 2 URLs = 2 `Startup` | `rapidfuzz` (lib pequena, sem infra nova) para comparar `name`/`website_url` contra startups existentes antes de criar uma nova; abaixo de um limiar de similaridade, associar evidencia ao registro existente em vez de criar outro — **DECIDIDO em 23/06/2026** (`docs/decisoes_pendentes.md`, secao 5); falta calibrar o limiar com exemplos reais antes de implementar, nao so escolher um numero no escuro | Startups V4 (Auditoria e confianca) | Medio — nova checagem em `CreateStartup`, sem mudar o schema |
 | `founders`/`customers`/`funding_*` nao tem origem nem confianca por campo | nenhuma lib nova: e' modelagem de dados (coluna `field_provenance`/`field_confidence` JSONB, populada quando `ExtractionTrigger` grava) | Startups V4 (Auditoria e confianca) | Medio — migration + ajuste no `Startup.update()` |
 
 Nao adotar uma ferramenta de entity resolution pesada (ex: Dedupe.io,

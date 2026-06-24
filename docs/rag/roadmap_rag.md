@@ -120,6 +120,38 @@ Entregue:
 
 Documento da entrega: `docs/rag/rag_v3_busca_hibrida.md`.
 
+**Extensao feita em 23/06/2026 (continua V3, nao e' nova versao — Fase 3
+de `docs/roadmap_evolucao_tecnica_mvp.md`, decidida apos o baseline Ragas
+medir `context_recall` 0.67):**
+
+- Troca de `to_tsvector('simple')`/`ts_rank` por **BM25 nativo** via
+  extensao `pg_search` (ParadeDB) — `domain/policies.py::fuse_rankings()`
+  (RRF) e o caso de uso `SearchEvidence` nao mudaram, so a implementacao
+  de `PostgresLexicalSearchRepository` (mesmo contrato);
+- Imagem do Postgres trocada em `infra/docker-compose.yml`:
+  `postgres:16-alpine` -> `paradedb/paradedb:latest-pg16` — `pg_search`
+  nao tem binario pra Alpine/musl, so Debian/Ubuntu/RHEL/macOS;
+- Risco real encontrado e tratado antes da troca: o banco usava collation
+  `en_US.utf8` (dependente de libc), e a imagem antiga e' musl enquanto a
+  do ParadeDB e' glibc — reaproveitar o mesmo volume Docker trocando so a
+  imagem arriscava corromper indices de texto silenciosamente. Resolvido
+  com `pg_dump`/`pg_restore` (volume novo do zero, dados restaurados via
+  SQL logico, nao copia de arquivo) em vez de troca direta;
+- Sintaxe BM25 confirmada testando direto contra um container real antes
+  de escrever o codigo final (`@@@` e `paradedb.score()`, indice
+  `USING bm25 (id, text) WITH (key_field='id')`) — a documentacao publica
+  do ParadeDB tinha 2 operadores diferentes em paginas diferentes (`@@@`
+  vs `|||`); confirmado que ambos funcionam identicamente na versao
+  instalada (0.24.1), optou-se por `@@@` por ser o mais compativel/citado;
+- Migration `b3f6e91c7d45`: `DROP INDEX ix_chunks_text_fts` (GIN antigo) +
+  `CREATE EXTENSION pg_search` + `CREATE INDEX ix_chunks_bm25 ... USING bm25`;
+- Verificacao: suite completa (500 passed, 1 skipped) + o teste de
+  integracao existente de busca lexical (texto em portugues, sem precisar
+  reescrever) passando contra a implementacao nova;
+- **Pendente, fora desta entrega**: medir o `context_recall` real
+  pos-troca via Ragas (`RUN_RAGAS_EVAL=1`) — tem custo real de API
+  (Gemini 2x por pergunta), fica para quando o usuario decidir rodar.
+
 ---
 
 ## RAG V4 - Reranking
@@ -174,11 +206,14 @@ context_precision   0.90
 context_recall      0.67
 ```
 
-`context_recall` (0.67) e' o mais baixo dos 4 — e' o numero que decide a
-Fase 3 daquele roadmap (BM25/`pg_search` so entra se uma mudanca de busca
-melhorar esse numero de forma medida). Falta ainda: dataset crescer com
-mais fontes do NVIDIA Knowledge V2 (hoje so 2/8 P0 validadas), e regressao
-de prompt automatica (essa parte continua futura, depende de CI existir).
+`context_recall` (0.67) e' o mais baixo dos 4. **Decidido em 23/06/2026**
+(`docs/decisoes_pendentes.md`, secao 2 — "nao gostei desse valor, vale a
+troca"): 0.67 nao foi considerado bom o suficiente, Fase 3 (BM25/
+`pg_search`) deixa de ser condicional e vira prioridade — ver "Ordem de
+implementacao recomendada" em `docs/roadmap_produto_final.md`. Falta
+ainda: dataset crescer com mais fontes do NVIDIA Knowledge V2 (hoje so
+2/8 P0 validadas), e regressao de prompt automatica (essa parte continua
+futura, depende de CI existir).
 
 ---
 
@@ -186,7 +221,7 @@ de prompt automatica (essa parte continua futura, depende de CI existir).
 
 | Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
 |---|---|---|---|
-| `context_recall` (0.67) e' o gargalo medido da V5; busca lexical usa `to_tsvector('simple')`, sem stemming ("treinar" != "treinamento") | avaliar `pg_search` (ParadeDB) como extensao Postgres para BM25 nativo — so depois de confirmar que o gargalo e' lexical, nao retrieval vetorial; decisao contra `rank-bm25` (Python) ja tomada e documentada em V3 acima | Fase 3 de `docs/roadmap_evolucao_tecnica_mvp.md` | Alto — troca de imagem Postgres + migration + reindexacao |
+| `context_recall` (0.67) e' o gargalo medido da V5; busca lexical usava `to_tsvector('simple')`, sem stemming ("treinar" != "treinamento") | `pg_search` (ParadeDB) como extensao Postgres para BM25 nativo — decisao contra `rank-bm25` (Python) ja tomada e documentada em V3 acima — **CONCLUIDO em 23/06/2026** (ver extensao da V3 abaixo) | Fase 3 de `docs/roadmap_evolucao_tecnica_mvp.md` | Alto — troca de imagem Postgres + migration + reindexacao |
 | Modelo do Cohere Rerank fixo em codigo (`rerank-v3.5`) | extrair para `Settings` (`COHERE_RERANK_MODEL`, default `rerank-v3.5`) — **concluido em 23/06/2026** | Fase 4 de `docs/roadmap_evolucao_tecnica_mvp.md` | Trivial |
 | Filtro de busca so por `source_type`, nada por startup/data/categoria | estender `LexicalSearchRepository`/`VectorRepository` com filtros estruturados adicionais (sem lib nova, so mais parametros de query) | V3.5 mencionada acima ("busca filtrada") | Medio |
 

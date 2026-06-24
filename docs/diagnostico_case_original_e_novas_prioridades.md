@@ -34,7 +34,7 @@ visiveis so olhando o roadmap interno.
 | 2 | Sistema multiagente (LangGraph) | **Completo (8/8 agentes)** | Ver secao 3 |
 | 3 | RAG NVIDIA com reranking | Completo | RAG V4: busca hibrida (vetorial+lexical, RRF) + Cohere Rerank |
 | 4 | Motor de recomendacao | Parcial | Recommendations V1 entrega o cruzamento, mas determinístico por keyword; classificacao da startup ja existe (Agents V9/Startups V3) mas `recommendations` ainda nao a consulta, e nao usa o RAG. Recommendation Agent (V11) ja entrega revisao/enriquecimento via LLM por cima disso, mas nao altera o motor de regras |
-| 5 | Interface web | Nao iniciado | Stack ja decidida em CLAUDE.md (Next.js + TS + Tailwind + TanStack Query), zero codigo |
+| 5 | Interface web | V1+V2 entregues | Next.js + TS + Tailwind + TanStack Query, com submissao de URL, acompanhamento do job e pagina de resultado; historico e revisao ainda pendentes |
 | 6 | Diferencial do projeto | Nao iniciado | Ver secao 6 |
 
 ---

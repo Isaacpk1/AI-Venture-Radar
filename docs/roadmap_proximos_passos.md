@@ -20,7 +20,7 @@ modulos em V1.
 | Recommendations | Entregue em V1 deterministico |
 | Briefing | Entregue em V1 deterministico |
 | Orchestration | V1 entregue; V2 entregue (URL bruta ate briefing, sem etapas manuais) |
-| Frontend | Nao iniciado |
+| Frontend | V1/V2 entregues; V3 em andamento (portfolio de startups entregue) |
 | Auth/observabilidade/producao | Pendente |
 
 ---
@@ -40,7 +40,8 @@ O backlog consolidado, com criterios de aceite, esta em
 
 O worker automatico de `url_ingestion_jobs` ja esta entregue, e a jornada
 ate o briefing tambem (`docs/orchestration/orchestration_v2_jornada_completa.md`).
-A prioridade agora e o Frontend (item 2).
+A prioridade agora e concluir o Frontend V3: filtros interativos e historico
+global de jobs, sobre a listagem de startups ja entregue.
 
 ## Proximas Entregas
 

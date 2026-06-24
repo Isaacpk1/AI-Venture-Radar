@@ -72,6 +72,7 @@ POST /scraping/jobs
 
 ```txt
 POST /startups
+GET  /startups?page=1&page_size=20
 POST /startups/{id}/evidences
 POST /startups/{id}/extract
 POST /startups/{id}/classify
