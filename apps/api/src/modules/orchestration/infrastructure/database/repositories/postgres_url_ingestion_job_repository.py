@@ -63,3 +63,15 @@ class PostgresUrlIngestionJobRepository(UrlIngestionJobRepository):
         models = (await self._session.scalars(statement)).all()
         total = await self._session.scalar(count_statement)
         return [UrlIngestionJobMapper.to_entity(model) for model in models], total or 0
+
+    async def list_completed_by_url(self, url: str) -> list[UrlIngestionJob]:
+        statement = (
+            select(UrlIngestionJobModel)
+            .where(
+                UrlIngestionJobModel.url == url,
+                UrlIngestionJobModel.status == UrlIngestionJobStatus.COMPLETED.value,
+            )
+            .order_by(UrlIngestionJobModel.created_at.desc())
+        )
+        models = (await self._session.scalars(statement)).all()
+        return [UrlIngestionJobMapper.to_entity(model) for model in models]

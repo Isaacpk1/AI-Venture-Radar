@@ -98,3 +98,47 @@ async def test_postgres_repository_list_page_filters_by_status_and_source_type()
             await transaction.rollback()
 
     await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_postgres_repository_list_completed_by_url_excludes_other_status_and_url() -> None:
+    async with engine.connect() as connection:
+        transaction = await connection.begin()
+        session = AsyncSession(bind=connection, expire_on_commit=False)
+
+        try:
+            repository = PostgresUrlIngestionJobRepository(session)
+
+            url = "https://acme.example.com"
+            old_completed = UrlIngestionJob(url=url)
+            old_completed.start_scraping(uuid4())
+            old_completed.start_ingesting(
+                scraping_result_id=uuid4(), ingestion_job_id=uuid4()
+            )
+            old_completed.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+            old_completed.complete()
+
+            still_running = UrlIngestionJob(url=url)
+            still_running.start_scraping(uuid4())
+
+            other_url_completed = UrlIngestionJob(url="https://beta.example.com")
+            other_url_completed.start_scraping(uuid4())
+            other_url_completed.start_ingesting(
+                scraping_result_id=uuid4(), ingestion_job_id=uuid4()
+            )
+            other_url_completed.start_embedding(
+                document_id=uuid4(), embedding_job_id=uuid4()
+            )
+            other_url_completed.complete()
+
+            for job in (old_completed, still_running, other_url_completed):
+                await repository.save(job)
+
+            results = await repository.list_completed_by_url(url)
+
+            assert [job.id for job in results] == [old_completed.id]
+        finally:
+            await session.close()
+            await transaction.rollback()
+
+    await engine.dispose()

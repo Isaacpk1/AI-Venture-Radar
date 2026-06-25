@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.src.modules.recommendations.domain.entities import Recommendation
@@ -56,3 +56,20 @@ class PostgresRecommendationRepository(RecommendationRepository):
             return
         model.justification = justification
         await self._session.flush()
+
+    async def count_by_technology(self, *, limit: int = 10) -> list[tuple[str, str, int]]:
+        statement = (
+            select(
+                RecommendationModel.technology_slug,
+                RecommendationModel.technology_name,
+                func.count().label("cnt"),
+            )
+            .group_by(
+                RecommendationModel.technology_slug,
+                RecommendationModel.technology_name,
+            )
+            .order_by(func.count().desc())
+            .limit(limit)
+        )
+        rows = (await self._session.execute(statement)).all()
+        return [(row[0], row[1], row[2]) for row in rows]

@@ -94,6 +94,13 @@ class FakeVectorRepository(VectorRepository):
     async def get_by_chunk_id(self, chunk_id: UUID) -> ChunkEmbeddingRecord | None:
         return self.records.get(chunk_id)
 
+    async def delete_by_document_id(self, document_id: UUID) -> None:
+        self.records = {
+            chunk_id: record
+            for chunk_id, record in self.records.items()
+            if record.document_id != document_id
+        }
+
 
 class FakeChunkSourceReader(ChunkSourceReader):
     def __init__(self, chunks_by_document: dict[UUID, list[ChunkSourceItem]]) -> None:

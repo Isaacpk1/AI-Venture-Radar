@@ -131,3 +131,25 @@ async def test_postgres_startup_repositories_persist_startup_and_evidence() -> N
             await transaction.rollback()
 
     await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_postgres_repository_list_all_includes_newly_created_startups() -> None:
+    async with engine.connect() as connection:
+        transaction = await connection.begin()
+        session = AsyncSession(bind=connection, expire_on_commit=False)
+
+        try:
+            startup_repo = PostgresStartupRepository(session)
+            startup = Startup(name=f"Dedup Calibration {uuid4().hex}")
+            await startup_repo.save(startup)
+            await session.flush()
+
+            all_startups = await startup_repo.list_all()
+
+            assert any(item.id == startup.id for item in all_startups)
+        finally:
+            await session.close()
+            await transaction.rollback()
+
+    await engine.dispose()

@@ -37,6 +37,9 @@ from apps.api.src.modules.recommendations.presentation.routes import (
 from apps.api.src.modules.scraping.presentation.routes import (
     router as scraping_router,
 )
+from apps.api.src.modules.startup_discovery.presentation.router import (
+    router as startup_discovery_router,
+)
 from apps.api.src.modules.startups.presentation.routes import (
     router as startups_router,
 )
@@ -93,3 +96,4 @@ app.include_router(recommendations_router)
 app.include_router(briefing_router)
 app.include_router(orchestration_router)
 app.include_router(url_ingestion_router)
+app.include_router(startup_discovery_router)

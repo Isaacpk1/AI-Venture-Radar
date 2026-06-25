@@ -88,6 +88,9 @@ export type Recommendation = {
   technology_name: string;
   category: string;
   score: number;
+  confidence: number;
+  complexity: string;
+  priority: number;
   justification: string;
   matched_keywords: string[];
   evidence_ids: string[];
@@ -99,6 +102,24 @@ export type Briefing = {
   startup_id: string;
   content: string;
   generated_at: string;
+};
+
+export type MaturityDistribution = {
+  ai_native: number;
+  ai_enabled: number;
+  non_ai: number;
+  unclassified: number;
+  total: number;
+};
+
+export type TechnologyStat = {
+  technology_slug: string;
+  technology_name: string;
+  count: number;
+};
+
+export type TechnologyStats = {
+  items: TechnologyStat[];
 };
 
 export type RagCitation = {

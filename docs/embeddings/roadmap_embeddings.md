@@ -143,7 +143,7 @@ dados existentes.
 | `model_name` ja fica salvo no Qdrant mas nunca e usado como guarda contra mismatch de dimensao | **DECIDIDO em 23/06/2026** (`docs/decisoes_pendentes.md`, secao 3): validar a dimensao do vetor contra a dimensao ja existente na colecao antes do upsert, levantando erro de dominio claro em vez de deixar o Qdrant rejeitar silenciosamente; gravar `embedding_model` esperado da colecao em algum lugar consultavel (config ou Postgres) pra detectar o mismatch antes de tentar escrever | Protege contra a proxima troca de modelo | Baixo — checagem antes do upsert, sem lib nova |
 | Chunk identico (mesmo `content_hash`) e reembeddido do zero se o job rodar de novo | cache por `content_hash` do chunk antes de chamar o provider — pula a chamada Gemini se o hash ja tem vetor salvo — **concluido em 23/06/2026** | Reduz custo de API, complementa a V5 (metricas) | Baixo — so consulta antes de gerar |
 | Tokens de entrada sao estimados (`estimate_input_tokens()`), nao o uso real reportado pela API | usar o uso real de tokens que a resposta do LangChain/Gemini ja retorna (`usage_metadata`), em vez da heuristica | Fecha o gap que a V5 ja deixou registrado como limite conhecido | Baixo — dado ja vem na resposta, falta so ler e logar (via `shared/logging`, Fase 0 ja entregue) |
-| Payload do Qdrant (`source_url`/`source_type`) duplica dado do Postgres sem mecanismo de propagacao se a evidencia for editada depois | **DECIDIDO em 23/06/2026**: mecanismo de sincronia (ex: reupsert do payload quando `Document`/`ScrapingResult` mudar) — baixo risco pratico hoje (nao existe fluxo de edicao de evidencia ainda), mas decidido proteger preventivamente | Consistencia Qdrant<->Postgres | Baixo-Medio |
+| Payload do Qdrant (`source_url`/`source_type`) duplica dado do Postgres sem mecanismo de propagacao se a evidencia for editada depois | **REDEFINIDO em 25/06/2026** — premissa original era "reupsert quando `Document`/`ScrapingResult` mudar", mas investigacao confirmou que essas entidades sao write-once (so `save()`, sem update de campo) — nao existe fluxo de edicao, logo essa versao da feature nao teria chamador real. Implementado o gatilho real equivalente: deletar vetores orfaos quando uma URL e' re-raspada apos o cache de 3 dias expirar, ver abaixo | Consistencia Qdrant<->Postgres | Baixo-Medio |
 
 Nao adotar embeddings locais (Hugging Face/sentence-transformers) nem trocar
 de provider agora: o ponto fraco real e observabilidade/cache em torno do
@@ -158,3 +158,15 @@ cached_chunk_id=...)` (pula a chamada ao provider quando ha cache hit).
 `ExecuteEmbeddingJob` consulta o cache antes de cada chunk. Testado:
 2 chunks com texto identico em documentos diferentes geram 1 unica chamada
 ao provider de embedding.
+
+**Limpeza de vetores orfaos — concluido em 25/06/2026** (substitui a
+"sincronia" planejada acima): `VectorRepository.delete_by_document_id()`
+(novo, contrato publico) remove todos os pontos do Qdrant cujo payload
+`document_id` bate com o informado; usa `client.delete()` filtrado por
+`Filter`/`FieldCondition`, no-op se a colecao nao existir (mesma guarda
+de `get_by_chunk_id`). `embeddings` so expoe a capacidade — quem decide
+QUANDO chamar e' `orchestration` (`AdvanceUrlIngestionJob`, ver
+`docs/orchestration/roadmap_orchestration.md`), porque so ele sabe que
+uma URL foi re-raspada e tem o `document_id` antigo a limpar. Testado
+contra Qdrant real (colecao descartavel): remove so os chunks do
+documento certo, no-op sem colecao.

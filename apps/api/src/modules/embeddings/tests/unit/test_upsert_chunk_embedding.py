@@ -47,6 +47,13 @@ class FakeVectorRepository(VectorRepository):
     async def get_by_chunk_id(self, chunk_id) -> ChunkEmbeddingRecord | None:
         return self.records.get(chunk_id)
 
+    async def delete_by_document_id(self, document_id) -> None:
+        self.records = {
+            chunk_id: record
+            for chunk_id, record in self.records.items()
+            if record.document_id != document_id
+        }
+
 
 class CountingEmbeddingService(EmbeddingService):
     def __init__(self) -> None:

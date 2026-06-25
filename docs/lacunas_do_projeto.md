@@ -72,7 +72,7 @@ Fase 0 quis resolver, mas resolveu so na borda (workers), nao no miolo.
 ## 3. Risco de dados (Postgres / Qdrant)
 
 ```txt
-[PARCIALMENTE RESOLVIDO] em 23/06/2026
+[RESOLVIDO] em 25/06/2026 (os 2 itens que estavam parcialmente abertos aqui)
 ```
 
 - `model_name` fica salvo no payload do Qdrant (confirmado,
@@ -82,9 +82,16 @@ Fase 0 quis resolver, mas resolveu so na borda (workers), nao no miolo.
   Protecao entregue em 23/06/2026: a colecao registra modelo e dimensao como
   metadata e recusa escritas incompativeis ou colecoes legadas sem schema.
 - Payload do Qdrant duplica `source_url`/`source_type` do Postgres sem
-  mecanismo de sincronia se a evidencia for editada depois. Decidido
-  resolver, nao implementado (baixo risco pratico hoje — nao existe fluxo
-  de edicao de evidencia ainda).
+  mecanismo de sincronia se a evidencia for editada depois. **Correcao em
+  25/06/2026:** essa entrada presumia um fluxo de edicao que, investigado
+  agora, nao existe no codigo — `Document`/`ScrapingResult` sao write-once
+  (so `save()`). Em vez de construir codigo sem chamador real, implementado
+  o gatilho real equivalente: `VectorRepository.delete_by_document_id()` +
+  `AdvanceUrlIngestionJob._cleanup_superseded_vectors()` removem do Qdrant
+  os vetores de um `Document` superado quando a mesma URL e' re-raspada
+  apos o cache de 3 dias expirar (antes ficavam orfaos pra sempre). Ver
+  `docs/embeddings/roadmap_embeddings.md` e
+  `docs/orchestration/roadmap_orchestration.md`.
 
 ```txt
 [FORA-ESCOPO]
@@ -138,19 +145,23 @@ Fase 0 quis resolver, mas resolveu so na borda (workers), nao no miolo.
 ## 6. Startups
 
 ```txt
-[DECIDIDO] (docs/decisoes_pendentes.md, secao 5)
+[RESOLVIDO] em 25/06/2026
 ```
-- Dedup por nome/website com `rapidfuzz` — confirmado **nao instalado**
-  ainda (`requirements.txt` nao tem `rapidfuzz`). Decidido fazer, falta
-  definir o limiar de similaridade com exemplos reais antes de implementar
-  (a decisao em si foi tomada, o parametro nao).
+- Dedup por nome/website com `rapidfuzz` — implementado (Startups V4,
+  slice inicial). `domain/policies.py::find_duplicate_startup()` compara
+  por dominio normalizado (exato, sem fuzzy) e por nome via
+  `rapidfuzz.fuzz.WRatio()` com `NAME_SIMILARITY_THRESHOLD = 92.0`,
+  calibrado com 17 pares reais antes de escrever qualquer logica. Ver
+  `docs/startups/roadmap_startups.md` e
+  `test_startup_deduplication_policy.py`. `requirements.txt` inclui
+  `rapidfuzz>=3.0,<4`.
 
 ```txt
 [ABERTO]
 ```
 - Sem confianca/origem por campo extraido (`founders`/`funding`/
-  `customers` nao sabem qual evidencia/fonte os preencheu) — V4 do modulo,
-  ainda futuro, sem decisao de prioridade.
+  `customers` nao sabem qual evidencia/fonte os preencheu) — V4 do modulo
+  (resto da fatia), ainda futuro, sem decisao de prioridade.
 
 ---
 
@@ -161,6 +172,15 @@ Fase 0 quis resolver, mas resolveu so na borda (workers), nao no miolo.
 ```
 - NVIDIA RAG Agent (V10) sem consumidor real — decidido deixar como esta,
   nao redesenhar o grafo. Ja documentado como decisao fechada.
+- Search Planner Agent (V3) existe e gera queries quando uma evidencia e'
+  insuficiente, mas ainda nao existe executor de busca web nem ligacao
+  automatica com `url_ingestion_jobs`. Estado real: o sistema consegue
+  detectar `needs_more_sources` no scraping e planejar o que procurar, mas
+  nao transforma essas queries em URLs candidatas, nao cria novos jobs e nao
+  reexecuta extract/classify/recommendations sozinho. Ver
+  `docs/agents/roadmap_agentes.md` e
+  `docs/orchestration/roadmap_orchestration.md` ("Chain de enriquecimento por
+  busca").
 
 ```txt
 [ABERTO]
@@ -271,8 +291,8 @@ Fase 0 quis resolver, mas resolveu so na borda (workers), nao no miolo.
 
 | Status | Quantidade de itens |
 |---|---|
-| RESOLVIDO (24/06/2026) | 5 (cache de scraping, fundacao de testes do frontend, RAG grounding em recommendations/briefing, e o Frontend V3 completo — listagem/cards, historico de jobs, badge de fit, evidencia clicavel, chatbot, export PDF) — varios outros (rag->embeddings, caches de embeddings, agent wiring, Cohere config, BM25/pg_search) ja foram resolvidos em sessoes anteriores e nem entraram aqui |
-| DECIDIDO, falta implementar | 7 (Frontend V3 saiu desta contagem — entregue por completo) |
+| RESOLVIDO (24-25/06/2026) | 7 (cache de scraping, fundacao de testes do frontend, RAG grounding em recommendations/briefing, Frontend V3 completo, P3 decidido+implementado, limpeza de vetores orfaos no Qdrant — redefinicao da "sincronia Qdrant<->Postgres", e dedup de startups com `rapidfuzz` — Startups V4 slice inicial) — varios outros (rag->embeddings, caches de embeddings, agent wiring, Cohere config, BM25/pg_search) ja foram resolvidos em sessoes anteriores e nem entraram aqui |
+| DECIDIDO, falta implementar | 6 (rapidfuzz saiu — implementado em 25/06/2026; Frontend V3 saiu — entregue por completo) |
 | ABERTO, sem decisao ainda | 11 |
 | FORA-ESCOPO (demo) | 2 grupos (producao transversal, backup Qdrant) |
 

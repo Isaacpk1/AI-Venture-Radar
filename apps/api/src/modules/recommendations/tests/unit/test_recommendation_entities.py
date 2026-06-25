@@ -45,3 +45,25 @@ def test_recommendation_rejects_empty_justification() -> None:
 def test_recommendation_rejects_empty_technology_slug() -> None:
     with pytest.raises(RecommendationError):
         _build(technology_slug="   ")
+
+
+def test_recommendation_rejects_confidence_above_one() -> None:
+    with pytest.raises(RecommendationError):
+        _build(confidence=1.5)
+
+
+def test_recommendation_rejects_invalid_complexity() -> None:
+    with pytest.raises(RecommendationError):
+        _build(complexity="unknown")
+
+
+def test_recommendation_accepts_valid_complexity_values() -> None:
+    for level in ("low", "medium", "high"):
+        rec = _build(complexity=level)
+        assert rec.complexity == level
+
+
+def test_recommendation_defaults_confidence_zero_and_complexity_medium() -> None:
+    rec = _build()
+    assert rec.confidence == 0.0
+    assert rec.complexity == "medium"

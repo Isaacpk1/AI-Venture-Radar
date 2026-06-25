@@ -41,3 +41,12 @@ class VectorRepository(ABC):
         Usado para reaproveitar um vetor existente (cache por content_hash)
         sem chamar o provider de embedding de novo.
         """
+
+    @abstractmethod
+    async def delete_by_document_id(self, document_id: UUID) -> None:
+        """Remove todos os vetores de chunks de um documento.
+
+        Usado por `orchestration` para limpar vetores orfaos quando uma URL
+        e' re-raspada e gera um `Document` novo - o antigo nao e' mais "a
+        versao atual" daquela URL. Nao-op se nao houver vetor (idempotente).
+        """

@@ -30,6 +30,22 @@ class StartupRepository(ABC):
     ) -> tuple[list[Startup], int]:
         """Lista startups filtradas, ordenadas pela atualizacao mais recente."""
 
+    @abstractmethod
+    async def list_all(self) -> list[Startup]:
+        """Lista todas as startups, sem paginacao.
+
+        Usado pela checagem de duplicata em `CreateStartup`
+        (`domain/policies.py::find_duplicate_startup`) — volume do projeto
+        (case/demo) nao justifica busca fuzzy indexada no banco.
+        """
+
+    @abstractmethod
+    async def count_by_maturity(self) -> dict[str, int]:
+        """Retorna contagem de startups por ai_maturity_level.
+
+        Chave: valor do enum (ex. "ai_native"), incluindo None mapeado para "unclassified".
+        """
+
 
 class StartupEvidenceRepository(ABC):
 

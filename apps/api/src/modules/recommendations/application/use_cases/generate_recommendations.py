@@ -55,6 +55,7 @@ class GenerateRecommendations(RecommendationGenerator):
             EvidenceSignal(
                 evidence_id=evidence.evidence_id,
                 text=f"{evidence.title or ''} {evidence.notes or ''}".lower(),
+                confidence_score=evidence.confidence_score,
             )
             for evidence in profile.evidences
         ]
@@ -65,6 +66,7 @@ class GenerateRecommendations(RecommendationGenerator):
                 category=technology.category,
                 use_cases=technology.use_cases,
                 keywords=technology.keywords,
+                complexity=technology.complexity,
             )
             for technology in technologies
         ]
@@ -89,7 +91,10 @@ class GenerateRecommendations(RecommendationGenerator):
                 await uow.recommendation_repository.save(recommendation)
             await uow.commit()
 
-        return [to_recommendation_view(recommendation) for recommendation in recommendations]
+        return [
+            to_recommendation_view(recommendation, priority=rank)
+            for rank, recommendation in enumerate(recommendations, start=1)
+        ]
 
     async def execute(
         self, recommendation_input: GenerateRecommendationsInput
@@ -127,6 +132,8 @@ class GenerateRecommendations(RecommendationGenerator):
             technology_name=match.technology.name,
             category=match.technology.category,
             score=match.score,
+            confidence=match.confidence,
+            complexity=match.technology.complexity,
             justification=(
                 _build_grounded_justification(grounded)
                 if grounded is not None
@@ -166,7 +173,7 @@ def _build_grounded_justification(grounded: GroundedJustification) -> str:
     return f"{grounded.text} Fontes: {sources}."
 
 
-def to_recommendation_view(recommendation: Recommendation) -> RecommendationView:
+def to_recommendation_view(recommendation: Recommendation, *, priority: int = 1) -> RecommendationView:
     return RecommendationView(
         id=recommendation.id,
         startup_id=recommendation.startup_id,
@@ -174,6 +181,9 @@ def to_recommendation_view(recommendation: Recommendation) -> RecommendationView
         technology_name=recommendation.technology_name,
         category=recommendation.category,
         score=recommendation.score,
+        confidence=recommendation.confidence,
+        complexity=recommendation.complexity,
+        priority=priority,
         justification=recommendation.justification,
         matched_keywords=list(recommendation.matched_keywords),
         evidence_ids=list(recommendation.evidence_ids),

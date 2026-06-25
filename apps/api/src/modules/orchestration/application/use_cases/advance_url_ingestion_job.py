@@ -157,6 +157,8 @@ class AdvanceUrlIngestionJob:
                 if not status.is_done:
                     raise UrlIngestionStillProcessingError("Embedding em andamento.")
 
+                await self._cleanup_superseded_vectors(job)
+
                 if job.source_type != STARTUP_EVIDENCE_SOURCE_TYPE:
                     job.complete()
                     await self._save(job)
@@ -255,6 +257,41 @@ class AdvanceUrlIngestionJob:
             job.record_analysis_result(
                 recommendation_count=recommendation_count, briefing_id=briefing_id
             )
+
+    async def _cleanup_superseded_vectors(self, job: UrlIngestionJob) -> None:
+        """Remove vetores Qdrant de scrapes anteriores da mesma URL.
+
+        Re-scrape apos o cache de ``SCRAPING_RESULT_CACHE_TTL`` (scraping)
+        expirar cria um ``Document`` novo para a mesma URL; sem esta
+        limpeza, o ``Document`` antigo (e seus vetores no Qdrant) fica
+        orfao para sempre. Best-effort: falha aqui nao impede o job atual
+        de concluir, so deixa o vetor orfao pra uma limpeza futura.
+        """
+
+        async with self._uow_factory() as uow:
+            previous_jobs = await uow.url_ingestion_job_repository.list_completed_by_url(
+                job.url
+            )
+
+        superseded_document_ids = {
+            previous.document_id
+            for previous in previous_jobs
+            if previous.id != job.id
+            and previous.document_id is not None
+            and previous.document_id != job.document_id
+        }
+        for document_id in superseded_document_ids:
+            try:
+                await self._embeddings_port.delete_vectors_for_document(document_id)
+                logger.info(
+                    "deleted superseded vectors from previous scrape",
+                    extra={"document_id": str(document_id)},
+                )
+            except Exception as error:
+                logger.warning(
+                    "failed to delete superseded vectors",
+                    extra={"document_id": str(document_id), "reason": str(error)},
+                )
 
     async def _get(self, job_id: UUID) -> UrlIngestionJob:
         async with self._uow_factory() as uow:

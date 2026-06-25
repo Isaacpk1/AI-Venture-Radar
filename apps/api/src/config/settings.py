@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     # Runtime
     environment: str = "development"
     log_level: str = "INFO"
+    startup_discovery_max_per_run: int = 20
 
 
 @lru_cache

@@ -103,6 +103,22 @@ class QdrantVectorRepository(VectorRepository):
             model_name=point.payload["model_name"],
         )
 
+    async def delete_by_document_id(self, document_id: UUID) -> None:
+        if not await self._client.collection_exists(self._collection_name):
+            return
+
+        await self._client.delete(
+            collection_name=self._collection_name,
+            points_selector=Filter(
+                must=[
+                    FieldCondition(
+                        key="document_id",
+                        match=MatchValue(value=str(document_id)),
+                    )
+                ]
+            ),
+        )
+
     def _build_filter(self, source_type: str | None) -> Filter | None:
         if source_type is None:
             return None

@@ -34,12 +34,12 @@ Frontend V3 esta completo.
 | agents | V12 | Evidence, Search Planner, Extraction, Startup Classifier, NVIDIA RAG, Recommendation e Briefing (8/8 agentes do brief) |
 | ingestion | V1 | documents/chunks + worker (worker entregue junto da V1) |
 | embeddings | V5 | metricas operacionais por job/chunk + cache por `content_hash` + guarda de schema do Qdrant |
-| startups | V3 (slice inicial) | dados estruturados + classificacao AI-native/AI-enabled/Non-AI + `ListStartups` paginado |
+| startups | V4 (slice inicial) | dados estruturados + classificacao AI-native/AI-enabled/Non-AI + `ListStartups` paginado + dedup por nome/dominio (`rapidfuzz`) |
 | rag | V4 | busca vetorial + lexical (BM25 via `pg_search`) com RRF + reranking Cohere + resposta citada |
 | nvidia_knowledge | V1 + V2 completo | catalogo cobre o brief; 20/20 fontes do registry processadas, 17/20 com conteudo recuperavel |
 | recommendations | V2 | regras deterministicas + justificativa fundamentada via RAG (NVIDIA Knowledge), com fallback deterministico |
 | briefing | V3 | template executivo + secao "Contexto NVIDIA" via RAG (extensao V1) + export em PDF real (Playwright+Jinja2, V3) |
-| orchestration | V1 + V2 completa | analysis_jobs; url_ingestion_jobs leva URL bruta ate startup/recommendations/briefing com worker automatico (Dramatiq), sem operacao manual; historico global paginado (`GET /url-ingestion/jobs`) |
+| orchestration | V1 + V2 completa | analysis_jobs; url_ingestion_jobs leva URL bruta ate startup/recommendations/briefing com worker automatico (Dramatiq), sem operacao manual; historico global paginado (`GET /url-ingestion/jobs`); limpa vetores orfaos no Qdrant quando uma URL e' re-raspada |
 | frontend | V3 completa | jornada URL->job->resultado (V2) + portfolio paginado, historico global de jobs, badge de fit, evidencia clicavel, chatbot NVIDIA Knowledge e export PDF (V3) |
 
 ---
@@ -120,11 +120,11 @@ url_ingestion_jobs
 
 ## Testes
 
-Validacao executada em 24/06/2026 com infra local ativa
+Validacao executada em 25/06/2026 com infra local ativa
 (Postgres/Redis/Qdrant via `infra/docker-compose.yml`):
 
 ```txt
-Backend: 524 passed, 1 skipped (`pytest apps/api/src/modules/ apps/api/src/shared/ -q`)
+Backend: 559 passed, 1 skipped (`pytest apps/api/src/modules/ apps/api/src/shared/ -q`)
   - o skip e o teste Ragas opt-in (RUN_RAGAS_EVAL=1 nao definido)
 Frontend: 25 passed (`npm test` em apps/web/)
 ```
@@ -140,7 +140,11 @@ direto contra a app ASGI real: criar startup -> recommendations ->
 briefing -> `GET /url-ingestion/jobs` (200, total real) ->
 `GET /briefings/{id}/export` (200, PDF real de 28KB, `%PDF-1.4`) ->
 `POST /rag/answer` (200, resposta real do Gemini). `next build` e
-`tsc --noEmit` sem erro.
+`tsc --noEmit` sem erro. Limpeza de vetores orfaos
+(`_cleanup_superseded_vectors`) e dedup de startups (`POST /startups`
+real, mesmo dominio com nome diferente reaproveita o mesmo id) tambem
+validados via script manual contra Postgres e Qdrant reais, alem dos
+testes automatizados.
 
 ---
 
@@ -154,13 +158,13 @@ Para aderencia total ao case original (ver CLAUDE.md secao "Pending" para
 o detalhe e ordem de prioridade):
 
 ```txt
-Sincronia Qdrant<->Postgres (payload do Qdrant reupsert quando
-Document/ScrapingResult mudar) - decidido, falta implementar; risco
-pratico baixo hoje (sem fluxo de edicao de evidencia ainda)
-rapidfuzz para dedup de startups por nome/website - decidido, falta
-calibrar o limiar de similaridade e implementar
 Descoberta de startups por fontes gratuitas (StartSe, Distrito, Endeavor
 etc.) - zero orcamento, ver docs/scraping/roadmap_scraping.md
+Chain de enriquecimento quando a fonte inicial e' fraca - parcialmente
+desenhada, ainda nao implementada: Evidence Validation pode sinalizar
+`needs_more_sources` e Search Planner gera queries, mas falta executor de
+busca web (ex: Tavily/SearchExecutorPort), criacao automatica de novos
+`url_ingestion_jobs` para a mesma startup e novo round de extracao/classificacao
 Frontend V4 (Recharts, comparacao, fila em lote) - precisa de endpoints
 agregados novos no backend (GROUP BY), nenhum item acima cria isso
 Auth, CI/CD, deploy e backup do Qdrant - fora de escopo deliberadamente
@@ -172,27 +176,29 @@ movida para docs/roadmap_produto_final.md)
 
 NVIDIA Knowledge V2, Orchestration V2 (URL bruta ate briefing), Frontend
 V3 completo e P3 (diferencial do case, decidido + implementado) ja estao
-prontos — nao aparecem mais como pendencia nesta lista.
-`docs/decisoes_pendentes.md` nao tem pergunta em aberto.
+prontos — nao aparecem mais como pendencia nesta lista. "Sincronia
+Qdrant<->Postgres" (redefinida como limpeza de vetores orfaos) e
+"rapidfuzz para dedup de startups" tambem saem da lista agora
+(25/06/2026) — ambos implementados. `docs/decisoes_pendentes.md` nao tem
+pergunta em aberto.
 
 ---
 
 ## Proximo Passo Recomendado
 
 ```txt
-Sincronia Qdrant<->Postgres ou calibracao do limiar do rapidfuzz para
-dedup de startups — sem ordem decidida entre os dois. Descoberta de
-startups por fontes gratuitas pode entrar em paralelo se sobrar
-capacidade.
+Descoberta de startups por fontes gratuitas (StartSe, Distrito, Endeavor
+etc.) - unico item do backlog secundario com decisao tomada que ainda
+falta implementar.
 ```
 
-Motivo: todos os itens de maior prioridade do roadmap original
-(`docs/roadmap_produto_final.md`) ja foram fechados — NVIDIA Knowledge V2
-(20/20 fontes, 17/20 com conteudo), Orchestration V2 (URL bruta ate
-startup/recommendations/briefing, sem operacao manual), Frontend V3
-completo (navegacao/historico, transparencia, chatbot, export) e P3
-(diferencial "rastreabilidade ponta a ponta" — decidido e ja
-implementado: citacoes NVIDIA como link Markdown real + frontend
-renderiza Markdown de verdade no briefing, justificativa e chatbot). O
-que resta e' so o backlog secundario, sem ordem de prioridade definida
-entre os itens.
+Motivo: todos os outros itens decididos ja foram fechados — NVIDIA
+Knowledge V2 (20/20 fontes, 17/20 com conteudo), Orchestration V2 (URL
+bruta ate startup/recommendations/briefing, sem operacao manual),
+Frontend V3 completo (navegacao/historico, transparencia, chatbot,
+export), P3 (diferencial "rastreabilidade ponta a ponta"), a sincronia
+Qdrant<->Postgres (redefinida e implementada como limpeza de vetores
+orfaos no re-scrape) e o dedup de startups via `rapidfuzz` (limiar 92,
+calibrado com 17 pares reais). O que resta sem decisao de ordem e'
+descoberta de novas fontes gratuitas e o Frontend V4 (este ultimo
+deliberadamente por ultimo, depende de endpoints agregados novos).

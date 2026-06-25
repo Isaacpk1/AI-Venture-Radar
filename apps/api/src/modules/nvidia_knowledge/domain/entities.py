@@ -24,6 +24,7 @@ class NvidiaTechnology:
     use_cases: tuple[str, ...]
     keywords: tuple[str, ...]
     official_url: str
+    complexity: str = "medium"
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "slug", _normalize_slug(self.slug))

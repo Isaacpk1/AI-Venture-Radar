@@ -87,6 +87,9 @@ class FakeRecommendationRepository(RecommendationRepository):
         if recommendation is not None:
             recommendation.justification = justification
 
+    async def count_by_technology(self, *, limit: int = 10) -> list[tuple[str, str, int]]:
+        return []
+
 
 class FakeGrounder(NvidiaKnowledgeGrounder):
     def __init__(self, result: GroundedJustification | None) -> None:

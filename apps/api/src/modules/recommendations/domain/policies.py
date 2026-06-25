@@ -51,6 +51,7 @@ class TechnologyCandidate:
     category: str
     use_cases: tuple[str, ...]
     keywords: tuple[str, ...]
+    complexity: str = "medium"
 
 
 @dataclass(frozen=True)
@@ -59,14 +60,44 @@ class EvidenceSignal:
 
     evidence_id: UUID
     text: str
+    confidence_score: float = 0.5
 
 
 @dataclass(frozen=True)
 class MatchResult:
     technology: TechnologyCandidate
     score: float
+    confidence: float = 0.0
     matched_keywords: tuple[str, ...] = field(default_factory=tuple)
     evidence_ids: tuple[UUID, ...] = field(default_factory=tuple)
+
+
+def _compute_confidence(
+    *,
+    score: float,
+    matched_evidence_ids: set[UUID],
+    evidence_signals: list[EvidenceSignal],
+) -> float:
+    """Calcula a confianca de uma recomendacao com base na qualidade das evidencias.
+
+    Logica: se o match veio de evidencias reais, a media do ``confidence_score``
+    delas reflete a qualidade da fonte que validou o sinal — uma pagina bem
+    avaliada pelo scraper vale mais do que uma pagina de baixa qualidade.
+    Se o match veio so do perfil (setor/descricao), nao temos essa validacao
+    de fonte, entao a confianca e proporcional ao score, mas com teto de 0.5
+    (match de texto de perfil e mais fraco que evidencia real).
+    """
+
+    if not matched_evidence_ids:
+        return min(0.5, score * 0.5)
+
+    matching_signals = [
+        s for s in evidence_signals if s.evidence_id in matched_evidence_ids
+    ]
+    if not matching_signals:
+        return min(0.5, score * 0.5)
+
+    return sum(s.confidence_score for s in matching_signals) / len(matching_signals)
 
 
 def match_technologies(
@@ -114,10 +145,16 @@ def match_technologies(
         if ai_maturity_level == "ai_native" and matched_keywords:
             score = min(1.0, score + AI_NATIVE_SCORE_BONUS)
         if len(matched_keywords) >= MIN_MATCHED_KEYWORDS and score >= MIN_MATCH_SCORE:
+            confidence = _compute_confidence(
+                score=score,
+                matched_evidence_ids=matched_evidence_ids,
+                evidence_signals=evidence_signals,
+            )
             results.append(
                 MatchResult(
                     technology=technology,
                     score=round(score, 2),
+                    confidence=round(confidence, 2),
                     matched_keywords=tuple(matched_keywords),
                     evidence_ids=tuple(
                         sorted(matched_evidence_ids, key=str)

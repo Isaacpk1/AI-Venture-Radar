@@ -15,7 +15,11 @@ from apps.api.src.modules.recommendations.factories.recommendations_factory impo
     RecommendationsFactory,
 )
 
-from .schemas import GenerateRecommendationsRequest, RecommendationResponse
+from .schemas import (
+    GenerateRecommendationsRequest,
+    RecommendationResponse,
+    TechnologyStatsResponse,
+)
 
 router = APIRouter(
     prefix="/recommendations",
@@ -41,6 +45,17 @@ async def generate_recommendations(
     except StartupProfileUnavailableError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     return [RecommendationResponse.from_view(view) for view in views]
+
+
+@router.get("/stats", response_model=TechnologyStatsResponse)
+async def get_technology_stats(
+    limit: int = 10,
+) -> TechnologyStatsResponse:
+    """Retorna as tecnologias NVIDIA mais recomendadas no portfolio (para graficos)."""
+
+    use_case = RecommendationsFactory.create_get_technology_stats()
+    view = await use_case.execute(limit=max(1, min(limit, 20)))
+    return TechnologyStatsResponse.from_view(view)
 
 
 @router.get("/{recommendation_id}", response_model=RecommendationResponse)

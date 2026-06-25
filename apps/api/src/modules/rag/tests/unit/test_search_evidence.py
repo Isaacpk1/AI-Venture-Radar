@@ -67,6 +67,9 @@ class FakeVectorRepository(VectorRepository):
     async def get_by_chunk_id(self, chunk_id):
         return None
 
+    async def delete_by_document_id(self, document_id) -> None:
+        pass
+
 
 class FakeLexicalSearchRepository(LexicalSearchRepository):
     def __init__(self, results: list[LexicalSearchResult] | None = None) -> None:

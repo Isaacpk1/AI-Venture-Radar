@@ -113,6 +113,25 @@ na Startups V3) + `ListUrlIngestionJobs` (use case) +
 Consumido pela pagina `/jobs` do frontend. Testes: 28 unit/2 integracao
 -> 29 unit/3 integracao.
 
+**Extensao feita em 25/06/2026 (continua V2 — limpeza de vetores orfaos
+no Qdrant):** o item de backlog "sincronia Qdrant<->Postgres" supunha
+edicao de `Document`/`ScrapingResult`, que nao existe no codigo
+(write-once) — investigado antes de implementar algo sem chamador real
+(regra 8 do `CLAUDE.md`). Gatilho real confirmado: re-scrape da mesma
+URL apos `SCRAPING_RESULT_CACHE_TTL` (3 dias, modulo `scraping`) expirar
+cria um `Document` novo; o antigo (e seus vetores no Qdrant) ficava
+orfao pra sempre. `UrlIngestionJobRepository.list_completed_by_url(url)`
+(novo) acha jobs concluidos anteriores da mesma URL;
+`EmbeddingsPort.delete_vectors_for_document()` (novo, delega pra
+`VectorRepository.delete_by_document_id()` do modulo `embeddings`, ver
+`docs/embeddings/roadmap_embeddings.md`)
+chamado por `AdvanceUrlIngestionJob._cleanup_superseded_vectors()` logo
+que o embedding e' confirmado concluido — best-effort, falha so gera
+`logger.warning`, nao impede o job atual de terminar. Testes: 29 unit/3
+integracao -> 31 unit/4 integracao. Validado contra Postgres e Qdrant
+reais via script manual, alem de unit/integration tests com fakes/colecao
+descartavel.
+
 ---
 
 ## Orchestration V3 - Retomada de Jobs Falhados

@@ -81,6 +81,16 @@ class FakeStartupRepository(StartupRepository):
         start = (page - 1) * page_size
         return startups[start : start + page_size], total
 
+    async def list_all(self) -> list[Startup]:
+        return list(self.items.values())
+
+    async def count_by_maturity(self) -> dict[str, int]:
+        result: dict[str, int] = {}
+        for startup in self.items.values():
+            key = startup.ai_maturity_level.value if startup.ai_maturity_level else "unclassified"
+            result[key] = result.get(key, 0) + 1
+        return result
+
 
 class FakeEvidenceRepository(StartupEvidenceRepository):
     def __init__(self) -> None:
@@ -160,6 +170,51 @@ async def test_create_startup_via_public_contract_returns_id() -> None:
     )
 
     assert uow.startup_repository.items[startup_id].name == "Acme AI"
+
+
+@pytest.mark.anyio
+async def test_create_startup_reuses_existing_record_on_domain_match() -> None:
+    uow = _make_uow()
+    existing = Startup(name="Acme Inc", website_url="https://www.acme.com/about")
+    await uow.startup_repository.save(existing)
+    use_case = CreateStartup(lambda: uow)
+
+    view = await use_case.execute(
+        CreateStartupInput(name="Acme Artificial Intelligence", website_url="https://acme.com/")
+    )
+
+    assert view.id == existing.id
+    assert len(uow.startup_repository.items) == 1
+    assert uow.commits == 0
+
+
+@pytest.mark.anyio
+async def test_create_startup_reuses_existing_record_on_name_match() -> None:
+    uow = _make_uow()
+    existing = Startup(name="Dadosfera")
+    await uow.startup_repository.save(existing)
+    use_case = CreateStartup(lambda: uow)
+
+    view = await use_case.execute(
+        CreateStartupInput(name="Dadosfera Tecnologia", website_url=None)
+    )
+
+    assert view.id == existing.id
+    assert len(uow.startup_repository.items) == 1
+
+
+@pytest.mark.anyio
+async def test_create_startup_creates_new_record_when_not_a_duplicate() -> None:
+    uow = _make_uow()
+    existing = Startup(name="Totally Unrelated Co")
+    await uow.startup_repository.save(existing)
+    use_case = CreateStartup(lambda: uow)
+
+    view = await use_case.execute(CreateStartupInput(name="Acme AI"))
+
+    assert view.id != existing.id
+    assert len(uow.startup_repository.items) == 2
+    assert uow.commits == 1
 
 
 @pytest.mark.anyio

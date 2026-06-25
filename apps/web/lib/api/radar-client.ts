@@ -3,11 +3,13 @@ import type {
   CreateUrlIngestionJobInput,
   ListStartupsParams,
   ListUrlIngestionJobsParams,
+  MaturityDistribution,
   RagAnswer,
   Recommendation,
   Startup,
   StartupEvidence,
   StartupPage,
+  TechnologyStats,
   UrlIngestionJob,
   UrlIngestionJobPage,
 } from "./radar-types";
@@ -73,6 +75,25 @@ export function askNvidiaKnowledge(query: string) {
     method: "POST",
     body: JSON.stringify({ query, source_type: "nvidia_knowledge" }),
   });
+}
+
+export function getPortfolioStats() {
+  return request<MaturityDistribution>("/api/radar/startups/stats");
+}
+
+export function getTechnologyStats(limit = 10) {
+  return request<TechnologyStats>(`/api/radar/recommendations/stats?limit=${limit}`);
+}
+
+export async function createBatchUrlIngestionJobs(urls: string[]) {
+  const results = await Promise.allSettled(
+    urls.map((url) => createUrlIngestionJob({ url }))
+  );
+  return results.map((r, i) => ({
+    url: urls[i],
+    job: r.status === "fulfilled" ? r.value : null,
+    error: r.status === "rejected" ? (r.reason as Error).message : null,
+  }));
 }
 
 export async function refreshStartupAnalysis(startupId: string) {

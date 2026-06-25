@@ -220,3 +220,81 @@ def test_word_boundary_still_matches_real_standalone_keywords() -> None:
     assert results[0].technology.slug == "nvidia-nemo"
     assert "agent" in results[0].matched_keywords
     assert "llm" in results[0].matched_keywords
+
+
+def test_confidence_reflects_evidence_quality() -> None:
+    """Match com evidencia de alta qualidade gera confianca mais alta."""
+
+    high_conf_id = uuid4()
+    results = match_technologies(
+        sector=None,
+        description=None,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=high_conf_id,
+                text="generative ai inference api deployment microservice",
+                confidence_score=0.9,
+            )
+        ],
+        technologies=[NIM],
+    )
+
+    assert len(results) == 1
+    assert results[0].confidence == 0.9
+
+
+def test_confidence_is_lower_for_profile_only_match() -> None:
+    """Match que veio so do perfil (setor/descricao) recebe confianca reduzida."""
+
+    results = match_technologies(
+        sector="LLM and generative AI inference API deployment microservice",
+        description=None,
+        evidence_signals=[],
+        technologies=[NIM],
+    )
+
+    assert len(results) == 1
+    # Score 1.0 -> confianca = min(0.5, 1.0 * 0.5) = 0.5
+    assert results[0].confidence == 0.5
+    assert results[0].confidence < results[0].score
+
+
+def test_confidence_averages_multiple_evidence_quality_scores() -> None:
+    """Confianca e' a media dos confidence_scores das evidencias que matcharam."""
+
+    id1, id2 = uuid4(), uuid4()
+    results = match_technologies(
+        sector=None,
+        description=None,
+        evidence_signals=[
+            EvidenceSignal(evidence_id=id1, text="llm inference api deployment microservice", confidence_score=0.8),
+            EvidenceSignal(evidence_id=id2, text="generative ai deployment", confidence_score=0.4),
+        ],
+        technologies=[NIM],
+    )
+
+    assert len(results) == 1
+    # Ambas as evidencias matcham, media = (0.8 + 0.4) / 2 = 0.6
+    assert results[0].confidence == 0.6
+
+
+def test_complexity_propagated_from_candidate() -> None:
+    """complexity do TechnologyCandidate aparece no MatchResult via TechnologyCandidate."""
+
+    nim_low = TechnologyCandidate(
+        slug="nvidia-nim",
+        name="NVIDIA NIM",
+        category="model_serving",
+        use_cases=("servir LLMs",),
+        keywords=("llm", "inference"),
+        complexity="low",
+    )
+    results = match_technologies(
+        sector="llm inference",
+        description=None,
+        evidence_signals=[],
+        technologies=[nim_low],
+    )
+
+    assert len(results) == 1
+    assert results[0].technology.complexity == "low"

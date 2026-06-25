@@ -26,7 +26,10 @@ class ListRecommendations(RecommendationsReader):
                 startup_id
             )
 
-        return [to_recommendation_view(recommendation) for recommendation in recommendations]
+        return [
+            to_recommendation_view(recommendation, priority=rank)
+            for rank, recommendation in enumerate(recommendations, start=1)
+        ]
 
     async def execute(self, *, startup_id: UUID) -> list[RecommendationView]:
         return await self.list_by_startup_id(startup_id)

@@ -45,3 +45,13 @@ class UrlIngestionJobRepository(ABC):
         source_type: str | None = None,
     ) -> tuple[list[UrlIngestionJob], int]:
         """Lista url ingestion jobs filtrados, mais recentes primeiro."""
+
+    @abstractmethod
+    async def list_completed_by_url(self, url: str) -> list[UrlIngestionJob]:
+        """Lista jobs concluidos com a mesma URL, mais recentes primeiro.
+
+        Usado para encontrar `document_id`s de scrapes anteriores da mesma
+        URL e limpar seus vetores orfaos no Qdrant quando um re-scrape
+        (apos o cache de `SCRAPING_RESULT_CACHE_TTL` expirar) gera um
+        `Document` novo.
+        """

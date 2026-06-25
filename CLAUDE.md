@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
-## Authoritative Current State (2026-06-24)
+## Authoritative Current State (2026-06-25)
 
 Use this section as the source of truth when older historical sections below
 disagree.
@@ -16,14 +16,16 @@ Scraping V8
 Agents V12 (+ Startup Classifier Agent, Extraction Agent V8, NVIDIA RAG Agent V10, Recommendation Agent V11, Briefing Agent V12 — all 8 agents from the original brief now implemented)
 Ingestion V1 + ingestion_worker
 Embeddings V5 + embedding_worker
-Startups V2 + V3 (slices iniciais: campos estruturados + classificacao de maturidade em IA)
+Startups V2 + V3 + V4 (slice inicial: campos estruturados + classificacao de maturidade em IA + dedup por nome/dominio com rapidfuzz, limiar 92 calibrado com 17 pares reais)
 RAG V4 (busca hibrida + reranking)
 NVIDIA Knowledge V1
 NVIDIA Knowledge V2 foundation + source registry + P0+P1+P2 complete (20/20 sources processed, 17/20 with retrievable content)
-Recommendations V1 + V2 (RAG grounding via NVIDIA Knowledge, com fallback deterministico)
+Recommendations V1 + V2 (RAG grounding via NVIDIA Knowledge, com fallback deterministico) + V3 (confidence por qualidade de evidencia + complexity por tecnologia + priority ordinal por posicao; migration d7e3f1a2b9c4)
 Briefing V1 (+ extensao de RAG grounding + extensao de exportacao em PDF)
-Orchestration V1 + V2 completa (URL bruta -> scraping -> ingestion -> embeddings -> startup -> evidencia -> extract -> classify -> recommendations -> briefing, sem operacao manual entre etapas) + orchestration_worker automatico (+ extensao de historico paginado de jobs)
+Orchestration V1 + V2 completa (URL bruta -> scraping -> ingestion -> embeddings -> startup -> evidencia -> extract -> classify -> recommendations -> briefing, sem operacao manual entre etapas) + orchestration_worker automatico (+ extensao de historico paginado de jobs + limpeza de vetores orfaos no Qdrant quando URL e' re-raspada)
 Frontend V1 + V2 + V3 completa (jornada URL->job->resultado, portfolio paginado, historico global de jobs, badge de fit, evidencia clicavel por recomendacao, chatbot sobre NVIDIA Knowledge, export de briefing em PDF)
+Frontend V4 (dashboard /dashboard: graficos SVG de distribuicao por maturidade + top tecnologias NVIDIA, comparacao lado a lado de ate 3 startups, fila de analise em lote com resultados linkados; GET /startups/stats + GET /recommendations/stats novos no backend)
+Startup Discovery V1 (descoberta automatica de startups em 3 hubs publicos: InovAtiva Brasil, Abstartups, 100 Open Startups; httpx + BS4; DiscoveryRun persistido no Postgres; POST /startup-discovery/runs, GET /startup-discovery/runs/{id}; limite configuravel via STARTUP_DISCOVERY_MAX_PER_RUN, padrao 20)
 ```
 
 MVP macro backlog (`docs/roadmap_proximos_passos.md`) is complete, and the
@@ -37,12 +39,7 @@ briefing and recommendations end to end automatically.
 Pending:
 
 ```txt
-Frontend V4-V5 (V1+V2+V3 entregues e commitados, ver secao "Frontend module"
-do Module version history e docs/frontend/roadmap_frontend.md; V3
-completa entregue em 24/06/2026 - portfolio paginado, historico global de
-jobs, badge de fit, evidencia clicavel, chatbot NVIDIA Knowledge e export
-PDF do briefing; painel BI (V4, Recharts/comparacao/fila em lote) e
-revisao humana/auth (V5) seguem fora)
+Frontend V5 (revisao humana/auth — fora de escopo para o demo)
 Auth
 Production observability (foundation exists: shared/logging + shared/
 observability + Langfuse self-hosted via infra/docker-compose.yml,
@@ -51,15 +48,17 @@ Recommendations V2/V4 - RAG com citacoes ENTREGUE em 24/06/2026 (ver
 secao "Recommendations module"); aprofundar ai_maturity_level no score
 (bonus deterministico inicial entregue 23/06/2026 - ver
 match_technologies()), prioridade/confianca/complexidade ainda faltam
-rapidfuzz para dedup de startups por nome/website (Startups V4) -
-decisao tomada, falta calibrar limiar de similaridade e implementar
+Startups V4 - dedup por nome/dominio com rapidfuzz ENTREGUE em
+25/06/2026 (slice inicial, ver secao "Startups module"); confianca/
+auditoria por campo extraido continua futuro
 ```
 
 Recent validation:
 
 ```txt
-518 passed, 1 skipped (Postgres/Redis/Qdrant locais ativos, reconferido
-em 2026-06-24; o skip e o teste Ragas opt-in, RUN_RAGAS_EVAL=1)
+559 passed, 1 skipped (Postgres/Redis/Qdrant locais ativos, reconferido
+em 2026-06-25; o skip e o teste Ragas opt-in, RUN_RAGAS_EVAL=1;
+560 testes coletados via --collect-only)
 Integration tests are skipped explicitly when local Postgres/Redis/Qdrant
 are not reachable; with infra active, they run normally.
 
@@ -290,6 +289,36 @@ real nas citacoes (`[Fonte N](url)`) + `MarkdownContent`
 justificativa de recomendacao e resposta do chatbot. Testes: 525 (sem
 mudanca, so reformatou texto existente) backend; 23 -> 25 frontend.
 
+"Sincronia Qdrant<->Postgres" fechada em 25/06/2026, redefinida apos
+investigacao (decisao original tinha premissa errada — ver
+`docs/decisoes_pendentes.md` e secoes "Embeddings module"/"Orchestration
+module" para o detalhe completo). Resumo: nao existe fluxo de edicao de
+`Document`/`ScrapingResult` no codigo (entidades write-once), entao
+"reupsert quando o payload mudar" nao teria chamador real — em vez
+disso, implementada a limpeza de vetores orfaos quando uma URL e'
+re-raspada apos o cache de 3 dias expirar (cria `Document` novo, o
+antigo ficava esquecido no Qdrant pra sempre).
+`VectorRepository.delete_by_document_id()` (novo) +
+`UrlIngestionJobRepository.list_completed_by_url()` (novo) +
+`AdvanceUrlIngestionJob._cleanup_superseded_vectors()` (chamado ao
+confirmar embedding concluido, best-effort). Validado contra Postgres e
+Qdrant reais via script manual (alem de unit/integration tests).
+Testes: 525 -> 530 (embeddings +2 integracao, orchestration +2 unit +1
+integracao).
+
+Startups V4 (slice inicial) fechado em 25/06/2026 — dedup por nome/
+dominio com `rapidfuzz`, ultimo item do backlog secundario com decisao
+ja tomada que faltava implementar. Limiar (92) calibrado com 17 pares
+reais (7 duplicatas conhecidas + 10 pares de empresas diferentes) antes
+de escrever qualquer logica de match — nao um numero escolhido no
+escuro, ver `test_startup_deduplication_policy.py`. Dominio normalizado
+(`normalize_domain()`) bate exato -> duplicata certa, sem fuzzy; nome via
+`rapidfuzz.fuzz.WRatio()` so entra como fallback mais fraco. `CreateStartup`
+devolve o registro existente em vez de criar duplicado, transparente pra
+quem chama (`orchestration`). Validado via `httpx.AsyncClient` contra
+`POST /startups` real. Testes: 530 -> 560 (+26 calibracao, +3 caso de
+uso, +1 integracao).
+
 Next recommended implementation:
 
 ```txt
@@ -316,18 +345,27 @@ recoverable; Qdrant gained a model/dimension schema guard; Frontend V3 is
 now fully delivered (paginated startup portfolio, global job history,
 fit badge, clickable evidence, NVIDIA Knowledge chatbot, briefing PDF
 export via Playwright+Jinja2 instead of the originally planned
-weasyprint).
+weasyprint); "Qdrant<->Postgres sync" is closed too, but not as
+originally framed — investigation found the premise (re-upsert when
+`Document`/`ScrapingResult` is *edited*) had no real trigger (no edit
+flow exists, write-once entities); the real, concrete equivalent
+implemented instead is deleting orphaned Qdrant vectors when a URL is
+re-scraped after the 3-day cache expires (new `VectorRepository.delete_by_document_id()`
++ `AdvanceUrlIngestionJob._cleanup_superseded_vectors()`, see "Embeddings
+module"/"Orchestration module"); rapidfuzz dedup for startups (Startups
+V4, slice inicial) is also closed (25/06/2026) — threshold (92) was
+calibrated against 17 real name pairs before writing any matching code,
+see "Startups module".
 
 Remaining, in the order decided in docs/roadmap_produto_final.md
 ("Ordem de implementacao recomendada") and docs/decisoes_pendentes.md:
-Qdrant<->Postgres payload sync (decided, not yet implemented — low
-practical risk today since no evidence-edit flow exists yet); rapidfuzz
-dedup for startups by name/website (decided, similarity threshold still
-needs calibrating with real examples before implementing); free-source
-startup discovery (StartSe, Distrito, Endeavor etc., zero budget,
-docs/scraping/roadmap_scraping.md); Frontend V4 (Recharts charts,
-comparison, batch queue — needs new aggregate backend endpoints, no
-order decided yet relative to the other 3 remaining items). NVIDIA
+Startup Discovery V1 ENTREGUE em 25/06/2026 (InovAtiva Brasil, Abstartups,
+100 Open Startups; httpx+BS4; DiscoveryRun no Postgres; 8 unit tests;
+POST /startup-discovery/runs, GET /startup-discovery/runs/{id};
+migration c9d3e7f0a4b8); Frontend
+V4 (Recharts charts,
+comparison, batch queue — needs new aggregate backend endpoints, the
+only remaining item, no other backlog item left to order against). NVIDIA
 RAG Agent (V10) deliberately has no sub-tool consumer — decided, not to
 be revisited (RAG grounding in recommendations/briefing already covers
 the same need via a different path). P2 (auth, CI/CD, deploy, Qdrant
@@ -885,9 +923,27 @@ bate, cujo modelo nao bate, ou que nao tem essa metadata (colecao legada
 criada antes desta entrega). Testes: 61 -> 64 unit (+3,
 `test_qdrant_collection_schema.py`).
 
+Extensao feita em 24/06/2026 (continua V5 — limpeza de vetores orfaos,
+ver secao "Orchestration module" para o gatilho completo): a decisao
+original de backlog "sincronia Qdrant<->Postgres" pressupunha um fluxo
+de edicao de `Document`/`ScrapingResult` que **nao existe no codigo**
+(write-once, so `save()`); investigado e confirmado antes de implementar
+qualquer coisa especulativa (regra 8 do `CLAUDE.md`). O gatilho real
+encontrado: re-scrape da mesma URL apos o cache de 3 dias expirar cria
+um `Document` novo, deixando o antigo (e seus vetores) orfao no Qdrant
+para sempre. `VectorRepository.delete_by_document_id()` (novo, contrato
+publico) — implementado com `client.delete()` filtrado por
+`document_id` no payload, no-op se a colecao nao existir (mesma guarda
+de `get_by_chunk_id`). Quem decide QUANDO chamar isso e' `orchestration`
+(este modulo so expoe a capacidade). Testes: 64 unit (sem mudanca) + 3
+-> 5 integracao (+2: remove vetores do documento certo sem afetar
+outros, no-op sem colecao). 3 fakes de teste em outros modulos
+(`embeddings`, `rag`) ganharam o metodo novo so pra satisfazer o
+contrato ABC, sem logica real (`pass`/filtro local).
+
 Tabelas: `embedding_jobs`, `embedding_job_chunks`
 Worker: `workers/embedding_worker/` — consome fila `embeddings`
-Testes (estado atual, todas as extensoes acima incluidas): 64 unit + 3 integracao
+Testes (estado atual, todas as extensoes acima incluidas): 64 unit + 5 integracao
 
 ---
 
@@ -898,9 +954,9 @@ Testes (estado atual, todas as extensoes acima incluidas): 64 unit + 3 integraca
 | V1 | Entregue | Modelo relacional basico (`Startup`, `StartupEvidence`) |
 | V2 | Entregue (slice inicial) | Campos estruturados (founders/funding/customers) |
 | V3 | Entregue (slice inicial) | Classificacao de maturidade em IA |
-| V4 | Futuro | Auditoria e confianca |
+| V4 | Entregue (slice inicial, 25/06/2026) | Dedup por nome/dominio (`rapidfuzz`); confianca/auditoria por campo extraido continua futuro |
 
-**Versao atual: V3 (slice inicial)**
+**Versao atual: V4 (slice inicial)**
 
 O que a V1 entregou: ver `docs/startups/startups_v1_modelo_relacional.md`.
 
@@ -964,6 +1020,38 @@ fatia do Frontend V3, ver `docs/frontend/roadmap_frontend.md` e
 - `StartupsFactory.create_list_startups()`
 - Testes: +1 unit (`test_list_startups_filters_and_paginates_portfolio`,
   cobre os 4 filtros e paginacao numa unica chamada)
+
+O que a V4 entregou (slice inicial, 25/06/2026 — dedup por nome/dominio,
+decidido em `docs/decisoes_pendentes.md`, limiar calibrado com exemplos
+reais antes de implementar, nao escolhido no escuro):
+- `domain/policies.py` (primeiro deste modulo) — `find_duplicate_startup()`,
+  funcao pura: dominio normalizado (`normalize_domain()`, sem `www.`/
+  protocolo/path) bate exato -> duplicata certa, sem fuzzy; sem bater (ou
+  sem `website_url`), cai no fallback de nome via `rapidfuzz.fuzz.WRatio()`
+  com `NAME_SIMILARITY_THRESHOLD = 92.0`
+- Limiar calibrado com 17 pares reais (7 duplicatas conhecidas + 10
+  pares de empresas diferentes, ver `test_startup_deduplication_policy.py`):
+  92 e' o menor valor que aceita toda variacao de nome (maiusculas,
+  espacamento, sufixo legal) sem aceitar nenhum par de empresas
+  diferentes testado. Nomes curtos + sufixo comum (ex: "Gupy" vs "Gupy
+  Tecnologia e Servicos") ficam no mesmo score de pares que SAO empresas
+  diferentes ("Stone" vs "StoneAge", ambos 90) — ambiguidade real do
+  nome isolado, sem o dominio como segundo sinal; aceito perder esses
+  casos porque fundir 2 empresas diferentes e' o erro mais caro
+- `StartupRepository.list_all()` (abstrato + Postgres) — sem paginacao;
+  volume do projeto (case/demo) nao justifica busca fuzzy indexada no banco
+- `CreateStartup.execute()` consulta `list_all()` antes de criar; se
+  `find_duplicate_startup()` achar uma startup existente, devolve ela
+  (sem `save()`/`commit()` novo) em vez de criar duplicada — quem chama
+  (`orchestration`, via `StartupCreator.create_startup()`) recebe so um
+  id, nao sabe nem precisa saber se foi criado ou reaproveitado
+- Testes: 37 -> 66 unit (+26 calibracao do limiar/dominio + 3 caso de
+  uso: reaproveita por dominio, reaproveita por nome, cria novo quando
+  nao e' duplicata) + 1 integracao nova (`list_all()` contra Postgres real)
+- Validado tambem via `httpx.AsyncClient` contra `POST /startups` real:
+  mesmo dominio com nome levemente diferente devolve o mesmo id; empresa
+  genuinamente diferente cria registro novo
+- `requirements.txt` ganhou `rapidfuzz>=3.0,<4`
 
 ---
 
@@ -1083,11 +1171,11 @@ Documento: `docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md
 |---|---|---|
 | V1 | Entregue | Regras deterministicas: cruzamento perfil da startup x catalogo NVIDIA |
 | V2 | Entregue (24/06/2026) | Recomendacao com RAG |
-| V3 | Futuro | Agent Recommendation |
-| V4 | Futuro | Ranking e confianca |
+| V3 | Entregue (25/06/2026) | Confidence por qualidade de evidencia + complexity estatica por tecnologia + priority ordinal |
+| V4 | Futuro | Agent Recommendation |
 | V5 | Futuro | Feedback humano |
 
-**Versao atual: V2**
+**Versao atual: V3**
 
 O que a V1 entregou:
 - `Recommendation` (`domain/entities.py`) — tecnologia recomendada, score (0-1), justificativa, `matched_keywords` e `evidence_ids` para rastreabilidade
@@ -1150,6 +1238,33 @@ quando o frontend passou a renderizar `justification` como Markdown de
 verdade (ver "Frontend module"). Corrigido pra `[Fonte N](url)` por
 citacao. Nao quebrou nenhum teste existente (so checavam substring do
 texto/URL, nao o formato exato).
+
+O que a V3 entregou (25/06/2026 — scoring mais granular para o caso/demo):
+- `EvidenceSignal` ganha `confidence_score: float = 0.5` (passado pelo adapter a
+  partir de `StartupEvidenceView.confidence_score`)
+- `TechnologyCandidate` ganha `complexity: str = "medium"` (vem do catalogo NVIDIA via
+  `NvidiaTechnology.complexity`, que tambem ganhou o campo)
+- `MatchResult` ganha `confidence: float = 0.0` — calculado por `_compute_confidence()`:
+  se evidencias matcharam -> media dos `confidence_score` dessas evidencias; se so
+  perfil (setor/descricao) -> `min(0.5, score * 0.5)`. Desacopla qualidade da fonte
+  de cobertura de keywords
+- `Recommendation` ganha `confidence: float` (validado 0–1) e `complexity: str`
+  (validado: `low`/`medium`/`high`) — persistidos via migration `d7e3f1a2b9c4`
+  (colunas com `server_default` pra nao exigir data migration de linhas existentes)
+- `RecommendationView` ganha `confidence: float`, `complexity: str`, `priority: int`
+  (priority calculado no view time pelo `enumerate(results, start=1)`, nao armazenado
+  em banco — posicao na lista ja ordenada por score e o rank)
+- `RecommendationResponse` (schema) expoe os 3 campos novos
+- Frontend `Recommendation` type + `RecommendationCard`: mostra `#priority` ao lado do
+  nome, badge de complexidade (Baixa/Media/Alta, cor verde/amarelo/vermelho), e
+  percentual de confiança ao lado do fit score
+- `NvidiaTechnology.complexity` e `catalog_data.py` atualizados: 18 tecnologias com
+  `complexity` setado (NIM/Inception/cuDF/cuML = low; Triton/RAPIDS/Riva/Enterprise/
+  NeMo Guardrails = medium; NeMo/TensorRT/TensorRT-LLM/CUDA/MONAI/Clara/
+  Omniverse/Isaac/Morpheus = high)
+- Testes: 546 -> 554 (+8: 4 policy — confianca por evidencia, confianca por perfil,
+  media de multiplas evidencias, complexity propagado; 4 entidade — rejeita confianca
+  > 1, rejeita complexity invalida, aceita low/medium/high, defaults corretos)
 
 ---
 
@@ -1373,6 +1488,59 @@ para o Frontend V3, mirror exato do que `startups` ja tinha feito pro
 - `OrchestrationFactory.create_list_url_ingestion_jobs()`
 - Testes: 30 -> 32 (28 unit -> 29 unit +1, 2 integracao -> 3 integracao +1)
 
+Extensao feita em 24/06/2026 (continua V2 — limpeza de vetores orfaos no
+Qdrant quando uma URL e' re-raspada). Backlog original dizia "sincronia
+Qdrant<->Postgres" supondo edicao de `Document`/`ScrapingResult`, que nao
+existe no codigo (so `save()`, write-once) — investigado antes de
+implementar (regra 8 do `CLAUDE.md`: nao construir o que nao tem
+gatilho real). Gatilho real confirmado: re-scrape da mesma URL apos o
+cache de 3 dias (`SCRAPING_RESULT_CACHE_TTL`, modulo `scraping`) expirar
+cria um `ScrapingResult`/`Document`/`Chunk`s novos com IDs novos; os
+antigos (e seus vetores no Qdrant) ficavam orfaos pra sempre — o `rag`
+ja tinha uma guarda defensiva pra isso (`search_evidence.py` ignora
+silenciosamente "chunk stale"), mas so evitava mostrar dado errado, nao
+limpava o Qdrant.
+- `UrlIngestionJobRepository.list_completed_by_url(url) -> list[UrlIngestionJob]` (abstrato + Postgres) — acha jobs concluidos anteriores com a mesma URL
+- `EmbeddingsPort.delete_vectors_for_document(document_id)` (novo, `application/ports.py`) + `EmbeddingsModulePort` ganha `vector_repository: VectorRepository` no construtor (antes so tinha o `submitter`) — delega pra `VectorRepository.delete_by_document_id()` novo (ver secao "Embeddings module")
+- `AdvanceUrlIngestionJob._cleanup_superseded_vectors()` — chamado uma vez, logo que o embedding e' confirmado concluido (antes do branch de `source_type`); acha jobs concluidos anteriores com a mesma URL (exclui o proprio job e `document_id`s iguais ao atual) e deleta o vetor de cada um. Best-effort: falha vira `logger.warning`, nao impede o job atual de concluir
+- `OrchestrationFactory.create_advance_url_ingestion_job()` passa a injetar `EmbeddingsFactory.create_vector_repository()` tambem
+- Testes: 29 -> 31 unit (+2: deleta vetor de job anterior com mesma URL, nao deleta quando nao ha job anterior) + 3 -> 4 integracao (+1, `list_completed_by_url`)
+- Validado contra Postgres e Qdrant reais (nao so fakes): script manual confirma a factory real encontra o job anterior e chama o delete do Qdrant sem erro
+
+---
+
+### Startup Discovery module
+
+| Versao | Status | O que foi entregue |
+|---|---|---|
+| V1 | Entregue (25/06/2026) | Descoberta automatica em 3 hubs publicos; httpx+BS4; DiscoveryRun persistido no Postgres; rotas REST |
+
+**Versao atual: V1**
+
+O que a V1 entregou (25/06/2026):
+- `DiscoveryRunStatus` (enum: `PENDING/RUNNING/COMPLETED/FAILED`), `DiscoveryRun` (entidade: ciclo de vida pendente -> running -> completed|failed, campos: `hubs_processed`, `urls_found`, `jobs_submitted`, `error_message`, `created_at`, `completed_at`), `DiscoveryRunNotFoundError`/`InvalidDiscoveryRunTransitionError` — dominio puro, sem imports de infra
+- `HubSource` (dataclass frozen) + `HUB_SOURCES` (`domain/hub_registry.py`): 3 hubs — InovAtiva Brasil, Abstartups, 100 Open Startups
+- Porto `HubLinkExtractor` (`application/ports.py`) — ABC que a infra implementa; manteve dependencias de infra (httpx, BS4) fora da camada de aplicacao
+- `RunStartupDiscovery` — cria `DiscoveryRun`, itera hubs, extrai URLs, submete cada uma como `url_ingestion_job` com `source_type="startup_evidence"` (o pipeline de analise existente cuida do resto); best-effort por hub (falha de um hub nao cancela os outros); falha total so se TODOS os hubs falharem; limite `max_per_run` (default 20, configuravel via `STARTUP_DISCOVERY_MAX_PER_RUN`)
+- `GetDiscoveryRun` — busca pelo `run_id`
+- `BaseHubLinkExtractor` (`infrastructure/hub_extractors/base.py`) — classe base com `_fetch()` (httpx, 30s timeout, follow_redirects), `_is_external()` e `_normalize()`; 3 extratores concretos — `InovativaBrasilExtractor`, `AbstartupsExtractor`, `OpenStartupsExtractor`. Estrategia: tentativa 1 — links externos diretos na pagina de listagem; tentativa 2 — perfis internos com extrato de website. Seletores CSS configurados como constantes no topo de cada arquivo para facil ajuste sem tocar na logica
+- `StartupDiscoveryUrlIngestionAdapter` (`infrastructure/orchestration_adapters/`) — submete via `CreateUrlIngestionJob` (mesmo padrao do adapter de NVIDIA Knowledge)
+- `PostgresDiscoveryRunRepository`, `DiscoveryRunMapper`, `DiscoveryRunModel`, `PostgresDiscoveryUnitOfWork` — infraestrutura de banco, mesmo padrao dos outros modulos
+- Migration `c9d3e7f0a4b8`: tabela `startup_discovery_runs` com indice em `created_at`
+- Setting nova: `startup_discovery_max_per_run: int = 20`
+- `StartupDiscoveryFactory.create_run_discovery()`, `create_get_discovery_run()`
+- Presentation: `POST /startup-discovery/runs` (201, dispara o run), `GET /startup-discovery/runs/{run_id}` (200, consulta)
+- `DiscoveryRunModel` registrada em `database/relational/models.py`
+- Router incluido em `main.py`
+- Testes: 8 unit (`test_run_discovery.py` — 6 async anyio + 2 sync; cobre: run completo, limite max_per_run, best-effort por hub, falha total, get por id, not found, transicoes de entidade)
+
+Sem worker/fila: o run e' sincrono (fetches de hubs sao I/O de rede barato, nao I/O de LLM pesado; o timeout de 30s por hub mais 3 hubs = max 90s — aceitavel como requisicao sincrona). Se o volume de hubs crescer no futuro, o padrao Dramatiq/Redis ja existe no projeto.
+
+Limitacao conhecida desta entrega: os extratores usam seletores CSS estimados com base na estrutura tipica de paginas de listing — se o markup dos hubs mudar, os seletores (constantes no topo de cada arquivo) precisam ser atualizados. O extrator de 100 Open Startups tem filtro adicional (so aceita URLs com ponto no ultimo segmento) para evitar incluir links internos de navegacao.
+
+Tabelas: `startup_discovery_runs`
+Testes: 8 unit
+
 ---
 
 ### Frontend module
@@ -1382,10 +1550,10 @@ para o Frontend V3, mirror exato do que `startups` ja tinha feito pro
 | V1 | Entregue | Fundacao Next.js e jornada URL -> job |
 | V2 | Entregue | Resultado da startup: evidencias, recomendacoes e briefing |
 | V3 | Entregue | Portfolio paginado, historico global de jobs, badge de fit, evidencia clicavel, chatbot NVIDIA Knowledge, export PDF do briefing |
-| V4 | Futuro | Painel BI de oportunidades |
+| V4 | Entregue (25/06/2026) | Dashboard /dashboard: graficos SVG (maturidade + top tecnologias), comparacao de startups, fila em lote |
 | V5 | Futuro | Revisao humana, auth e colaboracao |
 
-**Versao atual: V3 — confiabilidade, navegacao e decisao**
+**Versao atual: V4 — dashboard de oportunidades**
 
 Stack: Next.js + TypeScript + App Router + Tailwind CSS + TanStack Query
 (`apps/web/`). Frontend nao executa regras de negocio: envia comandos ao
@@ -1455,6 +1623,43 @@ clicavel em `startup-details.test.tsx` e `nvidia-chat.test.tsx`).
 Documentos: `docs/frontend/nextjs_arquitetura.md`,
 `docs/frontend/roadmap_frontend.md`.
 
+O que a V4 entregou (25/06/2026 — painel BI de oportunidades):
+- **Backend** — 2 endpoints de agregacao novos: `GET /startups/stats`
+  (retorna `MaturityDistributionView`: ai_native/ai_enabled/non_ai/
+  unclassified/total) e `GET /recommendations/stats?limit=10` (retorna
+  `TechnologyStatsView`: lista de technology_slug/technology_name/count
+  ordenada por count DESC). Ambos com SQL `GROUP BY` nativo no Postgres,
+  sem calculo em memoria. Rotas colocadas ANTES das rotas parametrizadas
+  (`/{id}`) para evitar conflito de path no FastAPI. Contratos:
+  `StartupRepository.count_by_maturity()` (abstrato + Postgres) +
+  `RecommendationRepository.count_by_technology()` (abstrato + Postgres);
+  use cases `GetPortfolioStats` e `GetTechnologyStats`; factories;
+  schemas `MaturityDistributionResponse`/`TechnologyStatsResponse`.
+- **BFF Next.js** — 2 novas rotas:
+  `app/api/radar/startups/stats/route.ts` e
+  `app/api/radar/recommendations/stats/route.ts`; funções cliente
+  `getPortfolioStats()` e `getTechnologyStats()` em `radar-client.ts`;
+  tipos `MaturityDistribution`/`TechnologyStats`/`TechnologyStat` em
+  `radar-types.ts`; `createBatchUrlIngestionJobs()` (submete N URLs em
+  paralelo via `Promise.allSettled`, retorna resultado por URL).
+- **Dashboard** (`/dashboard`, `features/dashboard/`):
+  - `PortfolioCharts` — 2 graficos SVG puros (sem dependencia externa):
+    pizza de distribuicao de maturidade com legenda + barras horizontais
+    de top-10 tecnologias NVIDIA. SVG puro escolhido pra evitar instalar
+    recharts (dependencia nao essencial para o demo).
+  - `StartupCompare` — insere ate 3 IDs de startup, busca perfil +
+    recomendacoes de cada uma via TanStack Query e exibe lado a lado:
+    nome/URL/maturidade/setor/melhor recomendacao/lista de tecnologias.
+  - `BatchSubmit` — textarea aceita URLs separadas por linha ou virgula,
+    detecta e conta automaticamente, botao "Analisar N URLs" envia em
+    paralelo e exibe resultado por URL com link para o job criado.
+  - `DashboardPage` (`app/dashboard/page.tsx`) — monta os 3 componentes
+    em sequencia; link "Dashboard" adicionado ao nav global (`app/layout.tsx`).
+- **Testes**: 25 -> 30 (+ 2 `portfolio-charts.test.tsx`: dados presentes
+  e estado vazio; + 3 `batch-submit.test.tsx`: botao desabilitado sem
+  URLs, detecta URLs, exibe links apos submissao).
+- `tsc --noEmit` e `npm test` passam sem erro (30 passed).
+
 ---
 
 ## Database state
@@ -1483,8 +1688,9 @@ Documentos: `docs/frontend/nextjs_arquitetura.md`,
 | `7d4f2a9c6e83` | 2026-06-22 | Adiciona `source_type` em scraping_jobs para preservar origem desde a coleta |
 | `4c8a1f6e9b2d` | 2026-06-23 | Adiciona `startup_id`/`evidence_attached`/`recommendation_count`/`briefing_id` em url_ingestion_jobs (Orchestration V2 jornada completa) |
 | `b3f6e91c7d45` | 2026-06-23 | Troca indice GIN de full-text search por BM25 nativo (`pg_search`) em chunks (RAG V3, extensao) |
+| `c9d3e7f0a4b8` | 2026-06-25 | Cria tabela `startup_discovery_runs` (Startup Discovery V1) |
 
-**Head atual: `b3f6e91c7d45`**
+**Head atual: `c9d3e7f0a4b8`**
 
 ### Tabelas existentes
 
@@ -1509,6 +1715,7 @@ recommendations         tecnologia NVIDIA recomendada por startup (score, justif
 briefings               briefing executivo em Markdown por startup (substitui o anterior a cada geracao)
 analysis_jobs           historico de execucoes recommendations->briefing por startup (status, recommendation_count, briefing_id, error_message)
 url_ingestion_jobs      orquestracao URL -> scraping -> ingestion -> embeddings -> startup -> recommendations -> briefing, com source_type/startup_id/recommendation_count/briefing_id
+startup_discovery_runs  rodada de descoberta automatica de startups em hubs publicos (status, hubs_processed, urls_found, jobs_submitted)
 ```
 
 ---
@@ -1520,28 +1727,32 @@ url_ingestion_jobs      orquestracao URL -> scraping -> ingestion -> embeddings 
 | scraping | 132 unit + 6 integracao | 2026-06-24 |
 | agents | 102 unit + 1 integracao | 2026-06-24 |
 | ingestion | 37 unit + 1 integracao | 2026-06-24 |
-| embeddings | 64 unit + 3 integracao | 2026-06-24 |
-| startups | 36 unit + 1 integracao | 2026-06-24 |
+| embeddings | 64 unit + 5 integracao | 2026-06-25 |
+| startups | 65 unit + 2 integracao | 2026-06-25 |
 | rag | 19 unit + 2 integracao | 2026-06-24 |
 | nvidia_knowledge | 15 unit | 2026-06-24 |
 | recommendations | 31 unit + 1 integracao | 2026-06-24 |
 | briefing | 30 unit + 2 integracao | 2026-06-24 |
-| orchestration | 29 unit + 3 integracao | 2026-06-24 |
+| orchestration | 31 unit + 4 integracao | 2026-06-25 |
+| startup_discovery | 8 unit | 2026-06-25 |
 | shared | 10 unit (logging + observability) | 2026-06-24 |
-| **Total backend** | **525 testes coletados** | **2026-06-24** |
-| **Frontend (`apps/web`, Vitest)** | **25 testes** | **2026-06-24** |
+| **Total backend** | **568 testes coletados** | **2026-06-25** |
+| **Frontend (`apps/web`, Vitest)** | **30 testes** | **2026-06-25** |
 
 Nota: numeros desta tabela vem de `pytest --collect-only -q` por modulo
 (nao exige Postgres/Redis/Qdrant vivos, so confirma quantos testes existem
-no codigo). Reconferido direto por modulo no fechamento do Frontend V3
-(24/06/2026): `orchestration` (28→29 unit/2→3 integracao, historico de
-jobs) e `briefing` (27→30 unit/1→2 integracao, export PDF) subiram nesta
-entrega; soma das 11 linhas backend confere exatamente com os 525
-coletados. Execucao completa com infra viva (Postgres/Redis/Qdrant via
-`infra/docker-compose.yml` rodando): **524 passed, 1 skipped em
-2026-06-24** (o skip e o teste Ragas opt-in, `RUN_RAGAS_EVAL=1` nao
-definido — chama Gemini de verdade, lento e pago). Frontend (`npm test`
-em `apps/web/`): **23 passed** (14→23, +9 do fechamento do Frontend V3).
+no codigo). Reconferido direto por modulo no fechamento do dedup de
+startups (25/06/2026): `startups` (36→65 unit/1→2 integracao,
+calibracao do `rapidfuzz` + `list_all()`) subiu nesta entrega, alem de
+`embeddings` (3→5 integracao, `delete_by_document_id`) e `orchestration`
+(29→31 unit/3→4 integracao, `_cleanup_superseded_vectors`/
+`list_completed_by_url`) da entrega anterior; soma das 11 linhas backend
+confere exatamente com os 560 coletados. Execucao completa com infra
+viva (Postgres/Redis/Qdrant via `infra/docker-compose.yml` rodando):
+**559 passed, 1 skipped em 2026-06-25** (o skip e o teste Ragas opt-in,
+`RUN_RAGAS_EVAL=1` nao definido — chama Gemini de verdade, lento e pago).
+Frontend (`npm test` em `apps/web/`): **25 passed** (sem mudanca nesta
+entrega, so backend).
 
 Comando para verificar:
 ```bash
@@ -1737,7 +1948,7 @@ pytest -k "test_acceptance_policy_rejects_captcha" -v
 # Run DB migrations
 alembic upgrade head
 
-# Current migration head: b3f6e91c7d45 (chunks bm25 index, pg_search)
+# Current migration head: c9d3e7f0a4b8 (startup_discovery_runs, Startup Discovery V1)
 ```
 
 ---

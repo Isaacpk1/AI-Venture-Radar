@@ -8,9 +8,9 @@ atual em um produto utilizavel, operavel e apresentavel.
 
 O backend possui scraping, ingestao, embeddings, RAG, catalogo NVIDIA,
 startups, recomendacoes, briefings, workers e oito agentes LangGraph. A suite
-local passou em 524 testes Python (com 1 skip opt-in, Ragas) e 23 testes de
-frontend (`pytest -q` e `npm test`, reconferido em 2026-06-24 apos o
-fechamento do Frontend V3). A
+local passou em 529 testes Python (com 1 skip opt-in, Ragas) e 25 testes de
+frontend (`pytest -q` e `npm test`, reconferido em 2026-06-25 apos a
+limpeza de vetores orfaos no Qdrant). A
 jornada unica da URL ate o briefing (P0 #1) ja esta fechada. O frontend
 (P0 #2) **esta completo** — Frontend V1, V2 e V3 ja estao
 entregues e commitados (`docs/frontend/roadmap_frontend.md`), cobrindo
@@ -78,8 +78,9 @@ Telas minimas:
 - tela de revisao humana e retomada de casos pendentes — **falta
   (Frontend V5)**, depende de autenticacao.
 
-Cobertura: `apps/web` usa Vitest + React Testing Library e possui 23
-testes (reconferido 24/06/2026, +9 do fechamento do Frontend V3).
+Cobertura: `apps/web` usa Vitest + React Testing Library e possui 25
+testes (reconferido 24/06/2026: +9 do fechamento do Frontend V3 + +2 do
+P3 "rastreabilidade ponta a ponta").
 **Correcao em 23/06/2026:** uma
 afirmacao anterior de "bug real de Rules of Hooks em `StartupDetails`" nao
 se confirmou lendo o arquivo na integra (hooks chamados corretamente,
@@ -206,39 +207,58 @@ JA ENTREGUE (nao repetir):
    evidencia clicavel em `startup-details.tsx`, chatbot sobre NVIDIA
    Knowledge (`/knowledge`, so UI sobre `/rag/answer` ja existente),
    export do briefing em PDF (24/06/2026 — ver decisao tecnica abaixo)
+9. P3 (diferencial do case) — rastreabilidade ponta a ponta, decidido e
+   implementado em 24/06/2026 (citacoes NVIDIA como link Markdown real +
+   frontend renderiza Markdown de verdade)
+10. Sincronia Qdrant<->Postgres — redefinida e implementada em
+    25/06/2026 (ver decisao tecnica abaixo): nao era reupsert no edit,
+    era limpeza de vetor orfao no re-scrape
+11. rapidfuzz para dedup de startups (Startups V4, slice inicial) —
+    25/06/2026: `domain/policies.py::find_duplicate_startup()`, limiar
+    92 calibrado com 17 pares reais (7 duplicatas + 10 empresas
+    diferentes) antes de codar; `CreateStartup` devolve registro
+    existente em vez de criar duplicata, transparente pra orchestration
 ```
 
 ```txt
-DECISAO TECNICA REGISTRADA (24/06/2026, dentro do item 8 acima):
-export do briefing trocou `weasyprint` (planejado originalmente) por
-Playwright + Jinja2 + `markdown`. `weasyprint` exige bibliotecas nativas
-(Pango/Cairo/GTK) com risco real de instalacao no Windows (ambiente
-deste projeto); `playwright` ja e' dependencia do projeto desde o
-Scraping V4 e ja funciona comprovadamente aqui. Ver
-docs/briefing/briefing_v3_export_pdf.md.
+DECISOES TECNICAS REGISTRADAS:
+- (24/06/2026, item 8) export do briefing trocou `weasyprint` (planejado
+  originalmente) por Playwright + Jinja2 + `markdown`. `weasyprint` exige
+  bibliotecas nativas (Pango/Cairo/GTK) com risco real de instalacao no
+  Windows (ambiente deste projeto); `playwright` ja e' dependencia do
+  projeto desde o Scraping V4 e ja funciona comprovadamente aqui. Ver
+  docs/briefing/briefing_v3_export_pdf.md.
+- (25/06/2026, item 10) "sincronia Qdrant<->Postgres" tinha premissa
+  errada — pressupunha edicao de `Document`/`ScrapingResult`, que nao
+  existe no codigo (write-once). Investigado antes de implementar
+  qualquer coisa especulativa (regra 8 do `CLAUDE.md`). Gatilho real
+  encontrado: re-scrape da mesma URL apos o cache de 3 dias expirar cria
+  um `Document` novo, deixando o antigo orfao no Qdrant pra sempre.
+  Implementado `VectorRepository.delete_by_document_id()` +
+  `AdvanceUrlIngestionJob._cleanup_superseded_vectors()`. Ver
+  docs/embeddings/roadmap_embeddings.md e
+  docs/orchestration/roadmap_orchestration.md.
 ```
 
 ```txt
-PROXIMA SEQUENCIA (atualizado 24/06/2026 apos o fechamento do Frontend
-V3 — tudo abaixo ja tem decisao tomada, ver docs/decisoes_pendentes.md,
-sem ordem de prioridade definida entre os itens 1-3):
+PROXIMA SEQUENCIA (atualizado 25/06/2026 — tudo abaixo ja tem decisao
+tomada, ver docs/decisoes_pendentes.md):
 
-1. Sincronia Qdrant<->Postgres (reupsert do payload do Qdrant quando
-   `Document`/`ScrapingResult` mudar) — DECIDIDO fazer, ainda nao
-   implementado; risco pratico baixo hoje porque nao existe fluxo de
-   edicao de evidencia ainda, protecao preventiva.
-
-2. rapidfuzz para dedup de startups — DECIDIDO fazer; falta calibrar o
-   limiar de similaridade com exemplos reais antes de codar (nao decidir
-   um numero no escuro).
-
-3. Descoberta de startups com fontes gratuitas (hubs como StartSe,
+1. Descoberta de startups com fontes gratuitas (hubs como StartSe,
    Distrito, Endeavor, etc. — ver `docs/scraping/roadmap_scraping.md`,
    "Descoberta de startups") — DECIDIDO fazer pra demo, teto de custo
-   zero/gratuito. Isolado dos itens 1-2, pode entrar em paralelo se
-   sobrar capacidade.
+   zero/gratuito.
 
-4. Frontend V4 (graficos com Recharts, comparacao, fila em lote) — por
+Antes do Frontend V4: Chain de enriquecimento quando a primeira fonte e'
+fraca - DECIDIDO como desenho tecnico, ainda nao implementado: `scraping`
+ja pode marcar `needs_more_sources` e o Search Planner Agent ja gera
+queries, mas falta o `SearchExecutorPort`/cliente de busca web, transformar
+queries em URLs candidatas, criar novos `url_ingestion_jobs` associados a
+mesma startup e rodar novo round de extract/classify/recommendations. Esta
+e' a peca que faz o produto "ir atras da startup na web" em vez de depender
+so da URL inicial. Ver `docs/orchestration/roadmap_orchestration.md`.
+
+2. Frontend V4 (graficos com Recharts, comparacao, fila em lote) — por
    ultimo entre os itens decididos porque depende de endpoints agregados
    novos no backend (GROUP BY) que nenhum item anterior cria.
 ```
@@ -249,11 +269,9 @@ FORA DE ESCOPO (decidido, nao revisitar sem motivo novo):
 - Redesenho do NVIDIA RAG Agent (V10) pra virar sub-tool de outro agente
 ```
 
-```txt
-AINDA SEM DECISAO:
-- P3: qual diferencial apresentar no case (unica pergunta sem resposta em
-  docs/decisoes_pendentes.md)
-```
+`docs/decisoes_pendentes.md` nao tem pergunta sem decisao no momento —
+P3 (diferencial do case) foi a ultima e foi resolvida em 24/06/2026, ver
+secao P3 acima.
 
 ---
 

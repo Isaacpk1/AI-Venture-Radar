@@ -25,6 +25,8 @@ class Recommendation:
     justification: str
     matched_keywords: tuple[str, ...] = field(default_factory=tuple)
     evidence_ids: tuple[UUID, ...] = field(default_factory=tuple)
+    confidence: float = 0.0
+    complexity: str = "medium"
 
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utc_now)
@@ -34,6 +36,7 @@ class Recommendation:
         self.technology_name = self.technology_name.strip()
         self.category = self.category.strip()
         self.justification = self.justification.strip()
+        self.complexity = self.complexity.strip().lower()
 
         if not self.technology_slug:
             raise RecommendationError("Recomendacao precisa ter technology_slug.")
@@ -43,6 +46,10 @@ class Recommendation:
             raise RecommendationError("Recomendacao precisa ter justificativa.")
         if not 0 <= self.score <= 1:
             raise RecommendationError("score deve ficar entre 0 e 1.")
+        if not 0 <= self.confidence <= 1:
+            raise RecommendationError("confidence deve ficar entre 0 e 1.")
+        if self.complexity not in {"low", "medium", "high"}:
+            raise RecommendationError("complexity deve ser low, medium ou high.")
 
     def update_justification(self, text: str) -> None:
         """Substitui a justificativa (ex: revisao de linguagem via agente)."""

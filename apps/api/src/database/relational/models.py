@@ -33,6 +33,9 @@ from apps.api.src.modules.scraping.infrastructure.database.models import (  # no
     scraping_job_model,
     scraping_result_model,
 )
+from apps.api.src.modules.startup_discovery.infrastructure.database.models import (  # noqa: F401
+    discovery_run_model,
+)
 from apps.api.src.modules.startups.infrastructure.database.models import (  # noqa: F401
     startup_evidence_model,
     startup_model,

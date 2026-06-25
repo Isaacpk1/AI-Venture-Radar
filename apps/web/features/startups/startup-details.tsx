@@ -40,11 +40,29 @@ function RecommendationCard({ recommendation, evidences }: { recommendation: Rec
   const [expanded, setExpanded] = useState(false);
   const matchedEvidences = evidences.filter((evidence) => recommendation.evidence_ids.includes(evidence.id));
 
+  const complexityLabel: Record<string, string> = { low: "Baixa", medium: "Média", high: "Alta" };
+  const complexityColor: Record<string, string> = {
+    low: "bg-green-900/40 text-green-300",
+    medium: "bg-yellow-900/40 text-yellow-300",
+    high: "bg-red-900/40 text-red-300",
+  };
+
   return (
     <article className="rounded-md border border-[var(--surface-border)] p-4">
-      <div className="flex justify-between gap-4">
-        <h3 className="font-medium">{recommendation.technology_name}</h3>
-        <span className="text-sm text-[var(--accent)]">{Math.round(recommendation.score * 100)}% fit</span>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-[var(--muted)]">#{recommendation.priority}</span>
+          <h3 className="font-medium">{recommendation.technology_name}</h3>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${complexityColor[recommendation.complexity] ?? complexityColor.medium}`}>
+            Complexidade {complexityLabel[recommendation.complexity] ?? recommendation.complexity}
+          </span>
+          <span className="text-sm text-[var(--accent)]">{Math.round(recommendation.score * 100)}% fit</span>
+          <span className="text-xs text-[var(--muted)]" title="Confiança baseada na qualidade das evidências">
+            {Math.round(recommendation.confidence * 100)}% conf.
+          </span>
+        </div>
       </div>
       <MarkdownContent className="mt-2 text-sm text-[var(--muted)] [&_p]:mt-0" content={recommendation.justification} />
       {recommendation.matched_keywords.length > 0 && (

@@ -82,6 +82,15 @@ class FakeUrlIngestionJobRepository(UrlIngestionJobRepository):
         start = (page - 1) * page_size
         return jobs[start : start + page_size], total
 
+    async def list_completed_by_url(self, url: str) -> list[UrlIngestionJob]:
+        jobs = [
+            job
+            for job in self.items.values()
+            if job.url == url and job.status is UrlIngestionJobStatus.COMPLETED
+        ]
+        jobs.sort(key=lambda job: job.created_at, reverse=True)
+        return jobs
+
 
 class FakeUoW(AnalysisUnitOfWork):
     def __init__(self, repository: FakeUrlIngestionJobRepository) -> None:
@@ -171,6 +180,7 @@ class FakeIngestionPort(IngestionPort):
 class FakeEmbeddingsPort(EmbeddingsPort):
     def __init__(self, status: StepStatus | None = None) -> None:
         self._status = status
+        self.deleted_document_ids: list[UUID] = []
 
     async def submit(self, document_id: UUID) -> UUID:
         return uuid4()
@@ -184,6 +194,9 @@ class FakeEmbeddingsPort(EmbeddingsPort):
             result_id=None,
             error_message=None,
         )
+
+    async def delete_vectors_for_document(self, document_id: UUID) -> None:
+        self.deleted_document_ids.append(document_id)
 
 
 class FakeStartupsPort(StartupsPort):
@@ -386,6 +399,66 @@ async def test_embedding_completion_starts_analyzing_for_startup_evidence() -> N
         await use_case.execute(job_id=job.id)
 
     assert repository.items[job.id].status is UrlIngestionJobStatus.ANALYZING
+
+
+@pytest.mark.anyio
+async def test_embedding_completion_deletes_vectors_of_previous_completed_job_with_same_url() -> (
+    None
+):
+    """Re-scrape (cache de 3 dias expirado) nao deve deixar vetor orfao."""
+
+    repository = FakeUrlIngestionJobRepository()
+    url = "https://acme.example.com"
+
+    old_document_id = uuid4()
+    old_job = UrlIngestionJob(url=url)
+    old_job.start_scraping(uuid4())
+    old_job.start_ingesting(scraping_result_id=uuid4(), ingestion_job_id=uuid4())
+    old_job.start_embedding(document_id=old_document_id, embedding_job_id=uuid4())
+    old_job.complete()
+    await repository.save(old_job)
+
+    new_document_id = uuid4()
+    new_job = UrlIngestionJob(url=url)
+    new_job.start_scraping(uuid4())
+    new_job.start_ingesting(scraping_result_id=uuid4(), ingestion_job_id=uuid4())
+    new_job.start_embedding(document_id=new_document_id, embedding_job_id=uuid4())
+    await repository.save(new_job)
+
+    embeddings_port = FakeEmbeddingsPort(
+        StepStatus(is_done=True, is_failed=False, result_id=None, error_message=None)
+    )
+    use_case = _make_advance_use_case(
+        repository=repository, embeddings_port=embeddings_port
+    )
+
+    with pytest.raises(UrlIngestionStillProcessingError):
+        await use_case.execute(job_id=new_job.id)
+
+    assert embeddings_port.deleted_document_ids == [old_document_id]
+
+
+@pytest.mark.anyio
+async def test_embedding_completion_skips_cleanup_without_previous_completed_job() -> (
+    None
+):
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(url="https://acme.example.com")
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=uuid4(), ingestion_job_id=uuid4())
+    job.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    await repository.save(job)
+    embeddings_port = FakeEmbeddingsPort(
+        StepStatus(is_done=True, is_failed=False, result_id=None, error_message=None)
+    )
+    use_case = _make_advance_use_case(
+        repository=repository, embeddings_port=embeddings_port
+    )
+
+    with pytest.raises(UrlIngestionStillProcessingError):
+        await use_case.execute(job_id=job.id)
+
+    assert embeddings_port.deleted_document_ids == []
 
 
 @pytest.mark.anyio

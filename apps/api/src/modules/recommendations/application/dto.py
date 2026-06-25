@@ -18,6 +18,9 @@ class RecommendationView:
     technology_name: str
     category: str
     score: float
+    confidence: float
+    complexity: str
+    priority: int
     justification: str
     matched_keywords: list[str]
     evidence_ids: list[UUID]
@@ -31,6 +34,7 @@ class EvidenceSnapshot:
     evidence_id: UUID
     title: str | None
     notes: str | None
+    confidence_score: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -52,6 +56,7 @@ class NvidiaTechnologySnapshot:
     category: str
     use_cases: tuple[str, ...]
     keywords: tuple[str, ...]
+    complexity: str = "medium"
 
 
 @dataclass(frozen=True)
@@ -60,3 +65,19 @@ class GroundedJustification:
 
     text: str
     citation_urls: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TechnologyStatView:
+    """Contagem de startups recomendadas para uma tecnologia NVIDIA."""
+
+    technology_slug: str
+    technology_name: str
+    count: int
+
+
+@dataclass(frozen=True)
+class TechnologyStatsView:
+    """Top tecnologias NVIDIA mais recomendadas no portfolio."""
+
+    items: list[TechnologyStatView]

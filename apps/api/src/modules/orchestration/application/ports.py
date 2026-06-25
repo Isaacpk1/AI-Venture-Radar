@@ -94,6 +94,15 @@ class EmbeddingsPort(ABC):
     async def get_status(self, job_id: UUID) -> StepStatus:
         """Consulta o status; ``result_id`` sempre None (ultimo passo)."""
 
+    @abstractmethod
+    async def delete_vectors_for_document(self, document_id: UUID) -> None:
+        """Remove os vetores de um documento superado por um re-scrape.
+
+        Best-effort do ponto de vista de quem chama: nao impede a
+        conclusao do job se falhar, so deixa o vetor orfao pra uma limpeza
+        futura.
+        """
+
 
 class UrlIngestionTaskDispatcher(ABC):
     """Porta para publicar/reenfileirar um url ingestion job na fila."""

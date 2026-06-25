@@ -72,3 +72,15 @@ class PostgresStartupRepository(StartupRepository):
         models = (await self._session.scalars(statement)).all()
         total = await self._session.scalar(count_statement)
         return [StartupMapper.to_entity(model) for model in models], total or 0
+
+    async def list_all(self) -> list[Startup]:
+        models = (await self._session.scalars(select(StartupModel))).all()
+        return [StartupMapper.to_entity(model) for model in models]
+
+    async def count_by_maturity(self) -> dict[str, int]:
+        statement = (
+            select(StartupModel.ai_maturity_level, func.count().label("cnt"))
+            .group_by(StartupModel.ai_maturity_level)
+        )
+        rows = (await self._session.execute(statement)).all()
+        return {(row[0] or "unclassified"): row[1] for row in rows}

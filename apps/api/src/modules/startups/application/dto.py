@@ -111,3 +111,14 @@ class StartupProfileView:
 
     startup: StartupView
     evidences: list[StartupEvidenceView]
+
+
+@dataclass
+class MaturityDistributionView:
+    """Distribuicao de startups por nivel de maturidade de IA."""
+
+    ai_native: int
+    ai_enabled: int
+    non_ai: int
+    unclassified: int
+    total: int

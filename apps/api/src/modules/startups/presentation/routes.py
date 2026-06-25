@@ -24,6 +24,7 @@ from apps.api.src.modules.startups.factories.startups_factory import StartupsFac
 from .schemas import (
     AddStartupEvidenceRequest,
     CreateStartupRequest,
+    MaturityDistributionResponse,
     StartupEvidenceResponse,
     StartupPageResponse,
     StartupResponse,
@@ -79,6 +80,15 @@ async def list_startups(
         )
     )
     return StartupPageResponse.from_view(view)
+
+
+@router.get("/stats", response_model=MaturityDistributionResponse)
+async def get_portfolio_stats() -> MaturityDistributionResponse:
+    """Retorna a distribuicao de startups por maturidade de IA (para graficos)."""
+
+    use_case = StartupsFactory.create_get_portfolio_stats()
+    view = await use_case.execute()
+    return MaturityDistributionResponse.from_view(view)
 
 
 @router.get("/{startup_id}", response_model=StartupResponse)

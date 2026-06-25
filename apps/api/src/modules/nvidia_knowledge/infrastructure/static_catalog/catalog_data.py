@@ -29,6 +29,7 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "microservice",
         ),
         official_url="https://docs.nvidia.com/nim/",
+        complexity="low",
     ),
     NvidiaTechnology(
         slug="nvidia-nemo",
@@ -54,6 +55,7 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         official_url=(
             "https://docs.nvidia.com/nemo-framework/user-guide/latest/overview.html"
         ),
+        complexity="high",
     ),
     NvidiaTechnology(
         slug="triton-inference-server",
@@ -79,6 +81,7 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         official_url=(
             "https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/"
         ),
+        complexity="medium",
     ),
     NvidiaTechnology(
         slug="tensorrt-llm",
@@ -102,6 +105,7 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "quantization",
         ),
         official_url="https://nvidia.github.io/TensorRT-LLM/",
+        complexity="high",
     ),
     NvidiaTechnology(
         slug="tensorrt",
@@ -127,6 +131,7 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         official_url=(
             "https://docs.nvidia.com/deeplearning/tensorrt/latest/index.html"
         ),
+        complexity="high",
     ),
     NvidiaTechnology(
         slug="rapids",
@@ -150,6 +155,7 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "spark",
         ),
         official_url="https://docs.rapids.ai/",
+        complexity="medium",
     ),
     NvidiaTechnology(
         slug="riva",
@@ -173,6 +179,7 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "conversational ai",
         ),
         official_url="https://docs.nvidia.com/deeplearning/riva/user-guide/docs/index.html",
+        complexity="medium",
     ),
     NvidiaTechnology(
         slug="cuda",
@@ -196,6 +203,7 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "parallel computing",
         ),
         official_url="https://docs.nvidia.com/cuda/",
+        complexity="high",
     ),
     NvidiaTechnology(
         slug="nvidia-ai-enterprise",
@@ -219,6 +227,7 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "infrastructure",
         ),
         official_url="https://docs.nvidia.com/ai-enterprise/",
+        complexity="medium",
     ),
     NvidiaTechnology(
         slug="monai",
@@ -242,6 +251,7 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "clinical ai",
         ),
         official_url="https://docs.nvidia.com/clara/monai/",
+        complexity="high",
     ),
     NvidiaTechnology(
         slug="nvidia-inception",
@@ -269,6 +279,7 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "go-to-market",
         ),
         official_url="https://www.nvidia.com/en-us/startups/",
+        complexity="low",
     ),
     NvidiaTechnology(
         slug="nemo-guardrails",
@@ -293,6 +304,7 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "governance",
         ),
         official_url="https://github.com/NVIDIA/NeMo-Guardrails",
+        complexity="medium",
     ),
     NvidiaTechnology(
         slug="nvidia-clara",
@@ -317,6 +329,7 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "drug discovery",
         ),
         official_url="https://www.nvidia.com/en-us/clara/",
+        complexity="high",
     ),
     NvidiaTechnology(
         slug="cudf",
@@ -340,6 +353,7 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "data science",
         ),
         official_url="https://docs.rapids.ai/api/cudf/stable/",
+        complexity="low",
     ),
     NvidiaTechnology(
         slug="cuml",
@@ -363,6 +377,7 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "classification",
         ),
         official_url="https://docs.rapids.ai/api/cuml/stable/",
+        complexity="low",
     ),
     NvidiaTechnology(
         slug="nvidia-omniverse",
@@ -387,6 +402,7 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "virtual world",
         ),
         official_url="https://www.nvidia.com/en-us/omniverse/",
+        complexity="high",
     ),
     NvidiaTechnology(
         slug="nvidia-isaac",
@@ -410,6 +426,7 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "perception",
         ),
         official_url="https://developer.nvidia.com/isaac",
+        complexity="high",
     ),
     NvidiaTechnology(
         slug="nvidia-morpheus",
@@ -433,5 +450,6 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "incident response",
         ),
         official_url="https://developer.nvidia.com/morpheus-cybersecurity",
+        complexity="high",
     ),
 )

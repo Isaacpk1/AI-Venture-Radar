@@ -51,6 +51,7 @@ class StartupsModuleProfileSource(StartupProfileSource):
                     evidence_id=evidence.id,
                     title=evidence.title,
                     notes=evidence.notes,
+                    confidence_score=evidence.confidence_score if evidence.confidence_score is not None else 0.5,
                 )
                 for evidence in profile.evidences
             ),

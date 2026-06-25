@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from apps.api.src.modules.startups.application.dto import (
+    MaturityDistributionView,
     StartupEvidenceView,
     StartupPageView,
     StartupView,
@@ -125,4 +126,22 @@ class StartupPageResponse(BaseModel):
             total=view.total,
             page=view.page,
             page_size=view.page_size,
+        )
+
+
+class MaturityDistributionResponse(BaseModel):
+    ai_native: int
+    ai_enabled: int
+    non_ai: int
+    unclassified: int
+    total: int
+
+    @classmethod
+    def from_view(cls, view: MaturityDistributionView) -> "MaturityDistributionResponse":
+        return cls(
+            ai_native=view.ai_native,
+            ai_enabled=view.ai_enabled,
+            non_ai=view.non_ai,
+            unclassified=view.unclassified,
+            total=view.total,
         )

@@ -41,3 +41,6 @@ ragas>=0.4,<0.5
 jinja2>=3.1,<4
 markdown>=3.6,<4
 
+# Dedup de startups por nome/dominio (Startups V4)
+rapidfuzz>=3.0,<4
+

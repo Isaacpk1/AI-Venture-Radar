@@ -114,7 +114,8 @@ class OrchestrationFactory:
                 IngestionFactory.create_ingested_document_reader(),
             ),
             embeddings_port=EmbeddingsModulePort(
-                EmbeddingsFactory.create_job_submitter()
+                EmbeddingsFactory.create_job_submitter(),
+                EmbeddingsFactory.create_vector_repository(),
             ),
             startups_port=StartupsModulePort(
                 StartupsFactory.create_create_startup(),

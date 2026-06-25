@@ -37,7 +37,7 @@ docs/roadmap_produto_final.md
 | agents | Agents V12 | `docs/agents/` |
 | ingestion | Ingestion V1 + worker | `docs/ingestion/` |
 | embeddings | Embeddings V5 + worker | `docs/embeddings/` |
-| startups | Startups V3 + listagem paginada | `docs/startups/` |
+| startups | Startups V4 (slice inicial): listagem paginada + dedup por nome/dominio (`rapidfuzz`) | `docs/startups/` |
 | rag | RAG V4 | `docs/rag/` |
 | nvidia_knowledge | NVIDIA Knowledge V1 expandido + V2 completo (20/20 fontes, 17/20 com conteudo) | `docs/nvidia_knowledge/` |
 | recommendations | Recommendations V2 (RAG grounding) | `docs/recommendations/` |
@@ -61,17 +61,16 @@ docs/roadmap_produto_final.md
 
 ## Proxima Ordem Recomendada
 
-(Atualizado 24/06/2026 — Frontend V3 e P3 completos agora; NVIDIA
-Knowledge V2 e recommendations/briefing com RAG ja estavam fechados.
-`docs/decisoes_pendentes.md` nao tem pergunta em aberto.)
+(Atualizado 25/06/2026 — Startups V4 (dedup por nome/dominio com
+`rapidfuzz`, limiar 92 calibrado com 17 pares reais), limpeza de vetores
+orfaos no Qdrant (`delete_by_document_id` + `_cleanup_superseded_vectors`),
+Frontend V3 e P3 completos. `docs/decisoes_pendentes.md` nao tem pergunta
+em aberto.)
 
 ```txt
-1. Sincronia Qdrant<->Postgres ou calibrar o limiar do rapidfuzz para
-   dedup de startups — sem ordem decidida entre os dois, ver
-   docs/roadmap_produto_final.md
-2. Descoberta de startups por fontes gratuitas (StartSe, Distrito,
+1. Descoberta de startups por fontes gratuitas (StartSe, Distrito,
    Endeavor etc.)
-3. Frontend V4 (graficos, comparacao, fila em lote)
+2. Frontend V4 (graficos, comparacao, fila em lote)
 ```
 
 Observacao: hardening de producao (auth, CI/CD, deploy, backup do Qdrant)

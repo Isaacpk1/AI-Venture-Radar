@@ -5,7 +5,11 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from apps.api.src.modules.recommendations.application.dto import RecommendationView
+from apps.api.src.modules.recommendations.application.dto import (
+    RecommendationView,
+    TechnologyStatView,
+    TechnologyStatsView,
+)
 
 
 class GenerateRecommendationsRequest(BaseModel):
@@ -19,6 +23,9 @@ class RecommendationResponse(BaseModel):
     technology_name: str
     category: str
     score: float
+    confidence: float
+    complexity: str
+    priority: int
     justification: str
     matched_keywords: list[str]
     evidence_ids: list[UUID]
@@ -33,8 +40,33 @@ class RecommendationResponse(BaseModel):
             technology_name=view.technology_name,
             category=view.category,
             score=view.score,
+            confidence=view.confidence,
+            complexity=view.complexity,
+            priority=view.priority,
             justification=view.justification,
             matched_keywords=view.matched_keywords,
             evidence_ids=view.evidence_ids,
             created_at=view.created_at,
         )
+
+
+class TechnologyStatResponse(BaseModel):
+    technology_slug: str
+    technology_name: str
+    count: int
+
+    @classmethod
+    def from_view(cls, view: TechnologyStatView) -> "TechnologyStatResponse":
+        return cls(
+            technology_slug=view.technology_slug,
+            technology_name=view.technology_name,
+            count=view.count,
+        )
+
+
+class TechnologyStatsResponse(BaseModel):
+    items: list[TechnologyStatResponse]
+
+    @classmethod
+    def from_view(cls, view: TechnologyStatsView) -> "TechnologyStatsResponse":
+        return cls(items=[TechnologyStatResponse.from_view(item) for item in view.items])
