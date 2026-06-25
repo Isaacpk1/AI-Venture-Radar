@@ -7,6 +7,7 @@ import pytest
 
 from apps.api.src.modules.orchestration.application.dto import (
     CreateUrlIngestionJobInput,
+    ListUrlIngestionJobsInput,
 )
 from apps.api.src.modules.orchestration.application.ports import (
     BriefingPort,
@@ -27,6 +28,9 @@ from apps.api.src.modules.orchestration.application.use_cases.advance_url_ingest
 )
 from apps.api.src.modules.orchestration.application.use_cases.create_url_ingestion_job import (
     CreateUrlIngestionJob,
+)
+from apps.api.src.modules.orchestration.application.use_cases.list_url_ingestion_jobs import (
+    ListUrlIngestionJobs,
 )
 from apps.api.src.modules.orchestration.domain.entities import UrlIngestionJob
 from apps.api.src.modules.orchestration.domain.enums import UrlIngestionJobStatus
@@ -59,6 +63,24 @@ class FakeUrlIngestionJobRepository(UrlIngestionJobRepository):
 
     async def get_by_id(self, job_id: UUID) -> UrlIngestionJob | None:
         return self.items.get(job_id)
+
+    async def list_page(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        status: UrlIngestionJobStatus | None = None,
+        source_type: str | None = None,
+    ) -> tuple[list[UrlIngestionJob], int]:
+        jobs = list(self.items.values())
+        if status is not None:
+            jobs = [job for job in jobs if job.status is status]
+        if source_type:
+            jobs = [job for job in jobs if job.source_type == source_type]
+        jobs.sort(key=lambda job: (job.created_at, job.id), reverse=True)
+        total = len(jobs)
+        start = (page - 1) * page_size
+        return jobs[start : start + page_size], total
 
 
 class FakeUoW(AnalysisUnitOfWork):
@@ -534,3 +556,29 @@ async def test_analyzing_fails_job_when_recommendations_port_raises() -> None:
     saved = repository.items[job.id]
     assert saved.status is UrlIngestionJobStatus.FAILED
     assert saved.error_message == "falha inesperada"
+
+
+@pytest.mark.anyio
+async def test_list_url_ingestion_jobs_filters_and_paginates_history() -> None:
+    repository = FakeUrlIngestionJobRepository()
+    matching = UrlIngestionJob(url="https://acme.example.com")
+    matching.start_scraping(uuid4())
+    other_status = UrlIngestionJob(url="https://beta.example.com")
+    other_source = UrlIngestionJob(
+        url="https://docs.nvidia.com/nim/", source_type="nvidia_knowledge"
+    )
+    other_source.start_scraping(uuid4())
+    for job in (matching, other_status, other_source):
+        await repository.save(job)
+
+    page = await ListUrlIngestionJobs(lambda: FakeUoW(repository)).execute(
+        ListUrlIngestionJobsInput(
+            page=1,
+            page_size=10,
+            status=UrlIngestionJobStatus.SCRAPING,
+            source_type="startup_evidence",
+        )
+    )
+
+    assert page.total == 1
+    assert page.items[0].id == matching.id

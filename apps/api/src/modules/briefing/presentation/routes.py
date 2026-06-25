@@ -2,11 +2,12 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Response, status
 
 from apps.api.src.modules.briefing.application.dto import GenerateBriefingInput
 from apps.api.src.modules.briefing.domain.exceptions import (
     BriefingNotFoundError,
+    BriefingRenderingError,
     StartupProfileUnavailableError,
 )
 from apps.api.src.modules.briefing.factories.briefing_factory import BriefingFactory
@@ -47,6 +48,24 @@ async def get_briefing(briefing_id: UUID) -> BriefingResponse:
     except BriefingNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     return BriefingResponse.from_view(view)
+
+
+@router.get("/{briefing_id}/export")
+async def export_briefing_pdf(briefing_id: UUID) -> Response:
+    """Exporta o briefing como PDF, preservando citacoes como links."""
+
+    use_case = BriefingFactory.create_export_briefing_pdf()
+    try:
+        pdf = await use_case.execute(briefing_id=briefing_id)
+    except BriefingNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except BriefingRenderingError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    return Response(
+        content=pdf.content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{pdf.filename}"'},
+    )
 
 
 @router.get("", response_model=list[BriefingResponse])

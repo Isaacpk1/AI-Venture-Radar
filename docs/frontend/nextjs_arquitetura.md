@@ -17,7 +17,7 @@ Esse fluxo e assíncrono e ja retorna um `UrlIngestionJob` consultavel em
 `recommendation_count` e `briefing_id`. A primeira tela deve usar esse contrato
 em vez de conhecer workers, Redis ou Dramatiq.
 
-Validacao atual: 518 testes do backend e 13 testes do frontend passam. A
+Validacao atual: 524 testes do backend e 23 testes do frontend passam. A
 aplicacao Next.js ja existe em `apps/web`, alinhada ao layout previsto em
 `CLAUDE.md`; as secoes abaixo descrevem as decisoes que ela implementa.
 

@@ -19,6 +19,9 @@ from apps.api.src.modules.orchestration.application.use_cases.get_analysis_job i
 from apps.api.src.modules.orchestration.application.use_cases.get_url_ingestion_job import (
     GetUrlIngestionJob,
 )
+from apps.api.src.modules.orchestration.application.use_cases.list_url_ingestion_jobs import (
+    ListUrlIngestionJobs,
+)
 from apps.api.src.modules.orchestration.infrastructure.embeddings_adapters.embeddings_adapter import (
     EmbeddingsModulePort,
 )
@@ -96,6 +99,10 @@ class OrchestrationFactory:
     @staticmethod
     def create_get_url_ingestion_job() -> GetUrlIngestionJob:
         return GetUrlIngestionJob(PostgresAnalysisUnitOfWork)
+
+    @staticmethod
+    def create_list_url_ingestion_jobs() -> ListUrlIngestionJobs:
+        return ListUrlIngestionJobs(PostgresAnalysisUnitOfWork)
 
     @staticmethod
     def create_advance_url_ingestion_job() -> AdvanceUrlIngestionJob:

@@ -129,7 +129,7 @@ tecnologia entra, nunca em `domain/`.
 | Tecnologia | Camada | Status | Por que |
 |---|---|---|---|
 | (string/Markdown puro) | `domain/policies.py::build_briefing_markdown()` | Em uso | Saida determinística, sem dependencia de template engine |
-| `weasyprint` + Jinja2 | novo, `infrastructure/` | Candidata | Exportacao PDF (V3) a partir do mesmo Markdown — libs leves, sem servico externo de PDF-as-a-service |
+| Playwright + Jinja2 + `markdown` | `infrastructure/rendering/` | Em uso (24/06/2026) | Exportacao PDF (V3) a partir do mesmo Markdown — trocado de `weasyprint` (planejado) por Playwright, ja dependencia do projeto desde o Scraping V4, sem risco de instalacao nativa (Pango/Cairo/GTK) no Windows |
 
 ---
 
@@ -150,9 +150,10 @@ tecnologia entra, nunca em `domain/`.
 | React 19 + TypeScript | `apps/web/features/`, `lib/api/` | Em uso | Componentes e tipos compartilhados com o contrato HTTP do backend |
 | TanStack Query | `providers/query-provider.tsx` | Em uso | Polling de jobs or (`/jobs/[jobId]`) sem reimplementar cache/retry |
 | Tailwind CSS | estilo de toda `apps/web/` | Em uso | Utilitarios de CSS, sem framework de componentes adicional |
-| Vitest + React Testing Library | `apps/web/**/*.test.tsx` | Em uso | 13 testes cobrem `UrlSubmissionForm`, `JobStatusPanel`, `StartupDetails` e `StartupPortfolio` |
+| Vitest + React Testing Library | `apps/web/**/*.test.tsx` | Em uso | 25 testes (24/06/2026) cobrem `UrlSubmissionForm`, `JobStatusPanel`, `StartupDetails`, `StartupPortfolio`, `JobHistory` e `NvidiaChat` |
 | recharts | novo, componente de grafico na V4 | Decidida (23/06/2026) | 2 graficos simples (distribuicao de maturidade de IA, top tecnologias NVIDIA) — ver `docs/frontend/roadmap_frontend.md` |
-| `/rag/answer` (reuso, sem tech nova) | novo componente de chat na V3 | Candidata | Chatbot sobre a base NVIDIA Knowledge — contrato publico de `rag` ja existe com citacoes, so falta UI |
+| `/rag/answer` (reuso, sem tech nova) | `features/knowledge/nvidia-chat.tsx` | Em uso (24/06/2026) | Chatbot sobre a base NVIDIA Knowledge — contrato publico de `rag` ja existia com citacoes, esta entrega foi so a UI |
+| `react-markdown` + `remark-gfm` | `components/markdown-content.tsx` | Em uso (24/06/2026) | Fechamento do P3 (rastreabilidade ponta a ponta): briefing/justificativa/resposta do chat eram texto cru, links nunca ficavam clicaveis na tela — so no PDF exportado. JS puro, sem dependencia nativa |
 
 ---
 

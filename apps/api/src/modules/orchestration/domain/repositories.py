@@ -7,6 +7,7 @@ from apps.api.src.modules.orchestration.domain.entities import (
     AnalysisJob,
     UrlIngestionJob,
 )
+from apps.api.src.modules.orchestration.domain.enums import UrlIngestionJobStatus
 
 
 class AnalysisJobRepository(ABC):
@@ -33,3 +34,14 @@ class UrlIngestionJobRepository(ABC):
     @abstractmethod
     async def get_by_id(self, job_id: UUID) -> UrlIngestionJob | None:
         """Busca url ingestion job por id."""
+
+    @abstractmethod
+    async def list_page(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        status: UrlIngestionJobStatus | None = None,
+        source_type: str | None = None,
+    ) -> tuple[list[UrlIngestionJob], int]:
+        """Lista url ingestion jobs filtrados, mais recentes primeiro."""

@@ -19,6 +19,7 @@ from apps.api.src.config.settings import get_settings
 
 _NO_EXTERNAL_DEPS_INTEGRATION_TESTS = {
     "test_scraping_flow.py",
+    "test_jinja_playwright_pdf_renderer.py",
 }
 
 

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from apps.api.src.modules.orchestration.application.dto import (
     AnalysisJobView,
+    UrlIngestionJobPageView,
     UrlIngestionJobView,
 )
 
@@ -84,4 +85,20 @@ class UrlIngestionJobResponse(BaseModel):
             created_at=view.created_at,
             started_at=view.started_at,
             finished_at=view.finished_at,
+        )
+
+
+class UrlIngestionJobPageResponse(BaseModel):
+    items: list[UrlIngestionJobResponse]
+    total: int
+    page: int
+    page_size: int
+
+    @classmethod
+    def from_view(cls, view: UrlIngestionJobPageView) -> "UrlIngestionJobPageResponse":
+        return cls(
+            items=[UrlIngestionJobResponse.from_view(item) for item in view.items],
+            total=view.total,
+            page=view.page,
+            page_size=view.page_size,
         )

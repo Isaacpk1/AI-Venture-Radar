@@ -242,6 +242,7 @@ async def test_generate_recommendations_uses_grounded_justification_when_availab
 
     assert len(views) == 1
     assert "NVIDIA NIM acelera a inferencia" in views[0].justification
+    assert "[Fonte 1](https://nvidia.com/nim)" in views[0].justification
     assert "https://nvidia.com/nim" in views[0].justification
     assert grounder.calls == [("NVIDIA NIM", "servir LLMs em producao")]
 

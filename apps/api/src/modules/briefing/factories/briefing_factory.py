@@ -20,11 +20,17 @@ from apps.api.src.modules.briefing.application.public.briefing_generator import 
 from apps.api.src.modules.briefing.application.use_cases.update_briefing_content import (
     UpdateBriefingContent,
 )
+from apps.api.src.modules.briefing.application.use_cases.export_briefing_pdf import (
+    ExportBriefingPdf,
+)
 from apps.api.src.modules.briefing.infrastructure.database.postgres_unit_of_work import (
     PostgresBriefingsUnitOfWork,
 )
 from apps.api.src.modules.briefing.infrastructure.rag_adapters.nvidia_context_grounder_adapter import (
     RagNvidiaContextGrounder,
+)
+from apps.api.src.modules.briefing.infrastructure.rendering.jinja_playwright_pdf_renderer import (
+    JinjaPlaywrightPdfRenderer,
 )
 from apps.api.src.modules.briefing.infrastructure.recommendations_adapters.recommendations_adapter import (
     RecommendationsModuleSource,
@@ -91,3 +97,7 @@ class BriefingFactory:
     @staticmethod
     def create_briefing_content_updater() -> BriefingContentUpdater:
         return UpdateBriefingContent(PostgresBriefingsUnitOfWork)
+
+    @staticmethod
+    def create_export_briefing_pdf() -> ExportBriefingPdf:
+        return ExportBriefingPdf(PostgresBriefingsUnitOfWork, JinjaPlaywrightPdfRenderer())

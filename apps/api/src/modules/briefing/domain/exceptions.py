@@ -11,3 +11,7 @@ class BriefingNotFoundError(BriefingError):
 
 class StartupProfileUnavailableError(BriefingError):
     """Perfil da startup nao pode ser lido no modulo startups."""
+
+
+class BriefingRenderingError(BriefingError):
+    """Falha ao renderizar o briefing em PDF."""

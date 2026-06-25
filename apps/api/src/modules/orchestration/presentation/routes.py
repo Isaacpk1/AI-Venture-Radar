@@ -2,12 +2,14 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from apps.api.src.modules.orchestration.application.dto import (
     CreateAnalysisJobInput,
     CreateUrlIngestionJobInput,
+    ListUrlIngestionJobsInput,
 )
+from apps.api.src.modules.orchestration.domain.enums import UrlIngestionJobStatus
 from apps.api.src.modules.orchestration.domain.exceptions import (
     AnalysisJobNotFoundError,
     StartupProfileUnavailableError,
@@ -22,6 +24,7 @@ from .schemas import (
     AnalysisJobResponse,
     CreateAnalysisJobRequest,
     CreateUrlIngestionJobRequest,
+    UrlIngestionJobPageResponse,
     UrlIngestionJobResponse,
 )
 
@@ -109,6 +112,27 @@ async def get_url_ingestion_job(job_id: UUID) -> UrlIngestionJobResponse:
     except UrlIngestionJobNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     return UrlIngestionJobResponse.from_view(view)
+
+
+@url_ingestion_router.get("", response_model=UrlIngestionJobPageResponse)
+async def list_url_ingestion_jobs(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    job_status: UrlIngestionJobStatus | None = Query(default=None, alias="status"),
+    source_type: str | None = None,
+) -> UrlIngestionJobPageResponse:
+    """Lista o historico global de url ingestion jobs, com filtros."""
+
+    use_case = OrchestrationFactory.create_list_url_ingestion_jobs()
+    view = await use_case.execute(
+        ListUrlIngestionJobsInput(
+            page=page,
+            page_size=page_size,
+            status=job_status,
+            source_type=source_type,
+        )
+    )
+    return UrlIngestionJobPageResponse.from_view(view)
 
 
 @url_ingestion_router.post(

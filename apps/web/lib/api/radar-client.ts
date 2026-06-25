@@ -2,11 +2,14 @@ import type {
   Briefing,
   CreateUrlIngestionJobInput,
   ListStartupsParams,
+  ListUrlIngestionJobsParams,
+  RagAnswer,
   Recommendation,
   Startup,
   StartupEvidence,
   StartupPage,
   UrlIngestionJob,
+  UrlIngestionJobPage,
 } from "./radar-types";
 
 export class RadarApiError extends Error {
@@ -25,6 +28,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+function buildQueryString(params: Record<string, unknown>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") search.set(key, String(value));
+  }
+  return search.size ? `?${search.toString()}` : "";
+}
+
 export function createUrlIngestionJob(input: CreateUrlIngestionJobInput) {
   return request<UrlIngestionJob>("/api/radar/url-ingestion-jobs", { method: "POST", body: JSON.stringify(input) });
 }
@@ -33,17 +44,16 @@ export function getUrlIngestionJob(jobId: string) {
   return request<UrlIngestionJob>(`/api/radar/url-ingestion-jobs/${jobId}`);
 }
 
+export function listUrlIngestionJobs(params: ListUrlIngestionJobsParams = {}) {
+  return request<UrlIngestionJobPage>(`/api/radar/url-ingestion-jobs${buildQueryString(params)}`);
+}
+
 export function getStartup(startupId: string) {
   return request<Startup>(`/api/radar/startups/${startupId}`);
 }
 
 export function listStartups(params: ListStartupsParams = {}) {
-  const search = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== "") search.set(key, String(value));
-  }
-  const suffix = search.size ? `?${search.toString()}` : "";
-  return request<StartupPage>(`/api/radar/startups${suffix}`);
+  return request<StartupPage>(`/api/radar/startups${buildQueryString(params)}`);
 }
 
 export function getStartupEvidences(startupId: string) {
@@ -56,6 +66,13 @@ export function listRecommendations(startupId: string) {
 
 export function listBriefings(startupId: string) {
   return request<Briefing[]>(`/api/radar/briefings?startup_id=${encodeURIComponent(startupId)}`);
+}
+
+export function askNvidiaKnowledge(query: string) {
+  return request<RagAnswer>("/api/radar/rag/answer", {
+    method: "POST",
+    body: JSON.stringify({ query, source_type: "nvidia_knowledge" }),
+  });
 }
 
 export async function refreshStartupAnalysis(startupId: string) {

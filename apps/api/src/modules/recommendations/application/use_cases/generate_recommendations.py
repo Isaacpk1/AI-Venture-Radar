@@ -152,7 +152,17 @@ def _build_justification(match: MatchResult) -> str:
 
 
 def _build_grounded_justification(grounded: GroundedJustification) -> str:
-    sources = ", ".join(grounded.citation_urls)
+    """Citacoes como link Markdown (`[Fonte N](url)`), nao URL puro.
+
+    Necessario pra rastreabilidade ponta a ponta (P3): o frontend renderiza
+    `justification` como Markdown de verdade desde o fechamento dessa
+    decisao - URL puro nao virava link clicavel sem essa sintaxe.
+    """
+
+    sources = ", ".join(
+        f"[Fonte {index}]({url})"
+        for index, url in enumerate(grounded.citation_urls, start=1)
+    )
     return f"{grounded.text} Fontes: {sources}."
 
 

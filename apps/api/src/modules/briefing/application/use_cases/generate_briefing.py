@@ -122,7 +122,13 @@ class GenerateBriefing(BriefingGenerator):
         if grounded is None:
             return None
 
-        sources = ", ".join(grounded.citation_urls)
+        # Link Markdown (`[Fonte N](url)`), nao URL puro - rastreabilidade
+        # ponta a ponta (P3) exige que isso vire link clicavel no frontend,
+        # que renderiza `content` como Markdown de verdade.
+        sources = ", ".join(
+            f"[Fonte {index}]({url})"
+            for index, url in enumerate(grounded.citation_urls, start=1)
+        )
         return f"{grounded.text} Fontes: {sources}."
 
 

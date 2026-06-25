@@ -104,6 +104,15 @@ Documentos da entrega: `docs/orchestration/orchestration_v2_url_ingestion_jobs.m
 `docs/orchestration/orchestration_v2_worker_automatico.md` e
 `docs/orchestration/orchestration_v2_jornada_completa.md` (fechamento final).
 
+**Extensao feita em 24/06/2026 (continua V2 — historico global de jobs
+para o Frontend V3, ver `docs/frontend/roadmap_frontend.md` bloco 2):**
+`UrlIngestionJobRepository` so tinha `save`/`get_by_id`; ganhou
+`list_page()` (mirror exato do `list_page` que `startups` ja tinha feito
+na Startups V3) + `ListUrlIngestionJobs` (use case) +
+`GET /url-ingestion/jobs` paginado com filtros `status`/`source_type`.
+Consumido pela pagina `/jobs` do frontend. Testes: 28 unit/2 integracao
+-> 29 unit/3 integracao.
+
 ---
 
 ## Orchestration V3 - Retomada de Jobs Falhados

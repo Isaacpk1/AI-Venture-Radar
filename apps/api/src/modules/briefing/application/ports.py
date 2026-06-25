@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 
 from apps.api.src.modules.briefing.application.dto import (
+    BriefingView,
     GroundedContext,
     RecommendationSnapshot,
     StartupProfileSnapshot,
@@ -46,3 +47,17 @@ class NvidiaContextGrounder(ABC):
         self, sector: str | None, technology_names: tuple[str, ...]
     ) -> GroundedContext | None:
         """Busca conteudo NVIDIA real relevante para o setor/tecnologias."""
+
+
+class BriefingDocumentRenderer(ABC):
+    """Renderiza o conteudo Markdown do briefing como PDF.
+
+    Diferente de ``NvidiaContextGrounder`` (best-effort, devolve ``None``),
+    esta porta nao tem fallback: falha de renderizacao e' erro real
+    (``BriefingRenderingError``), nao degradacao graciosa - o usuario pediu
+    um arquivo e precisa saber se ele nao foi gerado.
+    """
+
+    @abstractmethod
+    async def render_pdf(self, briefing: BriefingView) -> bytes:
+        """Converte o Markdown do briefing em bytes de um PDF."""

@@ -2,9 +2,11 @@
 
 from uuid import UUID
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.src.modules.orchestration.domain.entities import UrlIngestionJob
+from apps.api.src.modules.orchestration.domain.enums import UrlIngestionJobStatus
 from apps.api.src.modules.orchestration.domain.repositories import (
     UrlIngestionJobRepository,
 )
@@ -33,3 +35,31 @@ class PostgresUrlIngestionJobRepository(UrlIngestionJobRepository):
         if model is None:
             return None
         return UrlIngestionJobMapper.to_entity(model)
+
+    async def list_page(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        status: UrlIngestionJobStatus | None = None,
+        source_type: str | None = None,
+    ) -> tuple[list[UrlIngestionJob], int]:
+        filters = []
+        if status is not None:
+            filters.append(UrlIngestionJobModel.status == status.value)
+        if source_type:
+            filters.append(UrlIngestionJobModel.source_type == source_type.strip())
+
+        statement = (
+            select(UrlIngestionJobModel)
+            .where(*filters)
+            .order_by(UrlIngestionJobModel.created_at.desc(), UrlIngestionJobModel.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        count_statement = (
+            select(func.count()).select_from(UrlIngestionJobModel).where(*filters)
+        )
+        models = (await self._session.scalars(statement)).all()
+        total = await self._session.scalar(count_statement)
+        return [UrlIngestionJobMapper.to_entity(model) for model in models], total or 0

@@ -4,13 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
 import { getUrlIngestionJob } from "@/lib/api/radar-client";
-import type { UrlIngestionStatus } from "@/lib/api/radar-types";
 
-const orderedStatuses: UrlIngestionStatus[] = ["pending", "scraping", "ingesting", "embedding", "analyzing", "completed"];
-const labels: Record<UrlIngestionStatus, string> = {
-  pending: "Na fila", scraping: "Coletando fonte", ingesting: "Preparando documento",
-  embedding: "Indexando conhecimento", analyzing: "Gerando analise", completed: "Concluida", failed: "Falhou",
-};
+import { ORDERED_STATUSES as orderedStatuses, STATUS_LABELS as labels } from "./job-status-labels";
 
 export function JobStatusPanel({ jobId }: { jobId: string }) {
   const query = useQuery({

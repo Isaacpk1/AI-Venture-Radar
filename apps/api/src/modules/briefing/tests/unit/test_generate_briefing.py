@@ -222,7 +222,7 @@ async def test_generate_briefing_includes_nvidia_context_when_grounder_succeeds(
 
     assert "## Contexto NVIDIA" in view.content
     assert "NVIDIA NIM e NeMo aceleram atendimento" in view.content
-    assert "https://nvidia.com/nim" in view.content
+    assert "[Fonte 1](https://nvidia.com/nim)" in view.content
     assert grounder.calls == [(STARTUP_SNAPSHOT.sector, ("NVIDIA NIM",))]
 
 

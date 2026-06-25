@@ -3,7 +3,7 @@
 Este indice mostra como ler a documentacao atual sem cair em notas historicas
 antigas.
 
-Fonte de verdade operacional em 23/06/2026:
+Fonte de verdade operacional em 24/06/2026:
 
 ```txt
 docs/diagnostico_case_original_e_novas_prioridades.md
@@ -39,9 +39,9 @@ docs/roadmap_produto_final.md
 | embeddings | Embeddings V5 + worker | `docs/embeddings/` |
 | startups | Startups V3 + listagem paginada | `docs/startups/` |
 | rag | RAG V4 | `docs/rag/` |
-| nvidia_knowledge | NVIDIA Knowledge V1 expandido + V2 source registry + url_ingestion_jobs | `docs/nvidia_knowledge/` |
-| recommendations | Recommendations V1 | `docs/recommendations/` |
-| briefing | Briefing V1 | `docs/briefing/` |
+| nvidia_knowledge | NVIDIA Knowledge V1 expandido + V2 completo (20/20 fontes, 17/20 com conteudo) | `docs/nvidia_knowledge/` |
+| recommendations | Recommendations V2 (RAG grounding) | `docs/recommendations/` |
+| briefing | Briefing V3 (RAG grounding + export PDF) | `docs/briefing/` |
 | orchestration | Orchestration V1 + V2 completa | `docs/orchestration/` |
 
 ---
@@ -51,22 +51,31 @@ docs/roadmap_produto_final.md
 | Entregavel | Estado |
 |---|---|
 | Pipeline de scraping | Completo |
-| Sistema multiagente LangGraph | Completo: 8/8 agentes implementados |
+| Sistema multiagente LangGraph | Completo: 8/8 agentes implementados, 2 (Recommendation/Briefing) ja com consumidor sincrono real em orchestration |
 | RAG NVIDIA com busca hibrida + reranking | Completo |
-| Motor de recomendacao | Parcial: V1 deterministico entregue |
-| Interface web | V1+V2 entregues; historico e revisao pendentes |
-| Diferencial do projeto | Candidatos mapeados, decisao pendente |
+| Motor de recomendacao | V2: regras deterministicas + justificativa fundamentada via RAG (NVIDIA Knowledge), com fallback deterministico |
+| Interface web | V1+V2+V3 entregues (portfolio, historico global de jobs, badge de fit, evidencia clicavel, chatbot NVIDIA Knowledge, export PDF); so revisao humana/auth (V5) pendente |
+| Diferencial do projeto | **Decidido (24/06/2026): rastreabilidade ponta a ponta** — implementado (citacoes NVIDIA como link Markdown real + frontend renderiza Markdown de verdade) |
 
 ---
 
 ## Proxima Ordem Recomendada
 
+(Atualizado 24/06/2026 — Frontend V3 e P3 completos agora; NVIDIA
+Knowledge V2 e recommendations/briefing com RAG ja estavam fechados.
+`docs/decisoes_pendentes.md` nao tem pergunta em aberto.)
+
 ```txt
-1. Completar a base NVIDIA real e enriquecer recommendations
-2. Construir historico/listagem no frontend
-3. Revisao humana e exportacao
-4. Hardening: auth, observabilidade, CI/CD e deploy
+1. Sincronia Qdrant<->Postgres ou calibrar o limiar do rapidfuzz para
+   dedup de startups — sem ordem decidida entre os dois, ver
+   docs/roadmap_produto_final.md
+2. Descoberta de startups por fontes gratuitas (StartSe, Distrito,
+   Endeavor etc.)
+3. Frontend V4 (graficos, comparacao, fila em lote)
 ```
 
-Observacao: o MVP backend macro ja existe. O que falta agora e aderencia total
-ao case original, experiencia de usuario e robustez de producao.
+Observacao: hardening de producao (auth, CI/CD, deploy, backup do Qdrant)
+foi decidido como fora de escopo deliberadamente — este projeto continua
+case/demo, nao um alvo de producao (ver `docs/decisoes_pendentes.md`,
+tabela "Decisoes ja resolvidas"). O que falta agora e' aderencia total ao
+case original e experiencia de usuario, nao robustez de producao.

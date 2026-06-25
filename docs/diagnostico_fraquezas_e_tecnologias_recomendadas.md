@@ -140,7 +140,7 @@ o que mudou entre duas rodadas.
 
 ```txt
 apps/web possui Frontend V1+V2 e a fundacao de testes: Vitest + React Testing
-Library, com 13 testes cobrindo os componentes do MVP e o portfolio. A afirmacao
+Library, com 14 testes cobrindo os componentes do MVP e o portfolio. A afirmacao
 anterior sobre um bug de Rules of Hooks em `StartupDetails` foi reavaliada e
 removida: os hooks sempre estiveram antes dos returns condicionais. Ainda
 faltam testes das rotas BFF e dos fluxos futuros de listagem/revisao.

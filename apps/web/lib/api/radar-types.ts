@@ -21,6 +21,20 @@ export type UrlIngestionJob = {
 
 export type CreateUrlIngestionJobInput = { url: string; startup_id?: string };
 
+export type UrlIngestionJobPage = {
+  items: UrlIngestionJob[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+export type ListUrlIngestionJobsParams = {
+  page?: number;
+  page_size?: number;
+  status?: UrlIngestionStatus | "";
+  source_type?: string;
+};
+
 export type Startup = {
   id: string;
   name: string;
@@ -85,4 +99,27 @@ export type Briefing = {
   startup_id: string;
   content: string;
   generated_at: string;
+};
+
+export type RagCitation = {
+  chunk_id: string;
+  document_id: string;
+  source_url: string;
+  quote: string;
+};
+
+export type RagEvidenceChunk = {
+  chunk_id: string;
+  document_id: string;
+  source_url: string;
+  source_type: string;
+  text: string;
+  score: number;
+};
+
+export type RagAnswer = {
+  query: string;
+  answer: string;
+  citations: RagCitation[];
+  evidences: RagEvidenceChunk[];
 };

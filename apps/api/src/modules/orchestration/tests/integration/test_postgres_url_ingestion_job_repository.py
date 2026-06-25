@@ -63,3 +63,38 @@ async def test_postgres_repository_persists_analysis_fields() -> None:
             await transaction.rollback()
 
     await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_postgres_repository_list_page_filters_by_status_and_source_type() -> None:
+    async with engine.connect() as connection:
+        transaction = await connection.begin()
+        session = AsyncSession(bind=connection, expire_on_commit=False)
+
+        try:
+            repository = PostgresUrlIngestionJobRepository(session)
+
+            matching = UrlIngestionJob(url="https://acme.example.com")
+            matching.start_scraping(uuid4())
+            other_status = UrlIngestionJob(url="https://beta.example.com")
+            other_source = UrlIngestionJob(
+                url="https://docs.nvidia.com/nim/", source_type="nvidia_knowledge"
+            )
+            other_source.start_scraping(uuid4())
+            for job in (matching, other_status, other_source):
+                await repository.save(job)
+
+            jobs, total = await repository.list_page(
+                page=1,
+                page_size=10,
+                status=UrlIngestionJobStatus.SCRAPING,
+                source_type="startup_evidence",
+            )
+
+            assert total == 1
+            assert jobs[0].id == matching.id
+        finally:
+            await session.close()
+            await transaction.rollback()
+
+    await engine.dispose()

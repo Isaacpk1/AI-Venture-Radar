@@ -21,8 +21,9 @@ RAG V4 (busca hibrida + reranking)
 NVIDIA Knowledge V1
 NVIDIA Knowledge V2 foundation + source registry + P0+P1+P2 complete (20/20 sources processed, 17/20 with retrievable content)
 Recommendations V1 + V2 (RAG grounding via NVIDIA Knowledge, com fallback deterministico)
-Briefing V1 (+ extensao de RAG grounding, mesmo padrao de Recommendations V2)
-Orchestration V1 + V2 completa (URL bruta -> scraping -> ingestion -> embeddings -> startup -> evidencia -> extract -> classify -> recommendations -> briefing, sem operacao manual entre etapas) + orchestration_worker automatico
+Briefing V1 (+ extensao de RAG grounding + extensao de exportacao em PDF)
+Orchestration V1 + V2 completa (URL bruta -> scraping -> ingestion -> embeddings -> startup -> evidencia -> extract -> classify -> recommendations -> briefing, sem operacao manual entre etapas) + orchestration_worker automatico (+ extensao de historico paginado de jobs)
+Frontend V1 + V2 + V3 completa (jornada URL->job->resultado, portfolio paginado, historico global de jobs, badge de fit, evidencia clicavel por recomendacao, chatbot sobre NVIDIA Knowledge, export de briefing em PDF)
 ```
 
 MVP macro backlog (`docs/roadmap_proximos_passos.md`) is complete, and the
@@ -36,12 +37,12 @@ briefing and recommendations end to end automatically.
 Pending:
 
 ```txt
-Frontend V3-V5 (V1+V2 entregues e commitados, ver secao "Frontend module"
-do Module version history e docs/frontend/roadmap_frontend.md; V3 ganhou
-sua primeira fatia em 24/06/2026 - GET /startups paginado com filtros +
-pagina /startups - mas historico global de jobs, chatbot sobre NVIDIA
-Knowledge, badge de fit, evidencia clicavel e export ainda faltam; painel
-BI (V4) e revisao humana/auth (V5) seguem fora)
+Frontend V4-V5 (V1+V2+V3 entregues e commitados, ver secao "Frontend module"
+do Module version history e docs/frontend/roadmap_frontend.md; V3
+completa entregue em 24/06/2026 - portfolio paginado, historico global de
+jobs, badge de fit, evidencia clicavel, chatbot NVIDIA Knowledge e export
+PDF do briefing; painel BI (V4, Recharts/comparacao/fila em lote) e
+revisao humana/auth (V5) seguem fora)
 Auth
 Production observability (foundation exists: shared/logging + shared/
 observability + Langfuse self-hosted via infra/docker-compose.yml,
@@ -57,7 +58,8 @@ decisao tomada, falta calibrar limiar de similaridade e implementar
 Recent validation:
 
 ```txt
-474 passed (Postgres/Redis/Qdrant locais ativos)
+518 passed, 1 skipped (Postgres/Redis/Qdrant locais ativos, reconferido
+em 2026-06-24; o skip e o teste Ragas opt-in, RUN_RAGAS_EVAL=1)
 Integration tests are skipped explicitly when local Postgres/Redis/Qdrant
 are not reachable; with infra active, they run normally.
 
@@ -173,7 +175,9 @@ custo real de API) contra o baseline 0.67 — fica pra quando o usuario
 decidir rodar. Ver docs/rag/roadmap_rag.md (extensao da V3).
 
 RAG grounding em recommendations e briefing concluido (24/06/2026,
-decidido em 23/06/2026 — docs/decisoes_pendentes.md secao 2): 2 ports
+decidido em 23/06/2026 — `docs/decisoes_pendentes.md` foi reorganizado
+desde entao, decisao movida para a tabela "Decisoes ja resolvidas" la,
+linha "RAG real em recommendations/briefing?"): 2 ports
 novos (`NvidiaKnowledgeGrounder` em recommendations,
 `NvidiaContextGrounder` em briefing) + adapters
 (`RagNvidiaKnowledgeGrounder`/`RagNvidiaContextGrounder`,
@@ -195,6 +199,96 @@ textual e filtros (setor/pais/maturidade de IA) + pagina `/startups`
 (`startup-portfolio.tsx`) no frontend. Historico de jobs, chatbot sobre
 NVIDIA Knowledge, badge de fit e evidencia clicavel continuam fora desta
 fatia.
+
+Frontend V3 completo, resto da entrega (24/06/2026) — fecha os 4 blocos
+restantes do roadmap (navegacao/historico, transparencia, chatbot,
+export), nesta ordem:
+- **Historico global de jobs**: `UrlIngestionJobRepository.list_page()`
+  (novo, mirror exato de `StartupRepository.list_page()` da Startups V3)
+  + `ListUrlIngestionJobs` + `GET /url-ingestion/jobs` paginado com
+  filtros `status`/`source_type`; pagina `/jobs`
+  (`features/jobs/job-history.tsx`). Home (`/`) ganhou contagem real de
+  startups via `GET /startups?page_size=1` (so o `total`), trocando o
+  texto estatico anterior.
+- **Transparencia e confianca**: badge de fit consolidado
+  (`computeFitBadge()`, regra pura no frontend sobre
+  `ai_maturity_level` + melhor score + briefing existir — sem chamada
+  nova a API) ao lado do nome da startup; evidencia clicavel por
+  recomendacao (toggle "Ver evidencia" cruza `evidence_ids` da
+  recomendacao com a lista de evidencias ja carregada, mostra
+  `matched_keywords` como chips); achado real durante a implementacao —
+  o campo `customers` da `Startup` existia na API desde a V2 mas nunca
+  era renderizado em `startup-details.tsx`, corrigido junto.
+- **Chatbot sobre NVIDIA Knowledge**: `features/knowledge/nvidia-chat.tsx`
+  + pagina `/knowledge`, so UI — `POST /rag/answer` ja existia (RAG V2),
+  zero mudanca de backend; chama com `source_type=nvidia_knowledge`,
+  mostra resposta + citacoes.
+- **Exportacao do briefing em PDF**: decisao tecnica real desta entrega —
+  o roadmap pedia `weasyprint`, mas o projeto trocou por
+  **Playwright + Jinja2 + `markdown`**: `weasyprint` exige Pango/Cairo/GTK
+  nativos (risco real de instalacao no Windows, o ambiente deste
+  projeto); `playwright` ja e' dependencia (Scraping V4) e ja funciona
+  neste ambiente. Novo port `BriefingDocumentRenderer`
+  (`application/ports.py`, sem fallback — falha de renderizacao e' erro
+  real, diferente do `NvidiaContextGrounder` best-effort) implementado
+  por `JinjaPlaywrightPdfRenderer`
+  (`infrastructure/rendering/`): Markdown -> HTML (`markdown` + template
+  Jinja2) -> PDF (`page.pdf()` do Chromium headless). Links Markdown
+  (citacoes) viram `<a href>` na conversao, sem tratamento especial — e'
+  isso que preserva as citacoes no PDF. `ExportBriefingPdf` (use case) +
+  `GET /briefings/{id}/export`; BFF novo `proxyRadarBinary()`
+  (`lib/api/radar-server.ts`, nao usa `.text()` como `proxyRadarRequest`
+  pra nao corromper bytes binarios) + botao "Exportar PDF" em
+  `startup-details.tsx`.
+- Validado end-to-end via `httpx.AsyncClient` contra a app real (nao so
+  testes com fakes): criar startup -> recommendations -> briefing ->
+  `GET /url-ingestion/jobs` (200, total real) -> `GET /briefings/{id}/export`
+  (200, `application/pdf`, 28KB, bytes comecam com `%PDF-1.4`) ->
+  `POST /rag/answer` (200, resposta real do Gemini). Build de producao
+  (`next build`) e `tsc --noEmit` passam sem erro; todas as rotas novas
+  aparecem no manifesto de rotas do Next.js.
+- Limitacao do ambiente registrada durante esta entrega: o WSL deste
+  projeto nao consegue alcançar processos Python do lado Windows pela
+  rede (nem `127.0.0.1` nem `0.0.0.0` com binding explicito) — confirmado
+  que o processo sobe e responde corretamente do lado Windows
+  (`curl.exe` -> 200), so a travessia WSL->Windows falha. Mesma categoria
+  do problema de DNS intermitente ja registrado no NVIDIA Knowledge V2 —
+  ambiente, nao bug de codigo. Por isso a validacao visual em navegador
+  desta entrega ficou para o usuario rodar os servidores no proprio
+  terminal (`venv/Scripts/python.exe -m uvicorn ...` e `npm run dev`),
+  com a validacao funcional feita via `httpx.AsyncClient` direto contra a
+  app ASGI.
+- Testes: backend 519 -> 525 (orchestration +2: 1 unit + 1 integration;
+  briefing +4: 3 unit + 1 integration); frontend 14 -> 23 (+9: 3
+  `job-history.test.tsx`, 3 `nvidia-chat.test.tsx`, 3 novos em
+  `startup-details.test.tsx`).
+- **Bug real encontrado pelo usuario apos a entrega, testando via
+  `uvicorn` real (nao so a suite de testes):** `GET /briefings/{id}/export`
+  devolvia 500 (`NotImplementedError` em
+  `asyncio.base_events.py::_make_subprocess_transport`). Causa: no
+  Windows, so `ProactorEventLoop` suporta `create_subprocess_exec` (usado
+  pelo driver do Playwright); o loop principal sob o `uvicorn` do usuario
+  era `SelectorEventLoop` no momento da chamada — diferente do loop que a
+  suite de testes/script de validacao manual usaram antes (por acaso ja
+  Proactor), por isso nao apareceu na validacao original. Corrigido:
+  `JinjaPlaywrightPdfRenderer.render_pdf()` agora roda o Playwright numa
+  thread dedicada com seu proprio `ProactorEventLoop`
+  (`loop.run_in_executor`), funciona com qualquer loop ambiente. Ver
+  `docs/briefing/briefing_v3_export_pdf.md` secao 6.1.
+
+P3 (diferencial do case) decidido em 24/06/2026 — **rastreabilidade
+ponta a ponta**, ver `docs/decisoes_pendentes.md`. Fechamento no mesmo
+dia revelou 2 gaps reais: `recommendations`/`briefing` embutiam citacoes
+NVIDIA como texto puro (`Fontes: url1, url2`) em vez de Markdown — sem
+link, ficavam ilegiveis quando o frontend passou a renderizar Markdown
+de verdade; e o frontend renderizava `briefing.content` num `<pre>`
+(texto cru) e `recommendation.justification` num `<p>` simples — nenhum
+link (nem os de evidencia, validos desde a V1 do briefing) ficava
+clicavel fora do PDF exportado. Corrigido nos 2 lados: formato Markdown
+real nas citacoes (`[Fonte N](url)`) + `MarkdownContent`
+(`react-markdown`+`remark-gfm`, novo) reusado em briefing,
+justificativa de recomendacao e resposta do chatbot. Testes: 525 (sem
+mudanca, so reformatou texto existente) backend; 23 -> 25 frontend.
 
 Next recommended implementation:
 
@@ -218,26 +312,38 @@ persisted back to the DB (P1 #4/#5); BM25 via `pg_search` replaced the
 GIN full-text index in `rag`; Recommendations V2 and the Briefing V1
 extension both ground their output in real NVIDIA Knowledge content via
 RAG, with citations and a deterministic fallback when no context is
-recoverable; Qdrant gained a model/dimension schema guard; the frontend
-gained Vitest/RTL coverage and its first Frontend V3 slice (paginated
-startup portfolio via `GET /startups`).
+recoverable; Qdrant gained a model/dimension schema guard; Frontend V3 is
+now fully delivered (paginated startup portfolio, global job history,
+fit badge, clickable evidence, NVIDIA Knowledge chatbot, briefing PDF
+export via Playwright+Jinja2 instead of the originally planned
+weasyprint).
 
 Remaining, in the order decided in docs/roadmap_produto_final.md
 ("Ordem de implementacao recomendada") and docs/decisoes_pendentes.md:
-rapidfuzz dedup for startups by name/website (decided, similarity
-threshold still needs calibrating with real examples before
-implementing); the rest of Frontend V3 (global job history, chatbot over
-NVIDIA Knowledge, fit badge, clickable evidence, export); free-source
+Qdrant<->Postgres payload sync (decided, not yet implemented — low
+practical risk today since no evidence-edit flow exists yet); rapidfuzz
+dedup for startups by name/website (decided, similarity threshold still
+needs calibrating with real examples before implementing); free-source
 startup discovery (StartSe, Distrito, Endeavor etc., zero budget,
 docs/scraping/roadmap_scraping.md); Frontend V4 (Recharts charts,
-comparison, batch queue — needs new aggregate backend endpoints). NVIDIA
+comparison, batch queue — needs new aggregate backend endpoints, no
+order decided yet relative to the other 3 remaining items). NVIDIA
 RAG Agent (V10) deliberately has no sub-tool consumer — decided, not to
 be revisited (RAG grounding in recommendations/briefing already covers
 the same need via a different path). P2 (auth, CI/CD, deploy, Qdrant
 backup) is explicitly out of scope: this project stays a case/demo, not
-a production target (decided 23/06/2026, docs/decisoes_pendentes.md sec.
-1). P3 (case differentiator) remains fully open — the only undecided
-question left in docs/decisoes_pendentes.md.
+a production target (decided 23/06/2026, see "Decisoes ja resolvidas" in
+`docs/decisoes_pendentes.md`, row "Projeto e' demo ou produto real?",
+moved to `docs/roadmap_produto_final.md`). P3 (case differentiator) is
+now decided too (24/06/2026): end-to-end traceability — every
+recommendation and citation has a traceable origin. Closed the same day
+(see "Recent validation" below): NVIDIA citations in
+recommendations/briefing now use real Markdown link syntax (`[Fonte N](url)`,
+were plain text before) and the frontend renders Markdown for real
+(briefing, recommendation justification, chatbot answer — were raw
+`<pre>`/plain text before, so links never became clickable on screen,
+only inside the exported PDF). `docs/decisoes_pendentes.md` has no open
+question left.
 ```
 
 Relevant docs:
@@ -668,9 +774,14 @@ Testes: 33 unit + 1 integracao (novo, exige Postgres real rodando)
 | V2 | Entregue | Provider real (Gemini) por tras do mesmo contrato |
 | V3 | Entregue | Persistencia no Qdrant (`VectorRepository`, upsert, busca) |
 | V4 | Entregue | Worker em batch (`workers/embedding_worker`, fila `embeddings`), `EmbeddingJob`/`EmbeddingJobChunk`, retry/backoff via Dramatiq |
-| V5 | Futuro | Reembedding e metricas |
+| V5 | Entregue | Metricas operacionais por job/chunk + base de `content_hash` para reembedding |
 
-**Versao atual: V4**
+**Versao atual: V5** (corrigido nesta auditoria — esta tabela dizia
+"V5 | Futuro"/"Versao atual: V4" desde 21/06/2026, mas a V5 foi entregue
+na mesma leva da V4, ver `docs/embeddings/embeddings_v5_metricas_reembedding.md`
+e `docs/embeddings/roadmap_embeddings.md`; as 2 extensoes abaixo que se
+chamavam "continua V4" na verdade ja eram pos-V5 e foram corrigidas para
+"continua V5")
 
 O que a V1 entregou:
 - `EmbeddingVector` — value object imutavel (`domain/entities.py`), valida `len(values) == dimension`
@@ -714,15 +825,54 @@ Tabelas: `embedding_jobs`, `embedding_job_chunks`
 Worker: `workers/embedding_worker/` — consome fila `embeddings`
 Testes: 56 unit + 2 integracao (exigem Postgres e Qdrant reais rodando)
 
+O que a V5 entregou (mesma leva de commit da V4 — `EmbeddingJob`/
+`EmbeddingJobChunk` ja nasceram com os campos de metricas, ver
+`docs/embeddings/embeddings_v5_metricas_reembedding.md`):
+- `EmbeddingJob` ganha `succeeded_chunks`/`failed_chunks`/`total_latency_ms`/
+  `total_input_char_count`/`total_estimated_input_tokens` (agregados do job)
+- `EmbeddingJobChunk` ganha `content_hash`/`model_name`/`vector_dimension`/
+  `input_char_count`/`estimated_input_tokens`/`latency_ms` (metadados por chunk)
+- `chunk_content_hash()` (`domain/entities.py`) — hash deterministico do
+  texto do chunk; base para reembedding seletivo e para o cache por
+  `content_hash` que a Fase 6 implementou depois (ver extensao abaixo)
+- `UpsertChunkEmbedding.execute()` passa a devolver `ChunkEmbeddingView`
+  (modelo + dimensao) em vez de `None`, sem acoplar o worker ao provider
+  concreto
+- `ExecuteEmbeddingJob` mede latencia por chunk e soma os agregados do
+  job ao finalizar como `COMPLETED`/`PARTIAL`/`FAILED`
+- Reembedding basico: criar um novo `EmbeddingJob` para o mesmo
+  `document_id` reprocessa todos os chunks via upsert por `chunk_id` —
+  nesta versao ainda sem skip automatico de chunk inalterado (isso so
+  chegou na extensao de cache por `content_hash`, Fase 6, depois)
+- Limite conhecido (registrado no doc da entrega): tokens sao estimados
+  por contagem de caracteres, nao o uso real retornado pelo provider;
+  custo monetario real ainda nao e medido
+- Sem migration propria — as colunas novas ja estavam na mesma migration
+  `b7e2c4f8a1d3` da V4 (commit unico cobriu V4+V5)
+- Testes incluidos no mesmo lote da V4 (56 unit + 2 integracao, ver
+  acima — a V5 nao tem contagem separada porque foi commitada junto)
+
 Extensao feita durante a primeira validacao real do NVIDIA Knowledge V2
-(continua V4, nao e' nova versao): `GEMINI_EMBEDDING_MODEL` default
+(continua V5, nao e' nova versao): `GEMINI_EMBEDDING_MODEL` default
 trocado de `models/text-embedding-004` (descontinuado pela API do
 Gemini, devolvia 404 em `embedContent`) para `models/gemini-embedding-001`
 (3072 dimensoes, validado com chamada real). Sem migracao de dados — a
 colecao Qdrant local estava vazia. Ver
 `docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md`.
 
-Extensao feita em 24/06/2026 (continua V4 — protecao de schema decidida
+Extensao feita em 23/06/2026 (continua V5 — cache por `content_hash`,
+Fase 6 de `docs/roadmap_evolucao_tecnica_mvp.md`, complementa a base que
+a V5 ja tinha deixado pronta): `EmbeddingJobChunkRepository.find_completed_by_content_hash()`
+(filtra por hash + `model_name` — nunca reusa vetor de um modelo
+diferente do configurado) + `VectorRepository.get_by_chunk_id()` (busca
+vetor existente no Qdrant) + `UpsertChunkEmbedding.execute(...,
+cached_chunk_id=...)` pulam a chamada ao provider quando outro chunk com
+o mesmo texto (mesmo `content_hash`+`model_name`) ja foi processado,
+mesmo em documento diferente. `ExecuteEmbeddingJob` consulta o cache
+antes de cada chunk. Validado: 2 chunks com texto identico em documentos
+diferentes geram 1 unica chamada ao provider de embedding.
+
+Extensao feita em 24/06/2026 (continua V5 — protecao de schema decidida
 em 23/06/2026, `docs/decisoes_pendentes.md`, lacuna 3 de
 `docs/lacunas_do_projeto.md`): `model_name`/dimensao ficavam so no
 payload de cada ponto, sem guarda — trocar o modelo de embedding de novo
@@ -734,6 +884,10 @@ criacao, e a recusar upserts numa colecao existente cuja dimensao nao
 bate, cujo modelo nao bate, ou que nao tem essa metadata (colecao legada
 criada antes desta entrega). Testes: 61 -> 64 unit (+3,
 `test_qdrant_collection_schema.py`).
+
+Tabelas: `embedding_jobs`, `embedding_job_chunks`
+Worker: `workers/embedding_worker/` — consome fila `embeddings`
+Testes (estado atual, todas as extensoes acima incluidas): 64 unit + 3 integracao
 
 ---
 
@@ -988,6 +1142,15 @@ decisao para `briefing`"):
 
 Documento da entrega: `docs/recommendations/recommendations_v2_rag_grounding.md`.
 
+**Bug real corrigido em 24/06/2026** (descoberto ao fechar o P3 —
+diferencial "rastreabilidade ponta a ponta"): `_build_grounded_justification()`
+embutia `citation_urls` como texto puro (`Fontes: https://..., https://...`)
+em vez de sintaxe Markdown — sem link, ficava ilegivel como link clicavel
+quando o frontend passou a renderizar `justification` como Markdown de
+verdade (ver "Frontend module"). Corrigido pra `[Fonte N](url)` por
+citacao. Nao quebrou nenhum teste existente (so checavam substring do
+texto/URL, nao o formato exato).
+
 ---
 
 ### Briefing module
@@ -995,12 +1158,12 @@ Documento da entrega: `docs/recommendations/recommendations_v2_rag_grounding.md`
 | Versao | Status | O que foi entregue |
 |---|---|---|
 | V1 | Entregue | Template executivo em Markdown: resumo, evidencias, recomendacoes, riscos e proximas acoes |
-| V2 | Futuro | Briefing gerado por agente |
-| V3 | Futuro | Exportacao PDF/HTML |
+| V2 | Futuro (agente entregue em Agents V12) | Briefing gerado por agente |
+| V3 | Entregue (24/06/2026) | Exportacao em PDF preservando citacoes |
 | V4 | Futuro | Revisao humana |
 | V5 | Futuro | Ranking de oportunidades |
 
-**Versao atual: V1**
+**Versao atual: V3**
 
 O que a V1 entregou:
 - `Briefing` (`domain/entities.py`) — `startup_id`, `content` (Markdown), `generated_at`
@@ -1041,6 +1204,44 @@ Extensao feita em 24/06/2026 (continua V1, mesma decisao de
 - Testes: 18 -> 27 unit (+9: 2 policy, 2 caso de uso, 5 adapter)
 
 Documento: extensao registrada em `docs/briefing/roadmap_briefing.md` (sem doc dedicado — mesmo padrao de outras extensoes de V1).
+
+**Bug real corrigido em 24/06/2026** (mesmo achado do `recommendations`,
+ao fechar o P3 — "rastreabilidade ponta a ponta"): `_ground_context()`
+tinha o mesmo problema — `Fontes: {sources}` com URL puro em vez de
+Markdown. Corrigido pra `[Fonte N](url)`. A secao "Evidencias Principais"
+do briefing (`build_briefing_markdown()`) ja usava sintaxe Markdown
+correta desde a V1 (`[{label}]({evidence.source_url})`) — so a sintese
+NVIDIA via RAG tinha o problema.
+
+O que a V3 entregou (24/06/2026 — exportacao em PDF, decidida no roadmap
+do frontend, ver `docs/frontend/roadmap_frontend.md` bloco 5):
+- `BriefingDocumentRenderer` (`application/ports.py`) — porta nova, `async render_pdf(briefing: BriefingView) -> bytes`; diferente de `NvidiaContextGrounder` (best-effort, devolve `None`), esta porta nao tem fallback — falha de renderizacao e' erro real (`BriefingRenderingError`, `domain/exceptions.py`), nao degradacao graciosa
+- **Decisao tecnica desta entrega**: o roadmap original pedia `weasyprint` + Jinja2; trocado por **Playwright + Jinja2 + `markdown`**. `weasyprint` exige bibliotecas nativas (Pango/Cairo/GTK) com risco real de instalacao no Windows (ambiente deste projeto); `playwright` ja e' dependencia do projeto desde o Scraping V4 e ja funciona comprovadamente neste ambiente. Mesmo resultado (PDF real via Chromium headless), motor diferente
+- `JinjaPlaywrightPdfRenderer` (`infrastructure/rendering/`) — `markdown.markdown(content, extensions=["extra"])` converte o Markdown do briefing em HTML, injetado num template Jinja2 (`infrastructure/rendering/templates/briefing.html.jinja`), renderizado via `async_playwright()` + `chromium.launch(headless=True)` + `page.pdf(format="A4")`. Links Markdown (`[texto](url)`) ja viram `<a href>` na conversao — e' isso que preserva as citacoes no PDF, sem tratamento especial
+- `ExportBriefingPdf` (use case) — busca o briefing por id (reusa o repositorio existente), chama o renderer, devolve bytes + filename (`briefing-{startup_id}.pdf`)
+- `BriefingFactory.create_export_briefing_pdf()`
+- Presentation: `GET /briefings/{briefing_id}/export` — `Response` com `media_type="application/pdf"` e `Content-Disposition: attachment`; `BriefingNotFoundError` -> 404, `BriefingRenderingError` -> 502
+- Sem migration nova — nao persiste nada novo, so renderiza dado ja existente sob demanda
+- `requirements.txt` ganhou `jinja2>=3.1,<4` (ja vinha como dependencia transitiva, agora explicita) e `markdown>=3.6,<4` (nova)
+- Testes: 27 -> 30 unit (+3, `ExportBriefingPdf` com fake renderer) + 1 -> 2 integracao (+1, `JinjaPlaywrightPdfRenderer` real — Chromium headless de verdade, sem Postgres/Redis/Qdrant, adicionado a `_NO_EXTERNAL_DEPS_INTEGRATION_TESTS` em `apps/api/src/modules/conftest.py` pra nao ficar preso a um guard de Postgres que nao se aplica); validado tambem fora da suite via `httpx.AsyncClient` contra a app real: PDF de 28KB, bytes comecam com `%PDF-1.4`
+
+**Bug real encontrado pelo usuario apos a entrega (24/06/2026), testando
+via `uvicorn` real (nao so a suite de testes):** `GET
+/briefings/{id}/export` devolvia 500 (`NotImplementedError` em
+`asyncio.base_events.py::_make_subprocess_transport`). Causa: no Windows,
+so o `ProactorEventLoop` suporta `create_subprocess_exec` (usado pelo
+driver do Playwright pra abrir o Chromium); o loop principal sob o
+`uvicorn` do usuario era um `SelectorEventLoop` no momento da chamada —
+diferente do loop que a suite de testes e o script de validacao manual
+usaram antes da entrega (por acaso ja Proactor), por isso o bug nao
+apareceu na validacao original. Corrigido: `render_pdf()` agora delega
+pra `loop.run_in_executor(None, ...)`, que roda o Playwright numa thread
+dedicada com seu proprio `asyncio.ProactorEventLoop()` criado ali mesmo —
+funciona com qualquer loop ambiente, independente de como a app foi
+iniciada. Validado reproduzindo a condicao exata do bug
+(`asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())`
++ chamada real ao renderer): PDF gerado normalmente. Ver
+`docs/briefing/briefing_v3_export_pdf.md` secao 6.1.
 
 ---
 
@@ -1163,6 +1364,15 @@ fecha o P0 #1 de `docs/roadmap_produto_final.md`):
 
 Documento da entrega: `docs/orchestration/orchestration_v2_jornada_completa.md`.
 
+Extensao feita em 24/06/2026 (continua V2 — historico global de jobs
+para o Frontend V3, mirror exato do que `startups` ja tinha feito pro
+`ListStartups` da Startups V3):
+- `UrlIngestionJobRepository.list_page(*, page, page_size, status=None, source_type=None) -> tuple[list[UrlIngestionJob], int]` (abstrato + Postgres, mesmo padrao de offset/limit/count de `PostgresStartupRepository.list_page`)
+- `ListUrlIngestionJobsInput`/`UrlIngestionJobPageView` (`application/dto.py`) + `ListUrlIngestionJobs` (use case)
+- `GET /url-ingestion/jobs` (antes so existia `POST` e `GET /{job_id}`) — paginado, filtros `status`/`source_type` (query param exposto como `status`, mapeado pra `job_status` no parametro Python pra nao colidir com `fastapi.status` ja importado no arquivo)
+- `OrchestrationFactory.create_list_url_ingestion_jobs()`
+- Testes: 30 -> 32 (28 unit -> 29 unit +1, 2 integracao -> 3 integracao +1)
+
 ---
 
 ### Frontend module
@@ -1171,11 +1381,11 @@ Documento da entrega: `docs/orchestration/orchestration_v2_jornada_completa.md`.
 |---|---|---|
 | V1 | Entregue | Fundacao Next.js e jornada URL -> job |
 | V2 | Entregue | Resultado da startup: evidencias, recomendacoes e briefing |
-| V3 | Em andamento | Portfolio de startups entregue; filtros e historico de jobs pendentes |
+| V3 | Entregue | Portfolio paginado, historico global de jobs, badge de fit, evidencia clicavel, chatbot NVIDIA Knowledge, export PDF do briefing |
 | V4 | Futuro | Painel BI de oportunidades |
 | V5 | Futuro | Revisao humana, auth e colaboracao |
 
-**Versao atual: V2 — primeiro MVP visual completo**
+**Versao atual: V3 — confiabilidade, navegacao e decisao**
 
 Stack: Next.js + TypeScript + App Router + Tailwind CSS + TanStack Query
 (`apps/web/`). Frontend nao executa regras de negocio: envia comandos ao
@@ -1196,9 +1406,8 @@ extract/classify/recommendations/briefing ficam para V3.
 
 Cobertura inicial entregue em 23/06/2026: Vitest + React Testing Library
 validam `UrlSubmissionForm`, `JobStatusPanel`, `StartupDetails` e
-`StartupPortfolio` (13 testes).
-O proximo passo e ampliar a cobertura para as rotas BFF e para o fluxo de
-historico planejado na V3.
+`StartupPortfolio` (14 testes, reconferido em 24/06/2026 via `npm test`
+— numero anterior, 13, estava com 1 teste a menos).
 
 **Correcao em 23/06/2026:** entradas anteriores deste arquivo (e de
 `docs/roadmap_produto_final.md`/`docs/lacunas_do_projeto.md`) afirmavam um
@@ -1209,6 +1418,39 @@ sem violacao. Confirmado tambem por `git log`: o arquivo nunca recebeu
 correcao desse tipo. A afirmacao original nunca foi verificada lendo o
 codigo direto antes de ser propagada por varios documentos — registrado
 aqui pra nao repetir o erro.
+
+O que a V3 entregou (24/06/2026, em 2 fatias — ver "Recent validation"
+no topo deste arquivo para o detalhe completo de cada uma):
+- 1a fatia: `GET /startups` paginado (busca/setor/pais/maturidade) +
+  pagina `/startups` (`startup-portfolio.tsx`)
+- 2a fatia (resto da V3): `GET /url-ingestion/jobs` paginado (novo
+  `UrlIngestionJobRepository.list_page()`, mirror exato do que `startups`
+  V3 ja tinha feito) + pagina `/jobs` (`features/jobs/job-history.tsx`);
+  home (`/`) com contagem real de startups; badge de fit consolidado +
+  evidencia clicavel por recomendacao em `startup-details.tsx` (regra
+  pura no frontend, sem chamada nova a API); chatbot sobre NVIDIA
+  Knowledge (`features/knowledge/nvidia-chat.tsx` + pagina `/knowledge`,
+  so UI - `POST /rag/answer` ja existia); export do briefing em PDF real
+  via Playwright+Jinja2 (`GET /briefings/{id}/export`, ver secao do
+  modulo `briefing` para o detalhe da troca de tecnologia vs. o
+  weasyprint originalmente planejado)
+- Nav (`app/layout.tsx`) ganhou links para `/startups`, `/jobs` e
+  `/knowledge` - antes so existia o CTA para `/analyze`
+- Testes: 14 -> 23 (+9: 3 `job-history.test.tsx`, 3 `nvidia-chat.test.tsx`,
+  3 novos em `startup-details.test.tsx` para badge/evidencia)
+
+**Extensao feita em 24/06/2026 (continua V3 — fechamento do P3,
+"rastreabilidade ponta a ponta"):** gap real encontrado revisando a
+escolha do diferencial: `briefing.content` era renderizado num `<pre>`
+(texto cru) em `startup-details.tsx`, e `recommendation.justification`
+num `<p>` simples — nenhum link Markdown (nem os de evidencia, validos
+desde a V1 do briefing) ficava clicavel fora do PDF exportado. Corrigido
+com `components/markdown-content.tsx` (`MarkdownContent`, novo,
+`react-markdown` + `remark-gfm`) reusado em 3 lugares: briefing, justificativa
+de cada recomendacao (`RecommendationCard`) e resposta do chatbot
+(`NvidiaChat`). Dependencias novas: `react-markdown@^10`, `remark-gfm@^4`
+(sem dependencia nativa, JS puro). Testes: 23 -> 25 (+2: link Markdown
+clicavel em `startup-details.test.tsx` e `nvidia-chat.test.tsx`).
 
 Documentos: `docs/frontend/nextjs_arquitetura.md`,
 `docs/frontend/roadmap_frontend.md`.
@@ -1275,30 +1517,31 @@ url_ingestion_jobs      orquestracao URL -> scraping -> ingestion -> embeddings 
 
 | Modulo | Testes | Ultima verificacao |
 |---|---|---|
-| scraping | 132 unit + 6 integracao | 2026-06-23 |
-| agents | 102 unit + 1 integracao | 2026-06-23 |
-| ingestion | 37 unit + 1 integracao | 2026-06-23 |
-| embeddings | 61 unit + 3 integracao | 2026-06-23 |
-| startups | 35 unit + 1 integracao | 2026-06-23 |
-| rag | 19 unit + 2 integracao | 2026-06-23 |
-| nvidia_knowledge | 15 unit | 2026-06-23 |
-| recommendations | 26 unit + 1 integracao | 2026-06-23 |
-| briefing | 18 unit + 1 integracao | 2026-06-23 |
-| orchestration | 28 unit + 2 integracao | 2026-06-23 |
-| shared | 10 unit (logging + observability) | 2026-06-23 |
-| **Total** | **519 testes coletados** | **2026-06-24** |
+| scraping | 132 unit + 6 integracao | 2026-06-24 |
+| agents | 102 unit + 1 integracao | 2026-06-24 |
+| ingestion | 37 unit + 1 integracao | 2026-06-24 |
+| embeddings | 64 unit + 3 integracao | 2026-06-24 |
+| startups | 36 unit + 1 integracao | 2026-06-24 |
+| rag | 19 unit + 2 integracao | 2026-06-24 |
+| nvidia_knowledge | 15 unit | 2026-06-24 |
+| recommendations | 31 unit + 1 integracao | 2026-06-24 |
+| briefing | 30 unit + 2 integracao | 2026-06-24 |
+| orchestration | 29 unit + 3 integracao | 2026-06-24 |
+| shared | 10 unit (logging + observability) | 2026-06-24 |
+| **Total backend** | **525 testes coletados** | **2026-06-24** |
+| **Frontend (`apps/web`, Vitest)** | **25 testes** | **2026-06-24** |
 
 Nota: numeros desta tabela vem de `pytest --collect-only -q` por modulo
 (nao exige Postgres/Redis/Qdrant vivos, so confirma quantos testes existem
-no codigo) — todas as 11 linhas foram reconferidas nesta entrega, corrigindo
-pequenos desvios acumulados ao longo de entregas anteriores (ex: `rag` ganhou
-+1 teste de integracao com `test_ragas_quality_baseline.py`, ainda nao
-commitado, e +2 unit com `test_embeddings_query_embedder.py` do fix
-arquitetural rag->embeddings, ver "Recent validation"). A ultima execucao completa (`passed`, exigindo infra viva) deu
-**474 passed, 2 warnings em 2026-06-23**, antes do teste Ragas ser
-adicionado — por isso o total agora coletado (476) e' maior que o ultimo
-`passed` real. Rode o comando abaixo com a infra ativa para obter um
-`passed` atualizado.
+no codigo). Reconferido direto por modulo no fechamento do Frontend V3
+(24/06/2026): `orchestration` (28→29 unit/2→3 integracao, historico de
+jobs) e `briefing` (27→30 unit/1→2 integracao, export PDF) subiram nesta
+entrega; soma das 11 linhas backend confere exatamente com os 525
+coletados. Execucao completa com infra viva (Postgres/Redis/Qdrant via
+`infra/docker-compose.yml` rodando): **524 passed, 1 skipped em
+2026-06-24** (o skip e o teste Ragas opt-in, `RUN_RAGAS_EVAL=1` nao
+definido — chama Gemini de verdade, lento e pago). Frontend (`npm test`
+em `apps/web/`): **23 passed** (14→23, +9 do fechamento do Frontend V3).
 
 Comando para verificar:
 ```bash
@@ -1582,9 +1825,11 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | NVIDIA Knowledge V2 foundation | `docs/nvidia_knowledge/nvidia_knowledge_v2_foundation_source_type.md` |
 | NVIDIA Knowledge V2 source registry | `docs/nvidia_knowledge/nvidia_knowledge_v2_source_registry.md` |
 | NVIDIA Knowledge V2 primeira validacao real (current) | `docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md` |
-| Recommendations V1 (current) | `docs/recommendations/recommendations_v1_regras_deterministicas.md` |
+| Recommendations V1 | `docs/recommendations/recommendations_v1_regras_deterministicas.md` |
+| Recommendations V2 (current) | `docs/recommendations/recommendations_v2_rag_grounding.md` |
 | Recommendations roadmap | `docs/recommendations/roadmap_recommendations.md` |
-| Briefing V1 (current) | `docs/briefing/briefing_v1_template_executivo.md` |
+| Briefing V1 | `docs/briefing/briefing_v1_template_executivo.md` |
+| Briefing V3 export PDF (current) | `docs/briefing/briefing_v3_export_pdf.md` |
 | Briefing roadmap | `docs/briefing/roadmap_briefing.md` |
 | Orchestration V1 (current) | `docs/orchestration/orchestration_v1_analysis_jobs.md` |
 | Orchestration V2 URL ingestion jobs | `docs/orchestration/orchestration_v2_url_ingestion_jobs.md` |
@@ -1592,7 +1837,7 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Orchestration V2 jornada completa (current) | `docs/orchestration/orchestration_v2_jornada_completa.md` |
 | Orchestration roadmap | `docs/orchestration/roadmap_orchestration.md` |
 | Frontend architecture | `docs/frontend/nextjs_arquitetura.md` |
-| Frontend roadmap (current: V2) | `docs/frontend/roadmap_frontend.md` |
+| Frontend roadmap (current: V3) | `docs/frontend/roadmap_frontend.md` |
 | Diagnostico vs. case original + prioridades | `docs/diagnostico_case_original_e_novas_prioridades.md` |
 | Estado atual do projeto | `docs/estado_atual_do_projeto.md` |
 | Diagnostico de fraquezas e tecnologias recomendadas (transversal) | `docs/diagnostico_fraquezas_e_tecnologias_recomendadas.md` |

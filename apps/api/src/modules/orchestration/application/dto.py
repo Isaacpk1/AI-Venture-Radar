@@ -53,3 +53,19 @@ class UrlIngestionJobView:
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+
+
+@dataclass(frozen=True)
+class ListUrlIngestionJobsInput:
+    page: int = 1
+    page_size: int = 20
+    status: UrlIngestionJobStatus | None = None
+    source_type: str | None = None
+
+
+@dataclass(frozen=True)
+class UrlIngestionJobPageView:
+    items: list[UrlIngestionJobView]
+    total: int
+    page: int
+    page_size: int

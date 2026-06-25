@@ -68,6 +68,14 @@ detalhamento completo, incluindo limites conhecidos desta entrega
 (nao usa evidencia especifica da startup como query, sem cache de
 chamada RAG).
 
+**Bug real corrigido em 24/06/2026** (fechamento do P3 — diferencial
+"rastreabilidade ponta a ponta", `docs/decisoes_pendentes.md`):
+`citation_urls` viravam texto puro (`Fontes: url1, url2`) em
+`_build_grounded_justification()`, nao link Markdown — ficavam
+ilegiveis como link quando o frontend passou a renderizar
+`justification` como Markdown de verdade. Corrigido pra
+`[Fonte N](url)` por citacao.
+
 Pre-requisitos ja entregues:
 
 ```txt

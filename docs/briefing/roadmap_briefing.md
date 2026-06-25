@@ -21,7 +21,7 @@ startup + evidencias + recomendacoes -> briefing executivo
 |---|---|---|
 | Briefing V1 | Implementado | Template executivo em Markdown |
 | Briefing V2 | Futuro (agente entregue em Agents V12) | Briefing gerado por agente |
-| Briefing V3 | Futuro | Exportacao PDF/HTML |
+| Briefing V3 | Implementado (24/06/2026) | Exportacao em PDF, preservando citacoes |
 | Briefing V4 | Futuro | Revisao humana |
 | Briefing V5 | Futuro | Ranking de oportunidades |
 
@@ -74,6 +74,13 @@ implementacao recomendada" em `docs/roadmap_produto_final.md`.
 `source_type=nvidia_knowledge`, adiciona citacoes ao briefing quando houver
 contexto e faz fallback para o template deterministico quando nao houver.
 
+**Bug real corrigido em 24/06/2026** (mesmo achado do `recommendations`,
+fechamento do P3 — "rastreabilidade ponta a ponta"): `_ground_context()`
+embutia `citation_urls` como texto puro em vez de Markdown — corrigido
+pra `[Fonte N](url)` por citacao. A secao "Evidencias Principais"
+(`build_briefing_markdown()`) ja usava sintaxe Markdown correta desde a
+V1; so a sintese NVIDIA via RAG tinha o problema.
+
 ---
 
 ## Briefing V2 - Agente de Briefing
@@ -118,12 +125,29 @@ precisa fazer parte do fechamento da Orchestration V2.
 
 ## Briefing V3 - Exportacao
 
+Status:
+
+```txt
+implementado em 24/06/2026
+```
+
 Entregaveis:
 
-- exportar HTML;
-- exportar PDF;
-- preservar citacoes;
-- template visual simples.
+- exportar PDF (real, via Chromium headless) — entregue;
+- preservar citacoes (links Markdown viram `<a href>` na conversao para
+  HTML, sem tratamento especial) — entregue;
+- template visual simples (Jinja2) — entregue;
+- exportar HTML como formato separado — **nao entregue**: o Markdown ja
+  e' visualizavel na propria tela da startup, so o PDF precisava de um
+  motor de renderizacao novo.
+
+**Decisao tecnica tomada durante a implementacao:** trocado `weasyprint`
+(planejado abaixo, secao "Tecnologias candidatas") por **Playwright +
+Jinja2 + `markdown`**. `weasyprint` exige bibliotecas nativas (Pango/
+Cairo/GTK) com risco real de instalacao no Windows (ambiente deste
+projeto); `playwright` ja e' dependencia do projeto desde o Scraping V4 e
+ja funciona comprovadamente neste ambiente. Detalhe completo da entrega:
+`docs/briefing/briefing_v3_export_pdf.md`.
 
 ---
 
@@ -152,15 +176,20 @@ Entregaveis:
 ## Tecnologias candidatas (auditoria de codigo, 23/06/2026)
 
 Confirmado em `domain/policies.py::build_briefing_markdown()`: a saida e'
-Markdown puro, sem nenhum import de biblioteca de exportacao (reportlab,
-weasyprint, etc.) — exportar hoje exige copiar o Markdown manualmente.
+Markdown puro, sem nenhum import de biblioteca de exportacao — essa era
+a situacao antes da Briefing V3.
 
-| Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
+**Atualizado 24/06/2026 — Briefing V3 implementado:** a tabela abaixo
+ficou como registro historico da analise original; a implementacao real
+trocou `weasyprint` por Playwright (ja dependencia do projeto desde o
+Scraping V4), ver `docs/briefing/briefing_v3_export_pdf.md`. A linha
+sobre validacao pos-render (extrair URLs e comparar) **nao foi
+implementada** — risco aceito por agora: a conversao Markdown -> HTML
+via lib `markdown` e' direta o suficiente (links viram `<a href>` sem
+transformacao adicional) para nao precisar da mesma validacao defensiva
+que a reescrita por LLM do Briefing Agent V12 precisa.
+
+| Fraqueza confirmada (na epoca) | Tecnologia/abordagem planejada | Serve a | O que foi implementado de fato |
 |---|---|---|---|
-| Saida so em Markdown, sem exportacao visual | `weasyprint` + Jinja2 (libs leves, sem servico externo) para HTML -> PDF a partir do mesmo Markdown gerado por `build_briefing_markdown()` | Briefing V3 (Exportacao) | Medio |
-| Reescrita de prosa do Briefing Agent V12 ja tem fallback contra perda de URL no Markdown — exportacao precisa do mesmo cuidado | validacao pos-render: extrair URLs do PDF gerado e comparar contra as do Markdown original antes de servir o arquivo, mesmo espirito do fallback que V12 ja aplica | Briefing V3, junto do item acima | Baixo — reusa a logica de extracao de URL que V12 ja tem |
-
-Nao adotar um servico externo de geracao de PDF (ex: API paga de
-PDF-as-a-service): `weasyprint` roda no mesmo processo Python, sem
-dependencia de rede nova, e o volume (1 briefing por vez, sob demanda) nao
-justifica um servico separado.
+| Saida so em Markdown, sem exportacao visual | `weasyprint` + Jinja2 para HTML -> PDF | Briefing V3 (Exportacao) | Playwright + Jinja2 + `markdown` — mesmo objetivo, motor trocado por risco de instalacao do weasyprint no Windows |
+| Reescrita de prosa do Briefing Agent V12 ja tem fallback contra perda de URL no Markdown — exportacao precisa do mesmo cuidado | validacao pos-render: extrair URLs do PDF e comparar com o Markdown original | Briefing V3, junto do item acima | Nao implementado — a conversao `markdown` -> HTML e' direta, sem reescrita por LLM no meio, risco considerado baixo |

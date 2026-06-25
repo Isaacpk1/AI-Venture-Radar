@@ -193,8 +193,10 @@ Fase 0 quis resolver, mas resolveu so na borda (workers), nao no miolo.
 ```txt
 [RESOLVIDO] em 23/06/2026
 ```
-- Vitest + React Testing Library foram instalados e configurados. Ha 12
-  testes para `UrlSubmissionForm`, `JobStatusPanel` e `StartupDetails`.
+- Vitest + React Testing Library foram instalados e configurados. Ha 23
+  testes (reconferido 24/06/2026, +9 do fechamento do Frontend V3) para
+  `UrlSubmissionForm`, `JobStatusPanel`, `StartupDetails`,
+  `StartupPortfolio`, `JobHistory` e `NvidiaChat`.
 - **Correcao em 23/06/2026:** este documento afirmava um "bug real
   confirmado de Rules of Hooks em `StartupDetails`" — lendo o arquivo na
   integra, isso nao se confirma (hooks chamados corretamente, antes de
@@ -202,11 +204,33 @@ Fase 0 quis resolver, mas resolveu so na borda (workers), nao no miolo.
   ausencia de testes.
 
 ```txt
+[RESOLVIDO] em 24/06/2026 — Frontend V3 completo
+```
+- Listagem/cards de startups: `GET /startups` paginado com busca/filtros
+  + pagina `/startups` (`features/startups/startup-portfolio.tsx`).
+- Historico global de jobs: `UrlIngestionJobRepository.list_page()` novo
+  + `GET /url-ingestion/jobs` paginado + pagina `/jobs`
+  (`features/jobs/job-history.tsx`).
+- Badge de fit consolidado + evidencia clicavel por recomendacao em
+  `startup-details.tsx` (regra pura no frontend, sem chamada nova a
+  API); achado real durante a implementacao — `customers` da `Startup`
+  existia na API desde a V2 mas nunca era renderizado, corrigido junto.
+- Chatbot sobre NVIDIA Knowledge (`features/knowledge/nvidia-chat.tsx` +
+  pagina `/knowledge`) — so UI, `POST /rag/answer` ja existia.
+- Export do briefing em PDF (`GET /briefings/{id}/export`) — **decisao
+  tecnica registrada**: trocado `weasyprint` (planejado) por Playwright +
+  Jinja2 + `markdown`, ver `docs/briefing/briefing_v3_export_pdf.md`.
+- Validado end-to-end via `httpx.AsyncClient` contra a app real (PDF de
+  28KB gerado, `%PDF-1.4`); `next build`/`tsc --noEmit` sem erro.
+  Validacao visual em navegador ficou pendente nesta sessao — limitacao
+  de ambiente (WSL nao alcanca processos Windows pela rede), nao bug.
+
+```txt
 [ABERTO/planejado]
 ```
-- Sem listagem/cards/historico de startups (V3), sem graficos (V4), sem
-  chatbot sobre NVIDIA Knowledge (V3) — tudo ja desenhado no roadmap, nada
-  implementado ainda.
+- Frontend V4 (graficos com Recharts, comparacao de startups, fila em
+  lote) — precisa de endpoints agregados novos no backend (GROUP BY).
+- Frontend V5 (revisao humana, sem auth completa).
 
 ---
 
@@ -247,8 +271,8 @@ Fase 0 quis resolver, mas resolveu so na borda (workers), nao no miolo.
 
 | Status | Quantidade de itens |
 |---|---|
-| RESOLVIDO nesta sessao | 3 (cache de scraping, fundacao de testes do frontend, RAG grounding em recommendations/briefing) — varios outros (rag->embeddings, caches de embeddings, agent wiring, Cohere config, BM25/pg_search) ja foram resolvidos em sessoes anteriores e nem entraram aqui |
-| DECIDIDO, falta implementar | 8 |
+| RESOLVIDO (24/06/2026) | 5 (cache de scraping, fundacao de testes do frontend, RAG grounding em recommendations/briefing, e o Frontend V3 completo — listagem/cards, historico de jobs, badge de fit, evidencia clicavel, chatbot, export PDF) — varios outros (rag->embeddings, caches de embeddings, agent wiring, Cohere config, BM25/pg_search) ja foram resolvidos em sessoes anteriores e nem entraram aqui |
+| DECIDIDO, falta implementar | 7 (Frontend V3 saiu desta contagem — entregue por completo) |
 | ABERTO, sem decisao ainda | 11 |
 | FORA-ESCOPO (demo) | 2 grupos (producao transversal, backup Qdrant) |
 
