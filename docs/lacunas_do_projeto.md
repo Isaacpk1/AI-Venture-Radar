@@ -173,11 +173,10 @@ Fase 0 quis resolver, mas resolveu so na borda (workers), nao no miolo.
 - NVIDIA RAG Agent (V10) sem consumidor real — decidido deixar como esta,
   nao redesenhar o grafo. Ja documentado como decisao fechada.
 - Search Planner Agent (V3) existe e gera queries quando uma evidencia e'
-  insuficiente, mas ainda nao existe executor de busca web nem ligacao
-  automatica com `url_ingestion_jobs`. Estado real: o sistema consegue
-  detectar `needs_more_sources` no scraping e planejar o que procurar, mas
-  nao transforma essas queries em URLs candidatas, nao cria novos jobs e nao
-  reexecuta extract/classify/recommendations sozinho. Ver
+  insuficiente, mas ainda nao existe executor de busca web. Estado real: a
+  orquestracao ja cria ate 2 `url_ingestion_jobs` filhos no mesmo dominio
+  quando `founders`/`funding_stage`/`customers` seguem vazios; o que falta e'
+  transformar queries do Search Planner em URLs externas candidatas. Ver
   `docs/agents/roadmap_agentes.md` e
   `docs/orchestration/roadmap_orchestration.md` ("Chain de enriquecimento por
   busca").
@@ -246,10 +245,15 @@ Fase 0 quis resolver, mas resolveu so na borda (workers), nao no miolo.
   de ambiente (WSL nao alcanca processos Windows pela rede), nao bug.
 
 ```txt
+[RESOLVIDO] em 25/06/2026 - Frontend V4 completo
+```
+- Dashboard `/dashboard` com graficos SVG/HTML de maturidade e top tecnologias.
+- `GET /startups/stats` e `GET /recommendations/stats` entregues.
+- Comparacao de ate 3 startups e fila em lote entregues.
+
+```txt
 [ABERTO/planejado]
 ```
-- Frontend V4 (graficos com Recharts, comparacao de startups, fila em
-  lote) — precisa de endpoints agregados novos no backend (GROUP BY).
 - Frontend V5 (revisao humana, sem auth completa).
 
 ---

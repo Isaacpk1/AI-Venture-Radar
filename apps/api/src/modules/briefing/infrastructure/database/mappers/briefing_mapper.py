@@ -14,6 +14,10 @@ class BriefingMapper:
             id=entity.id,
             startup_id=entity.startup_id,
             content=entity.content,
+            review_status=entity.review_status,
+            review_comment=entity.review_comment,
+            reviewed_by=entity.reviewed_by,
+            reviewed_at=entity.reviewed_at,
             generated_at=entity.generated_at,
         )
 
@@ -23,5 +27,9 @@ class BriefingMapper:
             id=model.id,
             startup_id=model.startup_id,
             content=model.content,
+            review_status=model.review_status,
+            review_comment=model.review_comment,
+            reviewed_by=model.reviewed_by,
+            reviewed_at=model.reviewed_at,
             generated_at=model.generated_at,
         )

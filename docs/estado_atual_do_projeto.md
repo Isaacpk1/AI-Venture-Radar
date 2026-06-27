@@ -1,28 +1,21 @@
 # Estado Atual do Projeto - NVIDIA Startup AI Radar
 
-Documento de referencia do estado real em 24/06/2026. Para o detalhe
-completo de cada entrega, ver `CLAUDE.md` secao "Authoritative Current
-State" (sempre a fonte mais atualizada) e o "Module version history".
+Documento de referencia do estado real em 26/06/2026. Para o detalhe completo de cada entrega, ver `CLAUDE.md` secao "Authoritative Current State" e os roadmaps por modulo.
 
 ---
 
 ## Resumo
 
-O backend modular do MVP esta implementado de ponta a ponta:
+O MVP esta implementado de ponta a ponta:
 
 ```txt
-scraping -> ingestion -> embeddings -> startups -> rag -> recommendations
--> briefing -> orchestration
+URL -> scraping -> ingestion -> embeddings -> startups -> rag
+-> recommendations -> briefing -> frontend
 ```
 
-Tambem existem os 8 agentes do brief original (LangGraph): Evidence
-Validation, Search Planner, Extraction, Startup Classifier, NVIDIA RAG,
-Recommendation e Briefing. Os dois ultimos ja tem consumidor sincrono real
-dentro de `orchestration`. O frontend (Next.js) cobre a jornada
-URL -> job -> resultado da startup, portfolio paginado de startups,
-historico global de jobs, chatbot sobre NVIDIA Knowledge, badge de fit,
-evidencia clicavel por recomendacao e export do briefing em PDF —
-Frontend V3 esta completo.
+Tambem existem os 8 agentes do brief original em LangGraph: Evidence Validation, Search Planner, Extraction, Startup Classifier, NVIDIA RAG, Recommendation e Briefing, alem da infraestrutura generica de `agent_runs`.
+
+O frontend Next.js cobre a jornada URL -> job -> resultado da startup, portfolio paginado, historico global de jobs, chatbot NVIDIA Knowledge, badge de fit, evidencia clicavel por recomendacao, export PDF, dashboard de portfolio, comparacao de startups, fila em lote e revisao humana simples de recommendations/briefings. Startup Discovery V1 tambem esta entregue para descobrir URLs em hubs publicos e alimentar `url_ingestion_jobs`.
 
 ---
 
@@ -30,23 +23,25 @@ Frontend V3 esta completo.
 
 | Modulo | Versao atual | Observacao |
 |---|---|---|
-| scraping | V8 | pipeline com validacao deterministica, Gemini e agent review |
-| agents | V12 | Evidence, Search Planner, Extraction, Startup Classifier, NVIDIA RAG, Recommendation e Briefing (8/8 agentes do brief) |
-| ingestion | V1 | documents/chunks + worker (worker entregue junto da V1) |
-| embeddings | V5 | metricas operacionais por job/chunk + cache por `content_hash` + guarda de schema do Qdrant |
-| startups | V4 (slice inicial) | dados estruturados + classificacao AI-native/AI-enabled/Non-AI + `ListStartups` paginado + dedup por nome/dominio (`rapidfuzz`) |
-| rag | V4 | busca vetorial + lexical (BM25 via `pg_search`) com RRF + reranking Cohere + resposta citada |
-| nvidia_knowledge | V1 + V2 completo | catalogo cobre o brief; 20/20 fontes do registry processadas, 17/20 com conteudo recuperavel |
-| recommendations | V2 | regras deterministicas + justificativa fundamentada via RAG (NVIDIA Knowledge), com fallback deterministico |
-| briefing | V3 | template executivo + secao "Contexto NVIDIA" via RAG (extensao V1) + export em PDF real (Playwright+Jinja2, V3) |
-| orchestration | V1 + V2 completa | analysis_jobs; url_ingestion_jobs leva URL bruta ate startup/recommendations/briefing com worker automatico (Dramatiq), sem operacao manual; historico global paginado (`GET /url-ingestion/jobs`); limpa vetores orfaos no Qdrant quando uma URL e' re-raspada |
-| frontend | V3 completa | jornada URL->job->resultado (V2) + portfolio paginado, historico global de jobs, badge de fit, evidencia clicavel, chatbot NVIDIA Knowledge e export PDF (V3) |
+| scraping | V8 | Pipeline com validacao deterministica, Gemini e agent review |
+| agents | V12 | 8/8 agentes do brief, com Recommendation/Briefing ligados ao caminho sincrono |
+| ingestion | V1 | `documents`/`chunks` + worker |
+| embeddings | V5 | Metricas por job/chunk, cache por `content_hash`, guarda de schema do Qdrant e limpeza de vetores orfaos |
+| startups | V4 | Dados estruturados, classificacao AI-native/AI-enabled/Non-AI, listagem paginada, stats e dedup por nome/dominio |
+| rag | V4 | Busca vetorial + BM25 via `pg_search`, RRF, reranking Cohere e resposta citada |
+| nvidia_knowledge | V1 + V2 | Catalogo + registry; 20/20 fontes processadas, 17/20 com conteudo recuperavel |
+| recommendations | V3 | Regras deterministicas + RAG grounding + `confidence`/`complexity` + stats de tecnologias |
+| briefing | V3 | Markdown executivo, contexto NVIDIA via RAG e export PDF via Playwright/Jinja2 |
+| orchestration | V1 + V2.1 | `analysis_jobs` e `url_ingestion_jobs` ponta a ponta, com worker automatico e primeira rodada de enriquecimento por dominio |
+| startup_discovery | V1 | InovAtiva Brasil, Abstartups e 100 Open Startups; persiste runs e submete URLs descobertas |
+| frontend | V5 | Jornada operacional, portfolio, historico, chat, PDF, dashboard, comparacao, lote e revisao humana simples |
 
 ---
 
 ## Rotas Expostas
 
 ```txt
+/health
 /scraping/jobs
 /scraping/results/{result_id}
 /agents/runs/{run_id}
@@ -54,7 +49,8 @@ Frontend V3 esta completo.
 /ingestion/jobs
 /embeddings/jobs
 /startups
-/startups?page=1&page_size=20&query=&sector=&country=&ai_maturity_level=
+/startups/stats
+/startups/{startup_id}
 /startups/{startup_id}/evidences
 /startups/{startup_id}/extract
 /startups/{startup_id}/classify
@@ -64,20 +60,21 @@ Frontend V3 esta completo.
 /nvidia-knowledge/sources
 /nvidia-knowledge/ingestion/jobs
 /recommendations
+/recommendations/stats
 /briefings
 /briefings/{briefing_id}/export
+/briefings/{briefing_id}/review
 /analysis/jobs
 /url-ingestion/jobs
-/url-ingestion/jobs?page=1&page_size=20&status=&source_type=
+/startup-discovery/runs
+/startup-discovery/runs/{run_id}
 ```
 
 ---
 
 ## Banco e Migrations
 
-Migrations existentes (head atual: `b3f6e91c7d45` — sem mudanca nesta
-entrega, o historico de jobs e o export de PDF nao precisaram de schema
-novo):
+Head atual: `f4b2a9c8d6e1`.
 
 ```txt
 f3f7f3959ccc  scraping tables
@@ -86,20 +83,23 @@ d8e4a9c1b672  campos de auditoria de agent em attempts
 7c9f2a1b4d6e  agent_runs e agent_steps
 9e1f3b5c8a2d  checkpoint LangGraph
 3f8d1e2a9c7b  ingestion tables
-b7e2c4f8a1d3  embedding tables (ja inclui campos de metricas da V5, commit unico)
+b7e2c4f8a1d3  embedding tables
 c19a4e5f6b20  startup tables
 f90193dc1578  recommendations
 782e2cbdbfab  briefings
 2e85accbd38f  analysis_jobs
 3ca1a725713e  classificacao em startups
-8d84cba84a02  indice FTS de chunks (substituido pela b3f6e91c7d45)
+8d84cba84a02  indice FTS de chunks (substituido por BM25)
 f77998c46d08  campos estruturados em startups
-1d3e7f9a2b4c  source_type em documents para separar evidencias de startups e conhecimento NVIDIA
-2a7c9b8d1e5f  source_type em ingestion_jobs para preservar tipo ate o worker
-5b6c7d8e9f01  url_ingestion_jobs para Orchestration V2
-7d4f2a9c6e83  source_type em scraping_jobs para preservar origem desde a coleta
-4c8a1f6e9b2d  startup_id/evidence_attached/recommendation_count/briefing_id em url_ingestion_jobs (Orchestration V2 jornada completa)
-b3f6e91c7d45  indice BM25 (`pg_search`) em chunks para busca lexical (RAG V3, extensao)
+1d3e7f9a2b4c  source_type em documents
+2a7c9b8d1e5f  source_type em ingestion_jobs
+5b6c7d8e9f01  url_ingestion_jobs
+7d4f2a9c6e83  source_type em scraping_jobs
+4c8a1f6e9b2d  jornada completa em url_ingestion_jobs
+b3f6e91c7d45  BM25 (`pg_search`) em chunks
+c9d3e7f0a4b8  startup_discovery_runs
+e8a7c4d2b1f9  review_status/review_comment/reviewed_by/reviewed_at em recommendations e briefings
+f4b2a9c8d6e1  parent_job_id/enrichment_round em url_ingestion_jobs
 ```
 
 Tabelas principais:
@@ -114,91 +114,39 @@ recommendations
 briefings
 analysis_jobs
 url_ingestion_jobs
+startup_discovery_runs
 ```
 
 ---
 
 ## Testes
 
-Validacao executada em 25/06/2026 com infra local ativa
-(Postgres/Redis/Qdrant via `infra/docker-compose.yml`):
+Ultima validacao completa registrada com infra local ativa:
 
 ```txt
-Backend: 559 passed, 1 skipped (`pytest apps/api/src/modules/ apps/api/src/shared/ -q`)
-  - o skip e o teste Ragas opt-in (RUN_RAGAS_EVAL=1 nao definido)
-Frontend: 25 passed (`npm test` em apps/web/)
+Backend: 559 passed, 1 skipped
+Frontend: 25 passed
 ```
 
-A suite Python marca dependencias de integracao como `skip` explicito
-quando a infra local nao esta ativa. Com Postgres/Redis/Qdrant
-disponiveis, esses testes rodam normalmente. O teste de PDF
-(`test_jinja_playwright_pdf_renderer.py`) precisa so do Chromium do
-Playwright, ja instalado — nao depende de Postgres/Redis/Qdrant.
-
-Validado tambem fora da suite automatizada, via `httpx.AsyncClient`
-direto contra a app ASGI real: criar startup -> recommendations ->
-briefing -> `GET /url-ingestion/jobs` (200, total real) ->
-`GET /briefings/{id}/export` (200, PDF real de 28KB, `%PDF-1.4`) ->
-`POST /rag/answer` (200, resposta real do Gemini). `next build` e
-`tsc --noEmit` sem erro. Limpeza de vetores orfaos
-(`_cleanup_superseded_vectors`) e dedup de startups (`POST /startups`
-real, mesmo dominio com nome diferente reaproveita o mesmo id) tambem
-validados via script manual contra Postgres e Qdrant reais, alem dos
-testes automatizados.
+O codigo atual ja inclui testes adicionais de Frontend V5 e `startup_discovery`; `CLAUDE.md` registra 568 testes backend coletados e 30 testes frontend coletados em 25/06/2026. O teste Ragas continua opt-in via `RUN_RAGAS_EVAL=1`.
 
 ---
 
-## O Que Falta Para o Produto Final
+## O Que Falta
 
-Para o MVP backend macro: nada estrutural grande. Frontend V3 (todo o
-escopo do roadmap original de frontend que importava pro caso) tambem
-esta completo agora.
-
-Para aderencia total ao case original (ver CLAUDE.md secao "Pending" para
-o detalhe e ordem de prioridade):
+Para o MVP/demo macro, nada estrutural grande. O que permanece:
 
 ```txt
-Descoberta de startups por fontes gratuitas (StartSe, Distrito, Endeavor
-etc.) - zero orcamento, ver docs/scraping/roadmap_scraping.md
-Chain de enriquecimento quando a fonte inicial e' fraca - parcialmente
-desenhada, ainda nao implementada: Evidence Validation pode sinalizar
-`needs_more_sources` e Search Planner gera queries, mas falta executor de
-busca web (ex: Tavily/SearchExecutorPort), criacao automatica de novos
-`url_ingestion_jobs` para a mesma startup e novo round de extracao/classificacao
-Frontend V4 (Recharts, comparacao, fila em lote) - precisa de endpoints
-agregados novos no backend (GROUP BY), nenhum item acima cria isso
-Auth, CI/CD, deploy e backup do Qdrant - fora de escopo deliberadamente
-(decidido 23/06/2026: este projeto continua case/demo, nao alvo de
-producao; ver tabela "Decisoes ja resolvidas" em
-docs/decisoes_pendentes.md, linha "Projeto e' demo ou produto real?",
-movida para docs/roadmap_produto_final.md)
+Frontend V5: revisao humana simples entregue, sem auth completa - ENTREGUE.
+Chain de enriquecimento quando a fonte inicial e fraca: jobs filhos do mesmo dominio e executor Tavily opcional entregues; falta validar com chave real e calibrar ranking/allowlist.
+Expandir Startup Discovery para mais hubs gratuitos alem dos 3 iniciais.
+Auth, CI/CD, deploy e backup do Qdrant: fora de escopo deliberadamente.
 ```
-
-NVIDIA Knowledge V2, Orchestration V2 (URL bruta ate briefing), Frontend
-V3 completo e P3 (diferencial do case, decidido + implementado) ja estao
-prontos — nao aparecem mais como pendencia nesta lista. "Sincronia
-Qdrant<->Postgres" (redefinida como limpeza de vetores orfaos) e
-"rapidfuzz para dedup de startups" tambem saem da lista agora
-(25/06/2026) — ambos implementados. `docs/decisoes_pendentes.md` nao tem
-pergunta em aberto.
 
 ---
 
 ## Proximo Passo Recomendado
 
 ```txt
-Descoberta de startups por fontes gratuitas (StartSe, Distrito, Endeavor
-etc.) - unico item do backlog secundario com decisao tomada que ainda
-falta implementar.
+Validar a chain de enriquecimento com Tavily real e calibrar ranking/allowlist das fontes externas.
 ```
-
-Motivo: todos os outros itens decididos ja foram fechados — NVIDIA
-Knowledge V2 (20/20 fontes, 17/20 com conteudo), Orchestration V2 (URL
-bruta ate startup/recommendations/briefing, sem operacao manual),
-Frontend V3 completo (navegacao/historico, transparencia, chatbot,
-export), P3 (diferencial "rastreabilidade ponta a ponta"), a sincronia
-Qdrant<->Postgres (redefinida e implementada como limpeza de vetores
-orfaos no re-scrape) e o dedup de startups via `rapidfuzz` (limiar 92,
-calibrado com 17 pares reais). O que resta sem decisao de ordem e'
-descoberta de novas fontes gratuitas e o Frontend V4 (este ultimo
-deliberadamente por ultimo, depende de endpoints agregados novos).

@@ -10,7 +10,10 @@ aqui.
 
 from uuid import UUID
 
-from apps.api.src.modules.orchestration.application.ports import StartupsPort
+from apps.api.src.modules.orchestration.application.ports import (
+    StartupProfileSnapshot,
+    StartupsPort,
+)
 from apps.api.src.modules.startups.application.public.classification_trigger import (
     ClassificationTrigger,
 )
@@ -23,6 +26,9 @@ from apps.api.src.modules.startups.application.public.extraction_trigger import 
 from apps.api.src.modules.startups.application.public.startup_creator import (
     StartupCreator,
 )
+from apps.api.src.modules.startups.application.public.startup_profile_reader import (
+    StartupProfileReader,
+)
 
 
 class StartupsModulePort(StartupsPort):
@@ -34,11 +40,13 @@ class StartupsModulePort(StartupsPort):
         evidence_attacher: EvidenceAttacher,
         extraction_trigger: ExtractionTrigger,
         classification_trigger: ClassificationTrigger,
+        profile_reader: StartupProfileReader,
     ) -> None:
         self._creator = creator
         self._evidence_attacher = evidence_attacher
         self._extraction_trigger = extraction_trigger
         self._classification_trigger = classification_trigger
+        self._profile_reader = profile_reader
 
     async def create_startup(self, *, name: str, website_url: str) -> UUID:
         return await self._creator.create_startup(name=name, website_url=website_url)
@@ -65,3 +73,17 @@ class StartupsModulePort(StartupsPort):
 
     async def try_classify(self, startup_id: UUID) -> None:
         await self._classification_trigger.try_classify(startup_id)
+
+    async def get_profile(self, startup_id: UUID) -> StartupProfileSnapshot:
+        profile = await self._profile_reader.get_profile(startup_id)
+        startup = profile.startup
+        return StartupProfileSnapshot(
+            name=startup.name,
+            website_url=startup.website_url,
+            founders=list(startup.founders),
+            funding_stage=startup.funding_stage.value
+            if startup.funding_stage is not None
+            else None,
+            customers=list(startup.customers),
+            evidence_urls=[evidence.source_url for evidence in profile.evidences],
+        )

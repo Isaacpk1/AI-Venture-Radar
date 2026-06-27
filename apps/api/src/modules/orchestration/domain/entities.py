@@ -93,6 +93,8 @@ class UrlIngestionJob:
     document_id: UUID | None = None
     embedding_job_id: UUID | None = None
     startup_id: UUID | None = None
+    parent_job_id: UUID | None = None
+    enrichment_round: int = 0
     evidence_attached: bool = False
     recommendation_count: int | None = None
     briefing_id: UUID | None = None

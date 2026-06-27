@@ -24,6 +24,10 @@ class RecommendationMapper:
             justification=entity.justification,
             matched_keywords=list(entity.matched_keywords),
             evidence_ids=[str(evidence_id) for evidence_id in entity.evidence_ids],
+            review_status=entity.review_status,
+            review_comment=entity.review_comment,
+            reviewed_by=entity.reviewed_by,
+            reviewed_at=entity.reviewed_at,
             created_at=entity.created_at,
         )
 
@@ -41,5 +45,9 @@ class RecommendationMapper:
             justification=model.justification,
             matched_keywords=tuple(model.matched_keywords),
             evidence_ids=tuple(UUID(value) for value in model.evidence_ids),
+            review_status=model.review_status,
+            review_comment=model.review_comment,
+            reviewed_by=model.reviewed_by,
+            reviewed_at=model.reviewed_at,
             created_at=model.created_at,
         )

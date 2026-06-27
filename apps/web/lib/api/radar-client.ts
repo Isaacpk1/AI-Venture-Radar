@@ -6,6 +6,7 @@ import type {
   MaturityDistribution,
   RagAnswer,
   Recommendation,
+  ReviewInput,
   Startup,
   StartupEvidence,
   StartupPage,
@@ -66,8 +67,22 @@ export function listRecommendations(startupId: string) {
   return request<Recommendation[]>(`/api/radar/recommendations?startup_id=${encodeURIComponent(startupId)}`);
 }
 
+export function reviewRecommendation(recommendationId: string, input: ReviewInput) {
+  return request<Recommendation>(`/api/radar/recommendations/${recommendationId}/review`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
 export function listBriefings(startupId: string) {
   return request<Briefing[]>(`/api/radar/briefings?startup_id=${encodeURIComponent(startupId)}`);
+}
+
+export function reviewBriefing(briefingId: string, input: ReviewInput) {
+  return request<Briefing>(`/api/radar/briefings/${briefingId}/review`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 
 export function askNvidiaKnowledge(query: string) {

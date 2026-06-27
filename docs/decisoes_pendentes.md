@@ -36,10 +36,10 @@ texto da doc que referenciou, nao pelo numero da secao.
 | Proteger modelo/dimensao no Qdrant? | Sim, decidido | `docs/embeddings/roadmap_embeddings.md` |
 | Sincronia Qdrant<->Postgres? | **Redefinida em 25/06/2026**: a premissa original (reupsert quando `Document`/`ScrapingResult` for *editado*) nao tinha gatilho real — essas entidades sao write-once, sem fluxo de edicao no codigo. Implementado o equivalente real: deletar vetores orfaos no Qdrant quando uma URL e' re-raspada apos o cache de 3 dias expirar | `docs/embeddings/roadmap_embeddings.md`, `docs/orchestration/roadmap_orchestration.md` |
 | Backup do Qdrant? | Nao agora (demo) | `docs/roadmap_produto_final.md` P2 (fora de escopo) |
-| Descoberta de startups — fonte? | 14 hubs gratuitos (StartSe, Distrito, etc.) + 4 fontes de enriquecimento, teto de custo zero/demo | `docs/scraping/roadmap_scraping.md`, secao "Descoberta de startups" |
+| Descoberta de startups — fonte? | V1 entregue com 3 hubs gratuitos (InovAtiva Brasil, Abstartups, 100 Open Startups); expansao para 14 hubs continua futura | `docs/startup_discovery/roadmap_startup_discovery.md` |
 | Auth completa vs revisao simples? | Revisao simples, sem login | `docs/frontend/roadmap_frontend.md` V5 |
 | rapidfuzz pro dedup de startups? | Sim, implementado em 25/06/2026 — limiar 92, calibrado com 17 pares reais (7 duplicatas + 10 empresas diferentes) antes de codar | `docs/startups/roadmap_startups.md` |
-| recharts vs SVG pros graficos? | Recharts | `docs/frontend/roadmap_frontend.md`, `docs/mapa_tecnologias.md` |
+| recharts vs SVG pros graficos? | Implementacao final usa SVG/HTML em React sem dependencia nova de graficos | `docs/frontend/roadmap_frontend.md`, `docs/mapa_tecnologias.md` |
 | NVIDIA RAG Agent (V10) sem uso — redesenhar? | Nao, deixar como esta — RAG-grounding em recommendations/briefing cobre o mesmo proposito por outro caminho | `docs/agents/roadmap_agentes.md` |
 
 Sequencia de implementacao de tudo isso: ver "Ordem de implementacao

@@ -106,6 +106,24 @@ class SearchPlanResult:
 
 
 @dataclass(frozen=True)
+class SearchResultCandidate:
+    """Resultado candidato devolvido por um executor de busca web."""
+
+    url: str
+    title: str | None = None
+    snippet: str | None = None
+    score: float | None = None
+
+
+@dataclass(frozen=True)
+class SearchExecutionResult:
+    """Resultados de uma query ja executada em um provedor de busca."""
+
+    query: str
+    results: list[SearchResultCandidate]
+
+
+@dataclass(frozen=True)
 class StartupClassificationInput:
     """Contexto entregue ao Startup Classifier Agent.
 

@@ -24,6 +24,7 @@ startup_id -> dispara recommendations -> dispara briefing -> AnalysisJob
 |---|---|---|
 | Orchestration V1 | Implementado | analysis_jobs a partir de startup_id existente |
 | Orchestration V2 | Implementado | Entrada por URL bruta, ponta a ponta ate o briefing |
+| Orchestration V2.1 | Implementado | Primeira rodada automatica de enriquecimento por URLs do mesmo dominio |
 | Orchestration V3 | Futuro | Retomada de jobs falhados (retry por etapa) |
 | Orchestration V4 | Futuro | Notificacoes de conclusao |
 
@@ -132,6 +133,35 @@ integracao -> 31 unit/4 integracao. Validado contra Postgres e Qdrant
 reais via script manual, alem de unit/integration tests com fakes/colecao
 descartavel.
 
+**Extensao feita em 26/06/2026 (continua V2 - primeira fatia de
+enriquecimento automatico):** depois de `try_extract`/`try_classify` na etapa
+`ANALYZING`, `AdvanceUrlIngestionJob` consulta o perfil consolidado da
+startup. Se `founders`, `funding_stage` ou `customers` ainda estiverem vazios,
+e o job estiver em `enrichment_round < 1`, a orquestracao cria ate 2
+`url_ingestion_jobs` filhos para o mesmo `startup_id`, usando paginas
+candidatas do mesmo dominio (`/about`, `/team`, `/customers`,
+`/case-studies`). A tabela `url_ingestion_jobs` ganhou `parent_job_id` e
+`enrichment_round`; o repositorio ganhou `list_by_startup_id()` para dedupe
+por URL ja conhecida; e os jobs filhos sao despachados pela mesma fila
+`url_ingestion`. Testes unitarios de orquestracao: 34 passed.
+
+**Extensao feita em 26/06/2026 (continua V2 - busca externa opcional):** o
+modulo `agents` ganhou `SearchExecutorPort` e o adapter HTTP
+`TavilySearchExecutor`, configurado por `TAVILY_API_KEY`/
+`TAVILY_SEARCH_URL`. `AdvanceUrlIngestionJob` agora tenta usar Search Planner
++ executor de busca para encontrar URLs externas antes do fallback do mesmo
+dominio. Sem chave Tavily, a factory devolve `None` e o fluxo segue usando as
+paginas do dominio inicial. Testes focados: 22 passed.
+
+**Extensao feita em 26/06/2026 (continua V2 - resgate de fonte fraca):**
+quando o scraping de uma fonte `startup_evidence` falha porque o conteudo foi
+rejeitado pela validacao ou pede mais fontes, a orquestracao cria uma startup
+minima pelo dominio e agenda jobs filhos de enriquecimento. O job original
+continua `failed` para auditoria, mas a descoberta nao morre ali. Conteudo
+fraco nao vira evidencia aceita; ele so serve para disparar busca por fontes
+melhores. Teste focado: rejeicao de `https://www.kunumi.com/` agenda URLs
+externas/mesmo dominio como jobs filhos.
+
 ---
 
 ## Orchestration V3 - Retomada de Jobs Falhados
@@ -174,7 +204,7 @@ eventos resolveria um problema de latencia que ainda nao foi medido como
 real, e contradiria a regra 8 do `CLAUDE.md` ("construir so o que e
 necessario agora").
 
-### Chain de enriquecimento por busca (discutido em 23/06/2026)
+### Chain de enriquecimento por busca
 
 Pergunta original: depois de raspar uma URL e extrair o perfil da startup,
 campos como `founders` muitas vezes ficam vazios porque a pagina raspada
@@ -182,16 +212,23 @@ nunca mencionou isso. Hoje `AdvanceUrlIngestionJob` roda `try_extract` uma
 unica vez e para — se o campo nao estava na evidencia, fica vazio para
 sempre, sem nova tentativa.
 
-Confirmado o que falta (ver tambem `docs/agents/roadmap_agentes.md`, secao
-do Search Planner Agent): o Search Planner Agent (V3) ja sabe transformar
-um objetivo em queries de busca, mas (a) nao tem client de busca real para
-virar query em URL, e (b) nunca e chamado automaticamente — so pela fila
-generica `agent_runs`.
+Status em 26/06/2026: a chain ja detecta perfil incompleto, limita a uma
+rodada, cria jobs filhos e, quando `GEMINI_API_KEY` + `TAVILY_API_KEY` estao
+configuradas, tenta fontes externas planejadas pelo Search Planner antes de
+cair no fallback do mesmo dominio. Tambem cobre o caso em que a URL inicial
+e' fraca demais e falha ainda no scraping: a fonte e marcada como falha, mas
+dispara enriquecimento para a startup minima.
+
+O que ainda falta: validar com Tavily real, calibrar ranking/allowlist de
+dominios confiaveis e decidir se a segunda rodada deve existir alem do limite
+inicial `MAX_ENRICHMENT_ROUNDS = 1`.
 
 | Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
 |---|---|---|---|
-| `try_extract` roda uma vez; campo vazio fica vazio para sempre | depois de `try_extract` na etapa `ANALYZING`, checar se `founders`/`funding_stage`/`customers` continuam vazios; se sim, chamar o Search Planner Agent + o `SearchExecutorPort` novo (Tavily, ver roadmap de `agents`) para achar 1-2 URLs candidatas (ex: LinkedIn, Crunchbase, pagina `/about`/`/team` do mesmo dominio) | Nova capacidade de orchestration, complementar ao P1 #4 do `docs/roadmap_produto_final.md` | Alto — novo `ScrapingJob` associado ao mesmo `startup_id`, nova chamada de agente, novo round de `try_extract` quando a evidencia chegar |
-| Risco de loop sem fim se a busca nunca achar o dado | limite explicito de 1-2 rounds de enriquecimento por `startup_id` (campo novo em `url_ingestion_jobs`, ex: `enrichment_rounds`), mesma disciplina de `max_iterations` que todo agente do projeto ja segue | Mesma feature acima | Baixo (so um contador + guarda) |
+| `try_extract` roda uma vez; campo vazio fica vazio para sempre | checagem de `founders`/`funding_stage`/`customers` vazios e criacao de ate 2 jobs filhos do mesmo dominio | Entregue em 26/06/2026 | Baixo |
+| Risco de loop sem fim se a busca nunca achar o dado | `parent_job_id` + `enrichment_round`, com limite inicial `MAX_ENRICHMENT_ROUNDS = 1` | Entregue em 26/06/2026 | Baixo |
+| Encontrar fontes fora do dominio original | Search Planner Agent + `SearchExecutorPort` Tavily opcional para achar 1-2 URLs candidatas externas, como LinkedIn, Crunchbase ou paginas de imprensa | Entregue em 26/06/2026; falta validar com chave real | Medio |
+| URL inicial fraca falha antes de `ANALYZING` | resgate em `SCRAPING`: cria startup minima e agenda enriquecimento, sem aceitar a fonte fraca como evidencia | Entregue em 26/06/2026 | Baixo |
 
 Custo real desta feature: cada round gasta 1 chamada Gemini (Search
 Planner) + 1 chamada de API de busca (Tavily) + 1 scraping completo + 1

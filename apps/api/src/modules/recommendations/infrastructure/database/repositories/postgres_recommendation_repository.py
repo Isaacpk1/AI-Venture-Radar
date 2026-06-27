@@ -57,6 +57,16 @@ class PostgresRecommendationRepository(RecommendationRepository):
         model.justification = justification
         await self._session.flush()
 
+    async def update_review(self, recommendation: Recommendation) -> None:
+        model = await self._session.get(RecommendationModel, recommendation.id)
+        if model is None:
+            return
+        model.review_status = recommendation.review_status
+        model.review_comment = recommendation.review_comment
+        model.reviewed_by = recommendation.reviewed_by
+        model.reviewed_at = recommendation.reviewed_at
+        await self._session.flush()
+
     async def count_by_technology(self, *, limit: int = 10) -> list[tuple[str, str, int]]:
         statement = (
             select(

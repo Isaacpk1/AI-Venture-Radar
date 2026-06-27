@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass, field
 from uuid import UUID
 
-MIN_MATCHED_KEYWORDS = 1
+MIN_MATCHED_KEYWORDS = 2
 MIN_MATCH_SCORE = 0.25
 AI_NATIVE_SCORE_BONUS = 0.1
 

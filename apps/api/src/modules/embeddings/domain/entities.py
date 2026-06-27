@@ -78,17 +78,22 @@ class EmbeddingJob:
         self.error_message = reason
         self.finished_at = utc_now()
 
-    def finish(self, *, succeeded: int, failed: int) -> None:
+    def finish(
+        self, *, succeeded: int, failed: int, error_message: str | None = None
+    ) -> None:
         if self.status is not EmbeddingJobStatus.RUNNING:
             raise InvalidEmbeddingJobTransitionError(
                 f"EmbeddingJob {self.id} nao pode finalizar a partir de {self.status}."
             )
         if failed == 0:
             self.status = EmbeddingJobStatus.COMPLETED
+            self.error_message = None
         elif succeeded == 0:
             self.status = EmbeddingJobStatus.FAILED
+            self.error_message = error_message
         else:
             self.status = EmbeddingJobStatus.PARTIAL
+            self.error_message = error_message
         self.finished_at = utc_now()
         self.succeeded_chunks = succeeded
         self.failed_chunks = failed

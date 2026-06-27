@@ -15,7 +15,19 @@ class BriefingView:
     id: UUID
     startup_id: UUID
     content: str
+    review_status: str
+    review_comment: str | None
+    reviewed_by: str | None
+    reviewed_at: datetime | None
     generated_at: datetime
+
+
+@dataclass(frozen=True)
+class ReviewBriefingInput:
+    briefing_id: UUID
+    status: str
+    comment: str | None = None
+    reviewed_by: str | None = None
 
 
 @dataclass(frozen=True)
@@ -55,6 +67,8 @@ class RecommendationSnapshot:
     category: str
     score: float
     justification: str
+    confidence: float = 0.0
+    complexity: str = "medium"
 
 
 @dataclass(frozen=True)

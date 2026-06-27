@@ -25,6 +25,7 @@ def technology_to_view(technology: NvidiaTechnology) -> NvidiaTechnologyView:
         use_cases=list(technology.use_cases),
         keywords=list(technology.keywords),
         official_url=technology.official_url,
+        complexity=technology.complexity,
     )
 
 

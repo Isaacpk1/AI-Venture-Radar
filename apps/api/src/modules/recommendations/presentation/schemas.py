@@ -16,6 +16,12 @@ class GenerateRecommendationsRequest(BaseModel):
     startup_id: UUID
 
 
+class ReviewRecommendationRequest(BaseModel):
+    status: str
+    comment: str | None = None
+    reviewed_by: str | None = None
+
+
 class RecommendationResponse(BaseModel):
     id: UUID
     startup_id: UUID
@@ -29,6 +35,10 @@ class RecommendationResponse(BaseModel):
     justification: str
     matched_keywords: list[str]
     evidence_ids: list[UUID]
+    review_status: str
+    review_comment: str | None
+    reviewed_by: str | None
+    reviewed_at: datetime | None
     created_at: datetime
 
     @classmethod
@@ -46,6 +56,10 @@ class RecommendationResponse(BaseModel):
             justification=view.justification,
             matched_keywords=view.matched_keywords,
             evidence_ids=view.evidence_ids,
+            review_status=view.review_status,
+            review_comment=view.review_comment,
+            reviewed_by=view.reviewed_by,
+            reviewed_at=view.reviewed_at,
             created_at=view.created_at,
         )
 

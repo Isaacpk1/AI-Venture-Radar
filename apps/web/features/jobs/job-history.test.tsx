@@ -18,7 +18,7 @@ function renderWithClient(children: ReactNode) {
 const baseJob = {
   id: "job-1", url: "https://acme.example.com", source_type: "startup_evidence", status: "completed" as const,
   scraping_job_id: null, scraping_result_id: null, ingestion_job_id: null, document_id: null, embedding_job_id: null,
-  startup_id: "startup-1", recommendation_count: 2, briefing_id: "briefing-1", error_message: null,
+  startup_id: "startup-1", parent_job_id: null, enrichment_round: 0, recommendation_count: 2, briefing_id: "briefing-1", error_message: null,
   created_at: "2026-06-24T10:00:00Z", started_at: null, finished_at: null,
 };
 

@@ -49,7 +49,7 @@ tecnologia entra, nunca em `domain/`.
 | Trafilatura | `infrastructure/scrapers/` | Em uso | Isola conteudo principal em paginas densas (artigos, docs tecnicos) |
 | httpx (Gemini via HTTP direto) | `infrastructure/semantic_validators/` | Em uso | Validacao semantica leve (LLM_REVIEW) sem trazer LangChain so para isso |
 | Firecrawl | — | Candidata (so comentada hoje, `FIRECRAWL_API_KEY` existe em `Settings` sem uso) | Ultimo fallback pago para paginas que esgotam BS4/Playwright/Trafilatura (ex: `rapids-docs` no NVIDIA Knowledge V2) — ver `docs/scraping/roadmap_scraping.md` |
-| Extrator de links por hub (sem lib nova, BS4/Trafilatura ja resolvem) | novo, reusa o pipeline existente (`CreateScrapingJob`) so trocando a origem da URL | Decidida (23/06/2026), gratuito/demo | Descoberta de startups novas via 14 hubs (StartSe, Distrito, Endeavor, etc.) — ver `docs/scraping/roadmap_scraping.md`, "Descoberta de startups" |
+| `startup_discovery` com extratores de hubs (`httpx` + BeautifulSoup) | `modules/startup_discovery/infrastructure/hub_extractors/` | Em uso (V1) | Descoberta gratuita inicial em InovAtiva Brasil, Abstartups e 100 Open Startups; cria `url_ingestion_jobs`. Expansao para os demais hubs segue futura |
 
 ---
 
@@ -81,7 +81,7 @@ tecnologia entra, nunca em `domain/`.
 | Pydantic | saida de todo LLM client | Em uso | Regra 9 — resposta do LLM validada estruturalmente, nunca confiada direto |
 | PostgreSQL (checkpoints) | `infrastructure/checkpoints/postgres_checkpointer.py` | Em uso | Persiste estado do LangGraph por `thread_id` (human-in-the-loop, V6/V7) |
 | `asyncio.timeout` (stdlib) | `application/use_cases/execute_agent_job.py` | Candidata | Aplicar o limite que o `CLAUDE.md` ja declara obrigatorio (`timeout_total`) mas que ainda nao esta no codigo |
-| Tavily | novo `SearchExecutorPort` em `infrastructure/search_adapters/` | Candidata | Unico jeito de transformar a query de texto do Search Planner Agent numa URL real; free tier, integra direto com LangChain — ver `docs/agents/roadmap_agentes.md` |
+| Tavily | `SearchExecutorPort` em `agents/infrastructure/search_adapters/` | Em uso opcional | Transforma queries do Search Planner Agent em URLs externas quando `TAVILY_API_KEY` esta configurada |
 
 ---
 
@@ -138,8 +138,8 @@ tecnologia entra, nunca em `domain/`.
 | Tecnologia | Camada | Status | Por que |
 |---|---|---|---|
 | Dramatiq + Redis (reforco do item 1) | `infrastructure/queue/dramatiq_url_ingestion_dispatcher.py` | Em uso | A propria fila `url_ingestion` funciona como loop de polling (`UrlIngestionStillProcessingError` + reentrega) — decisao deliberada contra Kafka/RabbitMQ (regra 8) |
-| Tavily + Search Planner Agent (reuso, ver secao 5) | novo branch em `application/use_cases/advance_url_ingestion_job.py` | Candidata | Chain de enriquecimento: busca novas URLs quando `founders`/`funding_stage`/`customers` ficam vazios apos `try_extract` — ver `docs/orchestration/roadmap_orchestration.md` |
-
+| URLs do mesmo dominio + fila `url_ingestion` | `application/use_cases/advance_url_ingestion_job.py` | Em uso | Primeira fatia da chain de enriquecimento: cria ate 2 jobs filhos quando `founders`/`funding_stage`/`customers` ficam vazios apos `try_extract` |
+| Tavily + Search Planner Agent (reuso, ver secao 5) | `SearchExecutorPort` + adapters de enriquecimento em `orchestration` | Em uso opcional | Busca URLs externas quando `TAVILY_API_KEY` esta configurada; falta validar ranking/allowlist com chave real |
 ---
 
 ## 12. Frontend
@@ -151,7 +151,7 @@ tecnologia entra, nunca em `domain/`.
 | TanStack Query | `providers/query-provider.tsx` | Em uso | Polling de jobs or (`/jobs/[jobId]`) sem reimplementar cache/retry |
 | Tailwind CSS | estilo de toda `apps/web/` | Em uso | Utilitarios de CSS, sem framework de componentes adicional |
 | Vitest + React Testing Library | `apps/web/**/*.test.tsx` | Em uso | 25 testes (24/06/2026) cobrem `UrlSubmissionForm`, `JobStatusPanel`, `StartupDetails`, `StartupPortfolio`, `JobHistory` e `NvidiaChat` |
-| recharts | novo, componente de grafico na V4 | Decidida (23/06/2026) | 2 graficos simples (distribuicao de maturidade de IA, top tecnologias NVIDIA) — ver `docs/frontend/roadmap_frontend.md` |
+| SVG/HTML em React para graficos do dashboard | `features/dashboard/portfolio-charts.tsx` | Em uso (Frontend V4) | Implementacao atual usa componentes leves sem dependencia de grafico; a decisao antiga por `recharts` nao foi aplicada no codigo |
 | `/rag/answer` (reuso, sem tech nova) | `features/knowledge/nvidia-chat.tsx` | Em uso (24/06/2026) | Chatbot sobre a base NVIDIA Knowledge — contrato publico de `rag` ja existia com citacoes, esta entrega foi so a UI |
 | `react-markdown` + `remark-gfm` | `components/markdown-content.tsx` | Em uso (24/06/2026) | Fechamento do P3 (rastreabilidade ponta a ponta): briefing/justificativa/resposta do chat eram texto cru, links nunca ficavam clicaveis na tela — so no PDF exportado. JS puro, sem dependencia nativa |
 

@@ -27,6 +27,10 @@ class Recommendation:
     evidence_ids: tuple[UUID, ...] = field(default_factory=tuple)
     confidence: float = 0.0
     complexity: str = "medium"
+    review_status: str = "pending"
+    review_comment: str | None = None
+    reviewed_by: str | None = None
+    reviewed_at: datetime | None = None
 
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utc_now)
@@ -37,6 +41,9 @@ class Recommendation:
         self.category = self.category.strip()
         self.justification = self.justification.strip()
         self.complexity = self.complexity.strip().lower()
+        self.review_status = self.review_status.strip().lower()
+        self.review_comment = self._normalize_optional_text(self.review_comment)
+        self.reviewed_by = self._normalize_optional_text(self.reviewed_by)
 
         if not self.technology_slug:
             raise RecommendationError("Recomendacao precisa ter technology_slug.")
@@ -50,6 +57,10 @@ class Recommendation:
             raise RecommendationError("confidence deve ficar entre 0 e 1.")
         if self.complexity not in {"low", "medium", "high"}:
             raise RecommendationError("complexity deve ser low, medium ou high.")
+        if self.review_status not in {"pending", "approved", "rejected"}:
+            raise RecommendationError(
+                "review_status deve ser pending, approved ou rejected."
+            )
 
     def update_justification(self, text: str) -> None:
         """Substitui a justificativa (ex: revisao de linguagem via agente)."""
@@ -58,3 +69,29 @@ class Recommendation:
         if not text:
             raise RecommendationError("Recomendacao precisa ter justificativa.")
         self.justification = text
+
+    def review(
+        self,
+        *,
+        status: str,
+        comment: str | None = None,
+        reviewed_by: str | None = None,
+    ) -> None:
+        """Registra uma revisao humana simples, sem auth completa."""
+
+        status = status.strip().lower()
+        if status not in {"pending", "approved", "rejected"}:
+            raise RecommendationError(
+                "review_status deve ser pending, approved ou rejected."
+            )
+        self.review_status = status
+        self.review_comment = self._normalize_optional_text(comment)
+        self.reviewed_by = self._normalize_optional_text(reviewed_by)
+        self.reviewed_at = None if status == "pending" else utc_now()
+
+    @staticmethod
+    def _normalize_optional_text(value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None

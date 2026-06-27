@@ -33,6 +33,8 @@ class CreateUrlIngestionJobInput:
     url: str
     source_type: str = "startup_evidence"
     startup_id: UUID | None = None
+    parent_job_id: UUID | None = None
+    enrichment_round: int = 0
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,8 @@ class UrlIngestionJobView:
     document_id: UUID | None
     embedding_job_id: UUID | None
     startup_id: UUID | None
+    parent_job_id: UUID | None
+    enrichment_round: int
     recommendation_count: int | None
     briefing_id: UUID | None
     error_message: str | None

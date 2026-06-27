@@ -11,6 +11,8 @@ export type UrlIngestionJob = {
   document_id: string | null;
   embedding_job_id: string | null;
   startup_id: string | null;
+  parent_job_id: string | null;
+  enrichment_round: number;
   recommendation_count: number | null;
   briefing_id: string | null;
   error_message: string | null;
@@ -94,6 +96,10 @@ export type Recommendation = {
   justification: string;
   matched_keywords: string[];
   evidence_ids: string[];
+  review_status: "pending" | "approved" | "rejected";
+  review_comment: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
   created_at: string;
 };
 
@@ -101,7 +107,17 @@ export type Briefing = {
   id: string;
   startup_id: string;
   content: string;
+  review_status: "pending" | "approved" | "rejected";
+  review_comment: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
   generated_at: string;
+};
+
+export type ReviewInput = {
+  status: "pending" | "approved" | "rejected";
+  comment?: string;
+  reviewed_by?: string;
 };
 
 export type MaturityDistribution = {

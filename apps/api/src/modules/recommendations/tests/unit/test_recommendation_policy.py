@@ -163,17 +163,46 @@ def test_operational_aliases_match_ai_infrastructure_signals() -> None:
     assert "nvidia-nemo" in slugs
 
 
-def test_ai_native_bonus_can_promote_a_relevant_candidate() -> None:
+def test_ai_native_bonus_can_promote_a_candidate_with_enough_signals() -> None:
     results = match_technologies(
         sector=None,
         description=None,
         ai_maturity_level="ai_native",
-        evidence_signals=[EvidenceSignal(evidence_id=uuid4(), text="fine-tune models")],
+        evidence_signals=[
+            EvidenceSignal(evidence_id=uuid4(), text="fine-tune llm models")
+        ],
         technologies=[NEMO],
     )
 
     assert results[0].technology.slug == "nvidia-nemo"
-    assert results[0].score == 0.27
+    assert results[0].score == 0.43
+
+
+def test_single_generic_keyword_is_not_enough_for_recommendation() -> None:
+    results = match_technologies(
+        sector=None,
+        description=None,
+        ai_maturity_level="ai_native",
+        evidence_signals=[EvidenceSignal(evidence_id=uuid4(), text="platform")],
+        technologies=[
+            TechnologyCandidate(
+                slug="nvidia-ai-enterprise",
+                name="NVIDIA AI Enterprise",
+                category="ai_platform",
+                use_cases=("padronizar stack corporativa de IA",),
+                keywords=(
+                    "enterprise",
+                    "platform",
+                    "governance",
+                    "deployment",
+                    "support",
+                    "infrastructure",
+                ),
+            )
+        ],
+    )
+
+    assert results == []
 
 
 def test_word_boundary_avoids_cross_language_false_positives() -> None:

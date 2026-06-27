@@ -214,7 +214,8 @@ real (comparar 1 startup nova contra a base existente) com biblioteca leve.
 
 Relacionado (campo vazio, nao duplicidade): quando `founders`/
 `funding_stage`/`customers` ficam vazios porque a evidencia raspada nunca
-mencionou isso, a tecnologia candidata e' uma chain de busca automatica por
-mais URLs — desenhada em `docs/orchestration/roadmap_orchestration.md`
-("Chain de enriquecimento por busca") e `docs/agents/roadmap_agentes.md`
-(Search Planner Agent), nao neste documento.
+mencionou isso, a primeira fatia da chain de busca automatica ja agenda
+mais URLs do mesmo dominio via `url_ingestion_jobs`. O proximo incremento e'
+usar Search Planner + executor de busca externa. Ver
+`docs/orchestration/roadmap_orchestration.md` ("Chain de enriquecimento por
+busca") e `docs/agents/roadmap_agentes.md`.

@@ -24,6 +24,7 @@ class NvidiaTechnologyView:
     use_cases: list[str]
     keywords: list[str]
     official_url: str
+    complexity: str
 
 
 @dataclass(frozen=True)

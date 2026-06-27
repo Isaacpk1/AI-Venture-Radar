@@ -41,6 +41,10 @@ from apps.api.src.modules.orchestration.application.use_cases.list_analysis_jobs
 from apps.api.src.modules.orchestration.infrastructure.briefing_adapters.briefing_adapter import (
     BriefingModulePort,
 )
+from apps.api.src.modules.orchestration.infrastructure.agents_adapters.search_enrichment_adapters import (
+    AgentsSearchExecutorAdapter,
+    AgentsSearchPlannerAdapter,
+)
 from apps.api.src.modules.orchestration.infrastructure.database.postgres_unit_of_work import (
     PostgresAnalysisUnitOfWork,
 )
@@ -106,6 +110,8 @@ class OrchestrationFactory:
 
     @staticmethod
     def create_advance_url_ingestion_job() -> AdvanceUrlIngestionJob:
+        search_planning_service = AgentsFactory.create_search_planning_service()
+        search_executor = AgentsFactory.create_search_executor()
         return AdvanceUrlIngestionJob(
             uow_factory=PostgresAnalysisUnitOfWork,
             scraping_port=ScrapingModulePort(ScrapingFactory.create_job_submitter()),
@@ -122,6 +128,7 @@ class OrchestrationFactory:
                 StartupsFactory.create_add_startup_evidence(),
                 StartupsFactory.create_extract_startup_profile(),
                 StartupsFactory.create_classify_startup(),
+                StartupsFactory.create_startup_profile_reader(),
             ),
             recommendations_port=RecommendationsModulePort(
                 RecommendationsFactory.create_recommendation_generator(),
@@ -131,4 +138,11 @@ class OrchestrationFactory:
                 BriefingFactory.create_briefing_generator(),
                 agent_service=AgentsFactory.create_briefing_agent_service(),
             ),
+            task_dispatcher=OrchestrationFactory.create_url_ingestion_task_dispatcher(),
+            search_planner_port=AgentsSearchPlannerAdapter(search_planning_service)
+            if search_planning_service is not None
+            else None,
+            search_executor_port=AgentsSearchExecutorAdapter(search_executor)
+            if search_executor is not None
+            else None,
         )

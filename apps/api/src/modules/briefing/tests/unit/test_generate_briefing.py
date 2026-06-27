@@ -84,6 +84,10 @@ class FakeBriefingRepository(BriefingRepository):
         if briefing is not None:
             briefing.content = content
 
+    async def update_review(self, briefing: Briefing) -> None:
+        if briefing.id in self.items:
+            self.items[briefing.id] = briefing
+
 
 class FakeGrounder(NvidiaContextGrounder):
     def __init__(self, result: GroundedContext | None) -> None:
@@ -144,6 +148,8 @@ async def test_generate_briefing_persists_markdown_content() -> None:
                 technology_name="NVIDIA NIM",
                 category="model_serving",
                 score=0.8,
+                confidence=0.75,
+                complexity="medium",
                 justification="Evidencias mencionam llm e inference.",
             )
         ]
@@ -155,6 +161,9 @@ async def test_generate_briefing_persists_markdown_content() -> None:
     assert view.startup_id == startup_id
     assert "Acme AI" in view.content
     assert "NVIDIA NIM" in view.content
+    assert "## Leitura Executiva" in view.content
+    assert "fit 80%" in view.content
+    assert "confianca 75%" in view.content
     assert uow.commits == 1
     assert len(repository.items) == 1
 

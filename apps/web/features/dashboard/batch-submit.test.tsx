@@ -47,6 +47,8 @@ describe("BatchSubmit", () => {
           document_id: null,
           embedding_job_id: null,
           startup_id: null,
+          parent_job_id: null,
+          enrichment_round: 0,
           recommendation_count: null,
           briefing_id: null,
           error_message: null,

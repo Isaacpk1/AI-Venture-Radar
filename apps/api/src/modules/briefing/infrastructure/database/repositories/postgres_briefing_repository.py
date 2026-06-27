@@ -50,3 +50,13 @@ class PostgresBriefingRepository(BriefingRepository):
             return
         model.content = content
         await self._session.flush()
+
+    async def update_review(self, briefing: Briefing) -> None:
+        model = await self._session.get(BriefingModel, briefing.id)
+        if model is None:
+            return
+        model.review_status = briefing.review_status
+        model.review_comment = briefing.review_comment
+        model.reviewed_by = briefing.reviewed_by
+        model.reviewed_at = briefing.reviewed_at
+        await self._session.flush()

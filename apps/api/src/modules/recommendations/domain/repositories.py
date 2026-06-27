@@ -31,6 +31,10 @@ class RecommendationRepository(ABC):
         """Atualiza so a justificativa de uma recomendacao ja existente."""
 
     @abstractmethod
+    async def update_review(self, recommendation: Recommendation) -> None:
+        """Atualiza os campos de revisao de uma recomendacao existente."""
+
+    @abstractmethod
     async def count_by_technology(self, *, limit: int = 10) -> list[tuple[str, str, int]]:
         """Retorna as tecnologias mais recomendadas.
 

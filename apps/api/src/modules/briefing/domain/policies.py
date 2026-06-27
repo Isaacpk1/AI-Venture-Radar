@@ -35,6 +35,8 @@ class RecommendationItem:
     category: str
     score: float
     justification: str
+    confidence: float = 0.0
+    complexity: str = "medium"
 
 
 def assess_risks(
@@ -84,7 +86,46 @@ def suggest_next_actions(recommendations: list[RecommendationItem]) -> list[str]
         ]
 
     top = recommendations[0]
+    if top.score < LOW_SCORE_THRESHOLD or top.confidence < LOW_CONFIDENCE_THRESHOLD:
+        return [
+            "Validar em conversa se ha workloads reais de GPU, inferencia, "
+            "treinamento ou operacao de IA antes de propor implementacao NVIDIA."
+        ]
     return [f"Agendar conversa tecnica sobre {top.technology_name} ({top.category})."]
+
+
+def _recommendation_strength(recommendation: RecommendationItem) -> str:
+    if recommendation.score >= 0.65 and recommendation.confidence >= 0.65:
+        return "forte"
+    if recommendation.score >= LOW_SCORE_THRESHOLD and recommendation.confidence >= LOW_CONFIDENCE_THRESHOLD:
+        return "moderada"
+    return "exploratoria"
+
+
+def _best_recommendation_summary(recommendations: list[RecommendationItem]) -> str:
+    if not recommendations:
+        return (
+            "As evidencias atuais ainda nao sustentam uma recomendacao NVIDIA "
+            "prioritaria."
+        )
+
+    top = recommendations[0]
+    strength = _recommendation_strength(top)
+    return (
+        f"Melhor sinal atual: {top.technology_name} ({strength}, "
+        f"fit {top.score:.0%}, confianca {top.confidence:.0%})."
+    )
+
+
+def _recommendation_context(
+    recommendation: RecommendationItem,
+    strength: str,
+) -> str:
+    return (
+        f"Leitura: {strength}; fit {recommendation.score:.0%}; "
+        f"confianca {recommendation.confidence:.0%}; "
+        f"complexidade {recommendation.complexity}."
+    )
 
 
 def build_briefing_markdown(
@@ -114,6 +155,14 @@ def build_briefing_markdown(
     if startup.website_url:
         lines.append(f"Site: {startup.website_url}")
 
+    lines += ["", "## Leitura Executiva"]
+    lines.append(_best_recommendation_summary(recommendations))
+    if recommendations and _recommendation_strength(recommendations[0]) == "exploratoria":
+        lines.append(
+            "A recomendacao deve ser tratada como hipotese de qualificacao, "
+            "nao como indicacao tecnica fechada."
+        )
+
     lines += ["", "## Evidencias Principais"]
     if evidences:
         for evidence in evidences:
@@ -125,9 +174,11 @@ def build_briefing_markdown(
     lines += ["", "## Recomendacoes NVIDIA"]
     if recommendations:
         for recommendation in recommendations:
+            strength = _recommendation_strength(recommendation)
             lines.append(
                 f"- **{recommendation.technology_name}** "
                 f"({recommendation.category}, score {recommendation.score}) — "
+                f"{_recommendation_context(recommendation, strength)} "
                 f"{recommendation.justification}"
             )
     else:

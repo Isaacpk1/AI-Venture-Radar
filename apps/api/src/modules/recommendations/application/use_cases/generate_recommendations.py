@@ -187,5 +187,9 @@ def to_recommendation_view(recommendation: Recommendation, *, priority: int = 1)
         justification=recommendation.justification,
         matched_keywords=list(recommendation.matched_keywords),
         evidence_ids=list(recommendation.evidence_ids),
+        review_status=recommendation.review_status,
+        review_comment=recommendation.review_comment,
+        reviewed_by=recommendation.reviewed_by,
+        reviewed_at=recommendation.reviewed_at,
         created_at=recommendation.created_at,
     )

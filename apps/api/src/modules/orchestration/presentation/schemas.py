@@ -59,6 +59,8 @@ class UrlIngestionJobResponse(BaseModel):
     document_id: UUID | None
     embedding_job_id: UUID | None
     startup_id: UUID | None
+    parent_job_id: UUID | None
+    enrichment_round: int
     recommendation_count: int | None
     briefing_id: UUID | None
     error_message: str | None
@@ -79,6 +81,8 @@ class UrlIngestionJobResponse(BaseModel):
             document_id=view.document_id,
             embedding_job_id=view.embedding_job_id,
             startup_id=view.startup_id,
+            parent_job_id=view.parent_job_id,
+            enrichment_round=view.enrichment_round,
             recommendation_count=view.recommendation_count,
             briefing_id=view.briefing_id,
             error_message=view.error_message,

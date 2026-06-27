@@ -90,6 +90,4 @@ metodo `create_recommendation_agent_service()`, mesmo padrao ja usado em
   (technology_name, categoria, score, matched_keywords, justificativa
   deterministica). Mais contexto e' uma extensao futura, nao bloqueante
 - Sem interrupt/human-in-the-loop — nao ha decisao de alto custo aqui
-- Sem consumidor sincrono dedicado (Recommendations V3 nao foi alterado;
-  quem chamaria este agente em vez do `RecommendationGenerator` direto e'
-  o futuro Briefing Agent V12)
+- Nota historica: na entrega original do V11 ainda nao havia consumidor sincrono dedicado. Estado atual (26/06/2026): orchestration usa o Recommendation Agent quando `GEMINI_API_KEY` esta configurada, com fallback para `RecommendationGenerator`.

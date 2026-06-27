@@ -13,9 +13,13 @@ from apps.api.src.modules.orchestration.application.ports import (
     BriefingPort,
     DocumentContentView,
     EmbeddingsPort,
+    EnrichmentSearchCandidate,
+    EnrichmentSearchExecutorPort,
+    EnrichmentSearchPlannerPort,
     IngestionPort,
     RecommendationsPort,
     ScrapingPort,
+    StartupProfileSnapshot,
     StartupsPort,
     StepStatus,
     UrlIngestionTaskDispatcher,
@@ -89,6 +93,11 @@ class FakeUrlIngestionJobRepository(UrlIngestionJobRepository):
             if job.url == url and job.status is UrlIngestionJobStatus.COMPLETED
         ]
         jobs.sort(key=lambda job: job.created_at, reverse=True)
+        return jobs
+
+    async def list_by_startup_id(self, startup_id: UUID) -> list[UrlIngestionJob]:
+        jobs = [job for job in self.items.values() if job.startup_id == startup_id]
+        jobs.sort(key=lambda job: (job.created_at, job.id), reverse=True)
         return jobs
 
 
@@ -200,12 +209,18 @@ class FakeEmbeddingsPort(EmbeddingsPort):
 
 
 class FakeStartupsPort(StartupsPort):
-    def __init__(self, *, startup_id: UUID | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        startup_id: UUID | None = None,
+        profile: StartupProfileSnapshot | None = None,
+    ) -> None:
         self.created: list[tuple[str, str]] = []
         self.attached: list[tuple[UUID, UUID, str, str | None, str | None]] = []
         self.try_extract_calls: list[UUID] = []
         self.try_classify_calls: list[UUID] = []
         self._startup_id = startup_id or uuid4()
+        self._profile = profile
 
     async def create_startup(self, *, name: str, website_url: str) -> UUID:
         self.created.append((name, website_url))
@@ -229,6 +244,18 @@ class FakeStartupsPort(StartupsPort):
 
     async def try_classify(self, startup_id: UUID) -> None:
         self.try_classify_calls.append(startup_id)
+
+    async def get_profile(self, startup_id: UUID) -> StartupProfileSnapshot:
+        if self._profile is not None:
+            return self._profile
+        return StartupProfileSnapshot(
+            name="Acme AI",
+            website_url="https://acme.example.com",
+            founders=["Ada Lovelace"],
+            funding_stage="seed",
+            customers=["Contoso"],
+            evidence_urls=[],
+        )
 
 
 class FakeRecommendationsPort(RecommendationsPort):
@@ -254,6 +281,56 @@ class FakeBriefingPort(BriefingPort):
         return self._briefing_id
 
 
+class FakeEnrichmentSearchPlannerPort(EnrichmentSearchPlannerPort):
+    def __init__(self, queries: list[str] | None = None) -> None:
+        self.calls: list[dict[str, object]] = []
+        self._queries = (
+            ["acme founders funding customers"] if queries is None else queries
+        )
+
+    async def plan_queries(
+        self,
+        *,
+        startup_name: str,
+        source_url: str,
+        source_title: str | None,
+        raw_text: str,
+        missing_signals: list[str],
+        known_terms: list[str],
+        excluded_urls: list[str],
+        max_queries: int = 3,
+    ) -> list[str]:
+        self.calls.append(
+            {
+                "startup_name": startup_name,
+                "source_url": source_url,
+                "source_title": source_title,
+                "raw_text": raw_text,
+                "missing_signals": missing_signals,
+                "known_terms": known_terms,
+                "excluded_urls": excluded_urls,
+                "max_queries": max_queries,
+            }
+        )
+        return self._queries
+
+
+class FakeEnrichmentSearchExecutorPort(EnrichmentSearchExecutorPort):
+    def __init__(self, results: list[EnrichmentSearchCandidate]) -> None:
+        self.calls: list[tuple[str, list[str], int]] = []
+        self._results = results
+
+    async def search(
+        self,
+        query: str,
+        *,
+        excluded_urls: list[str],
+        max_results: int = 2,
+    ) -> list[EnrichmentSearchCandidate]:
+        self.calls.append((query, excluded_urls, max_results))
+        return self._results
+
+
 def _make_advance_use_case(
     *,
     repository: FakeUrlIngestionJobRepository,
@@ -263,6 +340,9 @@ def _make_advance_use_case(
     startups_port: StartupsPort | None = None,
     recommendations_port: RecommendationsPort | None = None,
     briefing_port: BriefingPort | None = None,
+    task_dispatcher: UrlIngestionTaskDispatcher | None = None,
+    search_planner_port: EnrichmentSearchPlannerPort | None = None,
+    search_executor_port: EnrichmentSearchExecutorPort | None = None,
 ) -> AdvanceUrlIngestionJob:
     return AdvanceUrlIngestionJob(
         uow_factory=lambda: FakeUoW(repository),
@@ -272,6 +352,9 @@ def _make_advance_use_case(
         startups_port=startups_port or FakeStartupsPort(),
         recommendations_port=recommendations_port or FakeRecommendationsPort(),
         briefing_port=briefing_port or FakeBriefingPort(),
+        task_dispatcher=task_dispatcher or FakeDispatcher(),
+        search_planner_port=search_planner_port,
+        search_executor_port=search_executor_port,
     )
 
 
@@ -346,6 +429,65 @@ async def test_advance_uses_job_source_type_when_submitting_ingestion() -> None:
         (scraping_result_id, "nvidia_knowledge")
     ]
     assert repository.items[job.id].status is UrlIngestionJobStatus.INGESTING
+
+
+@pytest.mark.anyio
+async def test_scraping_rejection_schedules_enrichment_instead_of_stopping_silently() -> None:
+    startup_id = uuid4()
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(url="https://www.kunumi.com/")
+    job.start_scraping(uuid4())
+    await repository.save(job)
+    dispatcher = FakeDispatcher()
+    planner = FakeEnrichmentSearchPlannerPort(["Kunumi founders customers funding"])
+    executor = FakeEnrichmentSearchExecutorPort(
+        [
+            EnrichmentSearchCandidate(url="https://www.crunchbase.com/organization/kunumi"),
+            EnrichmentSearchCandidate(url="https://www.instagram.com/kunumilab"),
+            EnrichmentSearchCandidate(url="https://grokipedia.com/page/Moradaai"),
+        ]
+    )
+    startups_port = FakeStartupsPort(
+        startup_id=startup_id,
+        profile=StartupProfileSnapshot(
+            name="kunumi.com",
+            website_url="https://www.kunumi.com/",
+            founders=[],
+            funding_stage=None,
+            customers=[],
+            evidence_urls=[],
+        ),
+    )
+    use_case = _make_advance_use_case(
+        repository=repository,
+        scraping_port=FakeScrapingPort(
+            StepStatus(
+                is_done=False,
+                is_failed=True,
+                result_id=None,
+                error_message="O conteúdo coletado foi rejeitado pela validação.",
+            )
+        ),
+        startups_port=startups_port,
+        task_dispatcher=dispatcher,
+        search_planner_port=planner,
+        search_executor_port=executor,
+    )
+
+    await use_case.execute(job_id=job.id)
+
+    saved = repository.items[job.id]
+    enrichment_jobs = [
+        item for item in repository.items.values() if item.parent_job_id == job.id
+    ]
+    assert saved.status is UrlIngestionJobStatus.FAILED
+    assert saved.startup_id == startup_id
+    assert startups_port.created == [("kunumi.com", "https://www.kunumi.com/")]
+    assert [item.url for item in enrichment_jobs] == [
+        "https://www.crunchbase.com/organization/kunumi",
+        "https://www.kunumi.com/about",
+    ]
+    assert dispatcher.dispatched_job_ids == [item.id for item in enrichment_jobs]
 
 
 @pytest.mark.anyio
@@ -503,6 +645,235 @@ async def test_analyzing_creates_startup_with_document_title_when_no_startup_id(
     assert briefing_port.calls == [startups_port._startup_id]
     assert saved.recommendation_count == 2
     assert saved.briefing_id == briefing_id
+
+
+@pytest.mark.anyio
+async def test_analyzing_schedules_enrichment_jobs_when_profile_is_incomplete() -> None:
+    startup_id = uuid4()
+    scraping_result_id = uuid4()
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(url="https://acme.example.com", startup_id=startup_id)
+    job.start_scraping(uuid4())
+    job.start_ingesting(
+        scraping_result_id=scraping_result_id, ingestion_job_id=uuid4()
+    )
+    job.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    job.start_analyzing()
+    await repository.save(job)
+    dispatcher = FakeDispatcher()
+    startups_port = FakeStartupsPort(
+        startup_id=startup_id,
+        profile=StartupProfileSnapshot(
+            name="Acme AI",
+            website_url="https://acme.example.com",
+            founders=[],
+            funding_stage=None,
+            customers=[],
+            evidence_urls=["https://acme.example.com"],
+        ),
+    )
+    use_case = _make_advance_use_case(
+        repository=repository,
+        ingestion_port=FakeIngestionPort(
+            content=DocumentContentView(title="Acme AI", clean_text="conteudo")
+        ),
+        startups_port=startups_port,
+        task_dispatcher=dispatcher,
+    )
+
+    await use_case.execute(job_id=job.id)
+
+    enrichment_jobs = [
+        item for item in repository.items.values() if item.parent_job_id == job.id
+    ]
+    assert [item.url for item in enrichment_jobs] == [
+        "https://acme.example.com/about",
+        "https://acme.example.com/team",
+    ]
+    assert {item.startup_id for item in enrichment_jobs} == {startup_id}
+    assert {item.enrichment_round for item in enrichment_jobs} == {1}
+    assert dispatcher.dispatched_job_ids == [item.id for item in enrichment_jobs]
+
+
+@pytest.mark.anyio
+async def test_analyzing_prefers_external_search_candidates_when_configured() -> None:
+    startup_id = uuid4()
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(url="https://acme.example.com", startup_id=startup_id)
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=uuid4(), ingestion_job_id=uuid4())
+    job.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    job.start_analyzing()
+    await repository.save(job)
+    planner = FakeEnrichmentSearchPlannerPort()
+    executor = FakeEnrichmentSearchExecutorPort(
+        [
+            EnrichmentSearchCandidate(url="https://acme.example.com/team"),
+            EnrichmentSearchCandidate(url="https://news.example.com/acme-seed"),
+            EnrichmentSearchCandidate(url="https://www.instagram.com/acme-ai"),
+            EnrichmentSearchCandidate(url="https://www.linkedin.com/company/acme-ai/"),
+        ]
+    )
+    startups_port = FakeStartupsPort(
+        startup_id=startup_id,
+        profile=StartupProfileSnapshot(
+            name="Acme AI",
+            website_url="https://acme.example.com",
+            founders=[],
+            funding_stage=None,
+            customers=[],
+            evidence_urls=["https://acme.example.com"],
+        ),
+    )
+    use_case = _make_advance_use_case(
+        repository=repository,
+        ingestion_port=FakeIngestionPort(
+            content=DocumentContentView(
+                title="Acme AI",
+                clean_text="landing page with weak evidence",
+            )
+        ),
+        startups_port=startups_port,
+        search_planner_port=planner,
+        search_executor_port=executor,
+    )
+
+    await use_case.execute(job_id=job.id)
+
+    enrichment_jobs = [
+        item for item in repository.items.values() if item.parent_job_id == job.id
+    ]
+    assert [item.url for item in enrichment_jobs] == [
+        "https://www.linkedin.com/company/acme-ai",
+        "https://news.example.com/acme-seed",
+    ]
+    assert planner.calls[0]["missing_signals"] == [
+        "founders",
+        "funding_stage",
+        "customers",
+    ]
+    assert executor.calls[0][0] == "acme founders funding customers"
+
+
+@pytest.mark.anyio
+async def test_analyzing_uses_deterministic_queries_when_planner_is_empty() -> None:
+    startup_id = uuid4()
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(url="https://acme.example.com", startup_id=startup_id)
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=uuid4(), ingestion_job_id=uuid4())
+    job.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    job.start_analyzing()
+    await repository.save(job)
+    planner = FakeEnrichmentSearchPlannerPort([])
+    executor = FakeEnrichmentSearchExecutorPort(
+        [
+            EnrichmentSearchCandidate(
+                url="https://www.crunchbase.com/organization/acme-ai"
+            ),
+        ]
+    )
+    startups_port = FakeStartupsPort(
+        startup_id=startup_id,
+        profile=StartupProfileSnapshot(
+            name="Acme AI",
+            website_url="https://acme.example.com",
+            founders=[],
+            funding_stage=None,
+            customers=[],
+            evidence_urls=["https://acme.example.com"],
+        ),
+    )
+    use_case = _make_advance_use_case(
+        repository=repository,
+        ingestion_port=FakeIngestionPort(
+            content=DocumentContentView(title="Acme AI", clean_text="")
+        ),
+        startups_port=startups_port,
+        search_planner_port=planner,
+        search_executor_port=executor,
+    )
+
+    await use_case.execute(job_id=job.id)
+
+    enrichment_jobs = [
+        item for item in repository.items.values() if item.parent_job_id == job.id
+    ]
+    assert [item.url for item in enrichment_jobs] == [
+        "https://www.crunchbase.com/organization/acme-ai",
+        "https://acme.example.com/about",
+    ]
+    assert executor.calls[0][0] == '"Acme AI" founders funding customers'
+    assert executor.calls[0][2] == 5
+
+
+@pytest.mark.anyio
+async def test_analyzing_does_not_schedule_enrichment_when_profile_is_complete() -> None:
+    startup_id = uuid4()
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(url="https://acme.example.com", startup_id=startup_id)
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=uuid4(), ingestion_job_id=uuid4())
+    job.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    job.start_analyzing()
+    await repository.save(job)
+    dispatcher = FakeDispatcher()
+    use_case = _make_advance_use_case(
+        repository=repository,
+        ingestion_port=FakeIngestionPort(
+            content=DocumentContentView(title="Acme AI", clean_text="conteudo")
+        ),
+        startups_port=FakeStartupsPort(startup_id=startup_id),
+        task_dispatcher=dispatcher,
+    )
+
+    await use_case.execute(job_id=job.id)
+
+    assert [
+        item for item in repository.items.values() if item.parent_job_id == job.id
+    ] == []
+    assert dispatcher.dispatched_job_ids == []
+
+
+@pytest.mark.anyio
+async def test_analyzing_does_not_schedule_enrichment_after_first_round() -> None:
+    startup_id = uuid4()
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(
+        url="https://acme.example.com/about",
+        startup_id=startup_id,
+        parent_job_id=uuid4(),
+        enrichment_round=1,
+    )
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=uuid4(), ingestion_job_id=uuid4())
+    job.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    job.start_analyzing()
+    await repository.save(job)
+    dispatcher = FakeDispatcher()
+    startups_port = FakeStartupsPort(
+        startup_id=startup_id,
+        profile=StartupProfileSnapshot(
+            name="Acme AI",
+            website_url="https://acme.example.com",
+            founders=[],
+            funding_stage=None,
+            customers=[],
+            evidence_urls=[],
+        ),
+    )
+    use_case = _make_advance_use_case(
+        repository=repository,
+        ingestion_port=FakeIngestionPort(
+            content=DocumentContentView(title="Acme AI", clean_text="conteudo")
+        ),
+        startups_port=startups_port,
+        task_dispatcher=dispatcher,
+    )
+
+    await use_case.execute(job_id=job.id)
+
+    assert dispatcher.dispatched_job_ids == []
 
 
 @pytest.mark.anyio

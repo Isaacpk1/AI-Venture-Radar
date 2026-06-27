@@ -140,8 +140,33 @@ class ExecuteEmbeddingJob:
             failed = sum(
                 1 for row in all_rows if row.status is EmbeddingJobChunkStatus.FAILED
             )
+            error_message = _summarize_chunk_failures(all_rows) if failed else None
             refreshed_job = await uow.job_repository.get_by_id(job.id)
             refreshed_job.record_metrics_from_chunks(all_rows)
-            refreshed_job.finish(succeeded=succeeded, failed=failed)
+            refreshed_job.finish(
+                succeeded=succeeded,
+                failed=failed,
+                error_message=error_message,
+            )
             await uow.job_repository.save(refreshed_job)
             await uow.commit()
+
+
+def _summarize_chunk_failures(chunks: list[EmbeddingJobChunk]) -> str | None:
+    failed_errors = [
+        row.error_message
+        for row in chunks
+        if row.status is EmbeddingJobChunkStatus.FAILED and row.error_message
+    ]
+    if not failed_errors:
+        return None
+
+    first_error = failed_errors[0]
+    same_error_count = sum(1 for error in failed_errors if error == first_error)
+    if same_error_count == len(failed_errors):
+        return f"{len(failed_errors)} chunk(s) falharam: {first_error}"
+
+    return (
+        f"{len(failed_errors)} chunk(s) falharam; erro mais recente: "
+        f"{first_error}"
+    )

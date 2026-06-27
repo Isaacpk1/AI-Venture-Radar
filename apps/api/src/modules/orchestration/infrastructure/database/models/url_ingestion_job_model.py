@@ -44,6 +44,12 @@ class UrlIngestionJobModel(Base):
     startup_id: Mapped[UUID | None] = mapped_column(
         PostgresUUID(as_uuid=True), nullable=True
     )
+    parent_job_id: Mapped[UUID | None] = mapped_column(
+        PostgresUUID(as_uuid=True), nullable=True, index=True
+    )
+    enrichment_round: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     evidence_attached: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )

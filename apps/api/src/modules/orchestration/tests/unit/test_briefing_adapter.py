@@ -49,6 +49,10 @@ def _make_view(**overrides) -> BriefingView:
         id=uuid4(),
         startup_id=uuid4(),
         content="conteudo deterministico",
+        review_status="pending",
+        review_comment=None,
+        reviewed_by=None,
+        reviewed_at=None,
         generated_at=datetime.now(UTC),
     )
     defaults.update(overrides)

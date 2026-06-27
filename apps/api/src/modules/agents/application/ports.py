@@ -13,6 +13,7 @@ from uuid import UUID
 from apps.api.src.modules.agents.application.dto import (
     NvidiaRagResult,
     RecommendationCandidate,
+    SearchExecutionResult,
 )
 
 
@@ -26,6 +27,25 @@ class AgentTaskDispatcher(ABC):
         run_id: UUID,
     ) -> None:
         """Publica somente o identificador da execucao para o worker."""
+
+
+class SearchExecutorPort(ABC):
+    """Contrato para transformar uma query planejada em URLs candidatas.
+
+    O Search Planner Agent gera apenas texto; esta porta representa o provedor
+    externo de busca web (ex: Tavily), mantendo o restante do modulo sem
+    conhecer HTTP, API key ou formato do fornecedor.
+    """
+
+    @abstractmethod
+    async def search(
+        self,
+        query: str,
+        *,
+        max_results: int = 5,
+        excluded_urls: list[str] | None = None,
+    ) -> SearchExecutionResult:
+        """Executa a query e devolve URLs candidatas normalizadas."""
 
 
 class NvidiaRagToolPort(ABC):

@@ -52,6 +52,10 @@ async def test_generate_returns_content() -> None:
         id=uuid4(),
         startup_id=startup_id,
         content="# Briefing Executivo — Acme AI\n",
+        review_status="pending",
+        review_comment=None,
+        reviewed_by=None,
+        reviewed_at=None,
         generated_at=datetime.now(UTC),
     )
     adapter = BriefingGeneratorAdapter(FakeBriefingGenerator(view), FakeContentUpdater())
@@ -74,7 +78,14 @@ async def test_update_content_delegates_to_updater() -> None:
     startup_id = uuid4()
     updater = FakeContentUpdater()
     view = BriefingView(
-        id=uuid4(), startup_id=startup_id, content="x", generated_at=datetime.now(UTC)
+        id=uuid4(),
+        startup_id=startup_id,
+        content="x",
+        review_status="pending",
+        review_comment=None,
+        reviewed_by=None,
+        reviewed_at=None,
+        generated_at=datetime.now(UTC),
     )
     adapter = BriefingGeneratorAdapter(FakeBriefingGenerator(view), updater)
 
@@ -87,7 +98,14 @@ async def test_update_content_delegates_to_updater() -> None:
 @pytest.mark.anyio
 async def test_update_content_translates_briefing_error() -> None:
     view = BriefingView(
-        id=uuid4(), startup_id=uuid4(), content="x", generated_at=datetime.now(UTC)
+        id=uuid4(),
+        startup_id=uuid4(),
+        content="x",
+        review_status="pending",
+        review_comment=None,
+        reviewed_by=None,
+        reviewed_at=None,
+        generated_at=datetime.now(UTC),
     )
     adapter = BriefingGeneratorAdapter(FakeBriefingGenerator(view), FailingContentUpdater())
 

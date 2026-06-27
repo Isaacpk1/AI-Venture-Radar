@@ -8,6 +8,7 @@ publico ``EvidenceValidationService`` atraves desta factory.
 
 from apps.api.src.config.settings import get_settings
 from apps.api.src.modules.agents.application.ports import AgentTaskDispatcher
+from apps.api.src.modules.agents.application.ports import SearchExecutorPort
 from apps.api.src.modules.agents.application.public.briefing_agent import (
     BriefingAgentService,
 )
@@ -83,6 +84,9 @@ from apps.api.src.modules.agents.infrastructure.database.postgres_unit_of_work i
 from apps.api.src.modules.agents.infrastructure.queue.dramatiq_agent_dispatcher import (
     DramatiqAgentJobPublisher,
     DramatiqAgentTaskDispatcher,
+)
+from apps.api.src.modules.agents.infrastructure.search_adapters.tavily_search_executor import (
+    TavilySearchExecutor,
 )
 from apps.api.src.modules.agents.infrastructure.briefing_adapters.briefing_generator_adapter import (
     BriefingGeneratorAdapter,
@@ -167,6 +171,23 @@ class AgentsFactory:
         )
 
         return SearchPlanningGraph(planner=planner, checkpointer=checkpointer)
+
+    @staticmethod
+    def create_search_executor() -> SearchExecutorPort | None:
+        """Cria o executor de busca web usado pelo enriquecimento.
+
+        Sem ``TAVILY_API_KEY``, devolve ``None`` para manter ambientes locais e
+        testes sem custo/rede externa.
+        """
+
+        settings = get_settings()
+        if not settings.tavily_api_key:
+            return None
+
+        return TavilySearchExecutor(
+            api_key=settings.tavily_api_key,
+            search_url=settings.tavily_search_url,
+        )
 
     @staticmethod
     def create_startup_classification_service(

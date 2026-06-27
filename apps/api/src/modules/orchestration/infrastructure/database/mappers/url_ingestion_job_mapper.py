@@ -21,6 +21,8 @@ class UrlIngestionJobMapper:
             document_id=entity.document_id,
             embedding_job_id=entity.embedding_job_id,
             startup_id=entity.startup_id,
+            parent_job_id=entity.parent_job_id,
+            enrichment_round=entity.enrichment_round,
             evidence_attached=entity.evidence_attached,
             recommendation_count=entity.recommendation_count,
             briefing_id=entity.briefing_id,
@@ -43,6 +45,8 @@ class UrlIngestionJobMapper:
             document_id=model.document_id,
             embedding_job_id=model.embedding_job_id,
             startup_id=model.startup_id,
+            parent_job_id=model.parent_job_id,
+            enrichment_round=model.enrichment_round,
             evidence_attached=model.evidence_attached,
             recommendation_count=model.recommendation_count,
             briefing_id=model.briefing_id,
@@ -63,6 +67,8 @@ class UrlIngestionJobMapper:
         model.document_id = entity.document_id
         model.embedding_job_id = entity.embedding_job_id
         model.startup_id = entity.startup_id
+        model.parent_job_id = entity.parent_job_id
+        model.enrichment_round = entity.enrichment_round
         model.evidence_attached = entity.evidence_attached
         model.recommendation_count = entity.recommendation_count
         model.briefing_id = entity.briefing_id

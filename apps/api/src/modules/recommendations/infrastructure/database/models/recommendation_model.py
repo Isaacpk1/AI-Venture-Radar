@@ -33,6 +33,14 @@ class RecommendationModel(Base):
     justification: Mapped[str] = mapped_column(Text, nullable=False)
     matched_keywords: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     evidence_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    review_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending"
+    )
+    review_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

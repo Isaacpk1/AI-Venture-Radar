@@ -26,6 +26,10 @@ class AgentPlanningError(AgentError):
     """O agente nao conseguiu gerar um plano de busca valido."""
 
 
+class AgentSearchExecutionError(AgentError):
+    """O executor de busca web nao conseguiu devolver URLs candidatas."""
+
+
 class AgentClassificationError(AgentError):
     """O agente nao conseguiu classificar a maturidade de IA da startup."""
 

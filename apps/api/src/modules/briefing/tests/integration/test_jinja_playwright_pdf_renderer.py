@@ -25,6 +25,10 @@ async def test_render_pdf_produces_real_pdf_bytes_with_citation_link() -> None:
             "## Recomendacoes NVIDIA\n\n"
             "- **NIM** - veja a fonte: [docs.nvidia.com](https://docs.nvidia.com/nim/)\n"
         ),
+        review_status="pending",
+        review_comment=None,
+        reviewed_by=None,
+        reviewed_at=None,
         generated_at=datetime.now(UTC),
     )
     renderer = JinjaPlaywrightPdfRenderer()

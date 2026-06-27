@@ -55,3 +55,7 @@ class UrlIngestionJobRepository(ABC):
         (apos o cache de `SCRAPING_RESULT_CACHE_TTL` expirar) gera um
         `Document` novo.
         """
+
+    @abstractmethod
+    async def list_by_startup_id(self, startup_id: UUID) -> list[UrlIngestionJob]:
+        """Lista jobs associados a uma startup, mais recentes primeiro."""

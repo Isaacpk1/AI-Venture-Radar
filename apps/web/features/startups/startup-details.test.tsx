@@ -10,6 +10,7 @@ import {
   listBriefings,
   listRecommendations,
   refreshStartupAnalysis,
+  reviewRecommendation,
 } from "@/lib/api/radar-client";
 import type { Briefing, Recommendation, Startup, StartupEvidence } from "@/lib/api/radar-types";
 
@@ -22,6 +23,7 @@ const mockedGetEvidences = vi.mocked(getStartupEvidences);
 const mockedListRecommendations = vi.mocked(listRecommendations);
 const mockedListBriefings = vi.mocked(listBriefings);
 const mockedRefresh = vi.mocked(refreshStartupAnalysis);
+const mockedReviewRecommendation = vi.mocked(reviewRecommendation);
 
 const STARTUP_ID = "11111111-1111-1111-1111-111111111111";
 
@@ -42,6 +44,43 @@ function baseStartup(overrides: Partial<Startup> = {}): Startup {
     customers: [],
     created_at: "2026-06-01T00:00:00Z",
     updated_at: "2026-06-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function baseRecommendation(overrides: Partial<Recommendation> = {}): Recommendation {
+  return {
+    id: "rec-1",
+    startup_id: STARTUP_ID,
+    technology_slug: "nim",
+    technology_name: "NVIDIA NIM",
+    category: "inference",
+    score: 0.8,
+    confidence: 0.7,
+    complexity: "medium",
+    priority: 1,
+    justification: "Evidencias mencionam inferencia de modelos.",
+    matched_keywords: [],
+    evidence_ids: [],
+    review_status: "pending",
+    review_comment: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    created_at: "2026-06-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function baseBriefing(overrides: Partial<Briefing> = {}): Briefing {
+  return {
+    id: "brief-1",
+    startup_id: STARTUP_ID,
+    content: "# Briefing",
+    review_status: "pending",
+    review_comment: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    generated_at: "2026-06-01T00:00:00Z",
     ...overrides,
   };
 }
@@ -94,24 +133,8 @@ describe("StartupDetails", () => {
       notes: "Evidencia coletada e aprovada pelo pipeline.",
       created_at: "2026-06-01T00:00:00Z",
     };
-    const recommendation: Recommendation = {
-      id: "rec-1",
-      startup_id: STARTUP_ID,
-      technology_slug: "nim",
-      technology_name: "NVIDIA NIM",
-      category: "inference",
-      score: 0.8,
-      justification: "Evidencias mencionam inferencia de modelos.",
-      matched_keywords: ["inference"],
-      evidence_ids: ["ev-1"],
-      created_at: "2026-06-01T00:00:00Z",
-    };
-    const briefing: Briefing = {
-      id: "brief-1",
-      startup_id: STARTUP_ID,
-      content: "# Briefing Executivo — Acme AI",
-      generated_at: "2026-06-01T00:00:00Z",
-    };
+    const recommendation = baseRecommendation({ matched_keywords: ["inference"], evidence_ids: ["ev-1"] });
+    const briefing = baseBriefing({ content: "# Briefing Executivo - Acme AI" });
 
     mockedGetStartup.mockResolvedValue(baseStartup());
     mockedGetEvidences.mockResolvedValue([evidence]);
@@ -140,12 +163,8 @@ describe("StartupDetails", () => {
   });
 
   it("mostra badge 'Pronto para contato' quando AI-native, melhor score alto e briefing existe", async () => {
-    const recommendation: Recommendation = {
-      id: "rec-1", startup_id: STARTUP_ID, technology_slug: "nim", technology_name: "NVIDIA NIM",
-      category: "inference", score: 0.8, justification: "Justificativa.", matched_keywords: [], evidence_ids: [],
-      created_at: "2026-06-01T00:00:00Z",
-    };
-    const briefing: Briefing = { id: "brief-1", startup_id: STARTUP_ID, content: "# Briefing", generated_at: "2026-06-01T00:00:00Z" };
+    const recommendation = baseRecommendation({ justification: "Justificativa." });
+    const briefing = baseBriefing();
     mockedGetStartup.mockResolvedValue(baseStartup());
     mockedGetEvidences.mockResolvedValue([]);
     mockedListRecommendations.mockResolvedValue([recommendation]);
@@ -174,11 +193,7 @@ describe("StartupDetails", () => {
       evidence_type: "product_description", title: "Acme lanca produto de IA", confidence_score: 0.9,
       notes: null, created_at: "2026-06-01T00:00:00Z",
     };
-    const recommendation: Recommendation = {
-      id: "rec-1", startup_id: STARTUP_ID, technology_slug: "nim", technology_name: "NVIDIA NIM",
-      category: "inference", score: 0.8, justification: "Justificativa.", matched_keywords: ["inference"], evidence_ids: ["ev-1"],
-      created_at: "2026-06-01T00:00:00Z",
-    };
+    const recommendation = baseRecommendation({ justification: "Justificativa.", matched_keywords: ["inference"], evidence_ids: ["ev-1"] });
     mockedGetStartup.mockResolvedValue(baseStartup());
     mockedGetEvidences.mockResolvedValue([evidence]);
     mockedListRecommendations.mockResolvedValue([recommendation]);
@@ -194,18 +209,10 @@ describe("StartupDetails", () => {
   });
 
   it("renderiza links Markdown da justificativa e do briefing como links clicaveis", async () => {
-    const recommendation: Recommendation = {
-      id: "rec-1", startup_id: STARTUP_ID, technology_slug: "nim", technology_name: "NVIDIA NIM",
-      category: "inference", score: 0.8,
-      justification: "NIM acelera inferencia. Fontes: [Fonte 1](https://docs.nvidia.com/nim/).",
-      matched_keywords: [], evidence_ids: [],
-      created_at: "2026-06-01T00:00:00Z",
-    };
-    const briefing: Briefing = {
-      id: "brief-1", startup_id: STARTUP_ID,
-      content: "# Briefing Executivo\n\n## Evidencias Principais\n- [Acme lanca produto](https://acme.example.com/blog) — news",
-      generated_at: "2026-06-01T00:00:00Z",
-    };
+    const recommendation = baseRecommendation({ justification: "NIM acelera inferencia. Fontes: [Fonte 1](https://docs.nvidia.com/nim/)." });
+    const briefing = baseBriefing({
+      content: "# Briefing Executivo\n\n## Evidencias Principais\n- [Acme lanca produto](https://acme.example.com/blog) - news",
+    });
     mockedGetStartup.mockResolvedValue(baseStartup());
     mockedGetEvidences.mockResolvedValue([]);
     mockedListRecommendations.mockResolvedValue([recommendation]);
@@ -223,12 +230,7 @@ describe("StartupDetails", () => {
     mockedGetEvidences.mockResolvedValue([]);
     mockedListRecommendations.mockResolvedValue([]);
     mockedListBriefings.mockResolvedValue([]);
-    mockedRefresh.mockResolvedValue({
-      id: "brief-2",
-      startup_id: STARTUP_ID,
-      content: "novo briefing",
-      generated_at: "2026-06-02T00:00:00Z",
-    });
+    mockedRefresh.mockResolvedValue({ ...baseBriefing(), id: "brief-2", content: "novo briefing", generated_at: "2026-06-02T00:00:00Z" });
 
     renderWithClient(<StartupDetails startupId={STARTUP_ID} />);
 
@@ -236,5 +238,30 @@ describe("StartupDetails", () => {
     await user.click(button);
 
     await waitFor(() => expect(mockedRefresh).toHaveBeenCalledWith(STARTUP_ID));
+  });
+
+  it("registra revisao de recomendacao ao clicar em aprovar", async () => {
+    const user = userEvent.setup();
+    const recommendation = baseRecommendation();
+    mockedGetStartup.mockResolvedValue(baseStartup());
+    mockedGetEvidences.mockResolvedValue([]);
+    mockedListRecommendations.mockResolvedValue([recommendation]);
+    mockedListBriefings.mockResolvedValue([]);
+    mockedReviewRecommendation.mockResolvedValue({
+      ...recommendation,
+      review_status: "approved",
+      review_comment: "Ok para contato",
+    });
+
+    renderWithClient(<StartupDetails startupId={STARTUP_ID} />);
+
+    const card = (await screen.findByText("NVIDIA NIM")).closest("article") as HTMLElement;
+    await user.type(within(card).getByPlaceholderText("Comentario da revisao"), "Ok para contato");
+    await user.click(within(card).getByRole("button", { name: "Aprovar" }));
+
+    await waitFor(() => expect(mockedReviewRecommendation).toHaveBeenCalledWith(
+      "rec-1",
+      { status: "approved", comment: "Ok para contato", reviewed_by: undefined },
+    ));
   });
 });

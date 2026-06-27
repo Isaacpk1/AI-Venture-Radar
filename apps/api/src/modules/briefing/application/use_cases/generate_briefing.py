@@ -76,6 +76,8 @@ class GenerateBriefing(BriefingGenerator):
                 category=recommendation.category,
                 score=recommendation.score,
                 justification=recommendation.justification,
+                confidence=recommendation.confidence,
+                complexity=recommendation.complexity,
             )
             for recommendation in recommendation_snapshots
         ]
@@ -137,5 +139,9 @@ def to_briefing_view(briefing: Briefing) -> BriefingView:
         id=briefing.id,
         startup_id=briefing.startup_id,
         content=briefing.content,
+        review_status=briefing.review_status,
+        review_comment=briefing.review_comment,
+        reviewed_by=briefing.reviewed_by,
+        reviewed_at=briefing.reviewed_at,
         generated_at=briefing.generated_at,
     )

@@ -59,6 +59,10 @@ def _make_view(**overrides) -> RecommendationView:
         justification="justificativa",
         matched_keywords=["llm"],
         evidence_ids=[],
+        review_status="pending",
+        review_comment=None,
+        reviewed_by=None,
+        reviewed_at=None,
         created_at=None,
     )
     defaults.update(overrides)

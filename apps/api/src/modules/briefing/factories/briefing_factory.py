@@ -11,6 +11,9 @@ from apps.api.src.modules.briefing.application.use_cases.get_briefing import (
 from apps.api.src.modules.briefing.application.use_cases.list_briefings import (
     ListBriefings,
 )
+from apps.api.src.modules.briefing.application.use_cases.review_briefing import (
+    ReviewBriefing,
+)
 from apps.api.src.modules.briefing.application.public.briefing_content_updater import (
     BriefingContentUpdater,
 )
@@ -101,3 +104,7 @@ class BriefingFactory:
     @staticmethod
     def create_export_briefing_pdf() -> ExportBriefingPdf:
         return ExportBriefingPdf(PostgresBriefingsUnitOfWork, JinjaPlaywrightPdfRenderer())
+
+    @staticmethod
+    def create_review_briefing() -> ReviewBriefing:
+        return ReviewBriefing(PostgresBriefingsUnitOfWork)

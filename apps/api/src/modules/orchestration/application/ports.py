@@ -60,6 +60,19 @@ class DocumentContentView:
     clean_text: str
 
 
+@dataclass(frozen=True)
+class StartupProfileSnapshot:
+    """Recorte minimo do perfil usado pela orquestracao para decidir
+    enriquecimento automatico, sem vazar DTOs internos de startups."""
+
+    name: str
+    website_url: str | None
+    founders: list[str]
+    funding_stage: str | None
+    customers: list[str]
+    evidence_urls: list[str]
+
+
 class IngestionPort(ABC):
     """Contrato para submeter e acompanhar um job de ingestion (Orchestration V2)."""
 
@@ -140,3 +153,49 @@ class StartupsPort(ABC):
     @abstractmethod
     async def try_classify(self, startup_id: UUID) -> None:
         """Aciona a classificacao de maturidade de IA; nao-op se o servico nao estiver disponivel."""
+
+    @abstractmethod
+    async def get_profile(self, startup_id: UUID) -> StartupProfileSnapshot:
+        """Le o perfil consolidado usado para decidir se faltam fontes."""
+
+
+@dataclass(frozen=True)
+class EnrichmentSearchCandidate:
+    """URL candidata encontrada por busca externa."""
+
+    url: str
+    title: str | None = None
+    snippet: str | None = None
+
+
+class EnrichmentSearchPlannerPort(ABC):
+    """Contrato da orquestracao para pedir queries de enriquecimento."""
+
+    @abstractmethod
+    async def plan_queries(
+        self,
+        *,
+        startup_name: str,
+        source_url: str,
+        source_title: str | None,
+        raw_text: str,
+        missing_signals: list[str],
+        known_terms: list[str],
+        excluded_urls: list[str],
+        max_queries: int = 3,
+    ) -> list[str]:
+        """Devolve queries priorizadas para buscar fontes melhores."""
+
+
+class EnrichmentSearchExecutorPort(ABC):
+    """Contrato da orquestracao para executar queries em busca web."""
+
+    @abstractmethod
+    async def search(
+        self,
+        query: str,
+        *,
+        excluded_urls: list[str],
+        max_results: int = 2,
+    ) -> list[EnrichmentSearchCandidate]:
+        """Executa uma query e devolve URLs candidatas."""

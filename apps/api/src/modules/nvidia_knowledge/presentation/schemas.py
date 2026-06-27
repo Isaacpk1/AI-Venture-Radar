@@ -23,6 +23,7 @@ class NvidiaTechnologyResponse(BaseModel):
     use_cases: list[str]
     keywords: list[str]
     official_url: str
+    complexity: str
 
     @classmethod
     def from_view(cls, view: NvidiaTechnologyView) -> "NvidiaTechnologyResponse":
@@ -34,6 +35,7 @@ class NvidiaTechnologyResponse(BaseModel):
             use_cases=view.use_cases,
             keywords=view.keywords,
             official_url=view.official_url,
+            complexity=view.complexity,
         )
 
 

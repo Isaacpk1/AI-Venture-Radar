@@ -20,6 +20,9 @@ from apps.api.src.modules.recommendations.application.use_cases.get_technology_s
 from apps.api.src.modules.recommendations.application.use_cases.list_recommendations import (
     ListRecommendations,
 )
+from apps.api.src.modules.recommendations.application.use_cases.review_recommendation import (
+    ReviewRecommendation,
+)
 from apps.api.src.modules.recommendations.application.public.recommendation_generator import (
     RecommendationGenerator,
 )
@@ -92,6 +95,10 @@ class RecommendationsFactory:
     @staticmethod
     def create_get_technology_stats() -> GetTechnologyStats:
         return GetTechnologyStats(PostgresRecommendationsUnitOfWork)
+
+    @staticmethod
+    def create_review_recommendation() -> ReviewRecommendation:
+        return ReviewRecommendation(PostgresRecommendationsUnitOfWork)
 
     @staticmethod
     def create_recommendation_generator() -> RecommendationGenerator:

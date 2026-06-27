@@ -30,6 +30,7 @@ async def test_catalog_lists_initial_technologies_sorted_by_name() -> None:
         technology.name for technology in technologies
     )
     assert all(technology.official_url.startswith("https://") for technology in technologies)
+    assert all(technology.complexity in {"low", "medium", "high"} for technology in technologies)
 
 
 @pytest.mark.anyio

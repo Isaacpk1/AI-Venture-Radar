@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
-## Authoritative Current State (2026-06-25)
+## Authoritative Current State (2026-06-26)
 
 Use this section as the source of truth when older historical sections below
 disagree.
@@ -25,6 +25,7 @@ Briefing V1 (+ extensao de RAG grounding + extensao de exportacao em PDF)
 Orchestration V1 + V2 completa (URL bruta -> scraping -> ingestion -> embeddings -> startup -> evidencia -> extract -> classify -> recommendations -> briefing, sem operacao manual entre etapas) + orchestration_worker automatico (+ extensao de historico paginado de jobs + limpeza de vetores orfaos no Qdrant quando URL e' re-raspada)
 Frontend V1 + V2 + V3 completa (jornada URL->job->resultado, portfolio paginado, historico global de jobs, badge de fit, evidencia clicavel por recomendacao, chatbot sobre NVIDIA Knowledge, export de briefing em PDF)
 Frontend V4 (dashboard /dashboard: graficos SVG de distribuicao por maturidade + top tecnologias NVIDIA, comparacao lado a lado de ate 3 startups, fila de analise em lote com resultados linkados; GET /startups/stats + GET /recommendations/stats novos no backend)
+Frontend V5 (revisao humana simples de recommendations/briefings: `pending`/`approved`/`rejected`, comentario, revisor textual e timestamp; sem auth completa; migration e8a7c4d2b1f9)
 Startup Discovery V1 (descoberta automatica de startups em 3 hubs publicos: InovAtiva Brasil, Abstartups, 100 Open Startups; httpx + BS4; DiscoveryRun persistido no Postgres; POST /startup-discovery/runs, GET /startup-discovery/runs/{id}; limite configuravel via STARTUP_DISCOVERY_MAX_PER_RUN, padrao 20)
 ```
 
@@ -39,7 +40,6 @@ briefing and recommendations end to end automatically.
 Pending:
 
 ```txt
-Frontend V5 (revisao humana/auth — fora de escopo para o demo)
 Auth
 Production observability (foundation exists: shared/logging + shared/
 observability + Langfuse self-hosted via infra/docker-compose.yml,
@@ -1689,8 +1689,10 @@ O que a V4 entregou (25/06/2026 — painel BI de oportunidades):
 | `4c8a1f6e9b2d` | 2026-06-23 | Adiciona `startup_id`/`evidence_attached`/`recommendation_count`/`briefing_id` em url_ingestion_jobs (Orchestration V2 jornada completa) |
 | `b3f6e91c7d45` | 2026-06-23 | Troca indice GIN de full-text search por BM25 nativo (`pg_search`) em chunks (RAG V3, extensao) |
 | `c9d3e7f0a4b8` | 2026-06-25 | Cria tabela `startup_discovery_runs` (Startup Discovery V1) |
+| `d7e3f1a2b9c4` | 2026-06-25 | Adiciona `confidence` e `complexity` em `recommendations` (Recommendations V3) |
+| `e8a7c4d2b1f9` | 2026-06-26 | Adiciona campos de revisao humana em `recommendations` e `briefings` (Frontend V5) |
 
-**Head atual: `c9d3e7f0a4b8`**
+**Head atual: `e8a7c4d2b1f9`**
 
 ### Tabelas existentes
 
@@ -1948,7 +1950,7 @@ pytest -k "test_acceptance_policy_rejects_captcha" -v
 # Run DB migrations
 alembic upgrade head
 
-# Current migration head: c9d3e7f0a4b8 (startup_discovery_runs, Startup Discovery V1)
+# Current migration head: e8a7c4d2b1f9 (human review fields, Frontend V5)
 ```
 
 ---

@@ -1,288 +1,111 @@
 # Roadmap para Fechar o Produto
 
-Atualizado em 23/06/2026 a partir da revisao cruzada de codigo, testes e
-documentacao. Este documento prioriza o que falta para transformar o backend
-atual em um produto utilizavel, operavel e apresentavel.
+Atualizado em 26/06/2026 a partir da revisao cruzada de codigo, testes e documentacao.
 
 ## Diagnostico resumido
 
-O backend possui scraping, ingestao, embeddings, RAG, catalogo NVIDIA,
-startups, recomendacoes, briefings, workers e oito agentes LangGraph. A suite
-local passou em 529 testes Python (com 1 skip opt-in, Ragas) e 25 testes de
-frontend (`pytest -q` e `npm test`, reconferido em 2026-06-25 apos a
-limpeza de vetores orfaos no Qdrant). A
-jornada unica da URL ate o briefing (P0 #1) ja esta fechada. O frontend
-(P0 #2) **esta completo** — Frontend V1, V2 e V3 ja estao
-entregues e commitados (`docs/frontend/roadmap_frontend.md`), cobrindo
-submissao de URL, acompanhamento de job, resultado completo da startup
-(evidencias, recomendacoes, briefing), portfolio paginado, historico
-global de jobs, badge de fit, evidencia clicavel, chatbot sobre NVIDIA
-Knowledge e export do briefing em PDF. O que resta do P0 #2 e'
-so revisao humana/auth (Frontend V5, deliberadamente sem auth completa)
-— ver secao 2 abaixo.
+O backend possui scraping, ingestao, embeddings, RAG, catalogo NVIDIA, startups, recomendacoes, briefings, workers, oito agentes LangGraph, orquestracao por URL e descoberta inicial de startups. O frontend operacional existe ate V4.
 
-**Decisao de escopo confirmada em 23/06/2026** (`docs/decisoes_pendentes.md`
-foi reorganizado depois disso — ver a tabela "Decisoes ja resolvidas" la,
-linha "Projeto e' demo ou produto real?"): este projeto fica como
-case/demo, nao vai pra producao real. Isso fecha a pergunta do P2 abaixo —
-autenticacao/CI/CD/backup ficam deliberadamente fora de escopo, nao
-"pendente". Tambem fecha a pergunta de auth do Frontend V5: revisao
-simples sem login, nao auth completa.
+Decisao de escopo mantida: este projeto e um case/demo. Auth completa, CI/CD, Dockerfiles de producao, backup do Qdrant e operacao real ficam fora de escopo ate haver nova decisao.
 
-## P0 — Jornada funcional de ponta a ponta
+## P0 - Jornada funcional de ponta a ponta
 
-### 1. Fechar Orchestration V2 — ENTREGUE
+### 1. Orchestration V2 - ENTREGUE
 
 ```txt
-entregue
+URL -> scraping -> ingestion -> embeddings -> startup/extract/classify
+-> recommendations -> briefing
 ```
 
-Implementado (ver `docs/orchestration/orchestration_v2_jornada_completa.md`):
+Entregue com `url_ingestion_jobs`, worker Dramatiq, polling, IDs downstream, historico paginado e idempotencia contra reentrega.
 
-- criar ou associar uma `Startup` ao concluir a ingestao de uma URL — entregue;
-- anexar evidencias rastreaveis ao perfil — entregue;
-- executar extract e classify — entregue (best-effort, nao bloqueia o
-  restante quando o servico de LLM nao esta configurado);
-- gerar recommendations e briefing — entregue;
-- persistir o estado, IDs downstream e erro de cada etapa — entregue;
-- expor consulta agregada do job para polling do frontend — entregue
-  (`startup_id`/`recommendation_count`/`briefing_id` em
-  `GET /url-ingestion/jobs/{id}`);
-- garantir idempotencia e retomada segura — entregue (guardas contra
-  reentrega-por-crash do Dramatiq).
+### 2. Frontend operacional - ENTREGUE ate V4
 
-**Pronto quando:** uma URL de startup produz briefing e recomendacoes sem
-operacao manual entre as etapas. Atingido.
-
-### 2. Frontend operacional — ENTREGUE (V1+V2+V3)
-
-Arquitetura definida em `docs/frontend/nextjs_arquitetura.md`.
-Roadmap versionado em `docs/frontend/roadmap_frontend.md`.
-
-Telas minimas:
-
-- submissao de URL e criacao manual de startup — **entregue (V1)**;
-- acompanhamento de pipeline e erros — **entregue (V1)**, pagina
-  `/jobs/[jobId]` com timeline e polling;
-- evidencias, perfil estruturado e classificacao — **entregue (V2)**,
-  pagina `/startups/[startupId]`;
-- recomendacoes e briefing com citacoes — **entregue (V2)**;
-- listagem paginada de startups — **entregue (Frontend V3)**:
-  `GET /startups` com busca e filtros, pagina `/startups` e cards de
-  portfolio;
-- historico global de jobs — **entregue (Frontend V3, 24/06/2026)**:
-  `GET /url-ingestion/jobs` paginado + pagina `/jobs`;
-- badge de fit, evidencia clicavel por recomendacao, chatbot sobre NVIDIA
-  Knowledge e export do briefing em PDF — **entregue (Frontend V3,
-  24/06/2026)**, ver `docs/frontend/roadmap_frontend.md` blocos 3-5;
-- tela de revisao humana e retomada de casos pendentes — **falta
-  (Frontend V5)**, depende de autenticacao.
-
-Cobertura: `apps/web` usa Vitest + React Testing Library e possui 25
-testes (reconferido 24/06/2026: +9 do fechamento do Frontend V3 + +2 do
-P3 "rastreabilidade ponta a ponta").
-**Correcao em 23/06/2026:** uma
-afirmacao anterior de "bug real de Rules of Hooks em `StartupDetails`" nao
-se confirmou lendo o arquivo na integra (hooks chamados corretamente,
-antes de qualquer `return` condicional) — corrigido aqui e nos outros docs
-que repetiam essa afirmacao.
-
-## P1 — Qualidade da decisao
-
-### 3. Completar NVIDIA Knowledge V2 — ENTREGUE (23/06/2026)
+Entregue:
 
 ```txt
-entregue
+/analyze
+/jobs
+/jobs/[jobId]
+/startups
+/startups/[startupId]
+/knowledge
+/dashboard
 ```
 
-P0+P1+P2 completo: 20/20 fontes processadas, 17/20 com conteudo
-recuperavel via `/rag/search`. Restam 3 gaps sem fix de codigo possivel
-agora (DNS intermitente Windows-side em 2 fontes, Firecrawl necessario
-para a terceira — ver `docs/nvidia_knowledge/roadmap_nvidia_knowledge.md`,
-"Tecnologias candidatas"). Nao bloqueiam mais o restante do P1.
+Inclui portfolio, historico global, badge de fit, evidencia clicavel, chatbot NVIDIA Knowledge, export PDF, graficos de portfolio, comparacao de ate 3 startups e fila de analise em lote.
 
-### 4. Recommendations V2/V4
+## P1 - Qualidade da decisao
 
-- buscar contexto NVIDIA via RAG com citacoes — **DECIDIDO em 23/06/2026**
-  (`docs/decisoes_pendentes.md`, secao 2): vale fazer, fica priorizado
-  logo apos o frontend. Caminho tecnico: `recommendations` chama
-  `rag/application/public/question_answerer.py`, ja existe, zero tech
-  nova. **Entregue:** os adaptadores de recommendations e briefing chamam
-  esse contrato com filtro `source_type=nvidia_knowledge` e mantem fallback
-  deterministico quando nao houver contexto recuperavel;
-- aprofundar o uso de `ai_maturity_level` no score (bonus deterministico inicial entregue);
-- adicionar prioridade, confianca, complexidade, proxima acao e trade-offs;
-- separar justificativa de negocio da justificativa tecnica;
-- integrar Recommendation Agent V11 ao caminho principal — **ENTREGUE em
-  23/06/2026**: `orchestration` usa o agente quando `GEMINI_API_KEY` esta
-  configurada (justificativa revisada persistida de volta em
-  `recommendations`), cai para o gerador V1 puro sem a chave.
+### 3. NVIDIA Knowledge V2 - ENTREGUE
 
-### 5. Briefing e revisao
+20/20 fontes processadas, 17/20 com conteudo recuperavel. Os 3 gaps restantes nao bloqueiam o MVP: dois sao problema de DNS/ambiente e um exige fallback pago de scraping.
 
-- ligar Qdrant/RAG no briefing tambem — **DECIDIDO em 23/06/2026**, junto
-  com o item acima ("ligar o qdrant com o briefing tambem, quero isso
-  junto"). Mesmo caminho tecnico, mesmo contrato publico de `rag`.
-  **Entregue em 24/06/2026:** `NvidiaContextGrounder` +
-  `RagNvidiaContextGrounder` geram a secao "Contexto NVIDIA" no Markdown
-  do briefing, com fallback deterministico sem `GEMINI_API_KEY`/sem
-  citacao real (ver `docs/briefing/roadmap_briefing.md`);
-- integrar Briefing Agent V12 ao fluxo principal — **ENTREGUE em
-  23/06/2026**: mesma logica do item acima, prosa reescrita persistida de
-  volta em `briefings`;
-- exportar HTML/PDF preservando citacoes;
-- aprovar/rejeitar, comentar e manter historico de revisao;
-- ranquear oportunidades e gerar visao de lote.
+### 4. Recommendations V3 - ENTREGUE
 
-## P2 — Prontidao de producao
-
-**FORA DE ESCOPO** (decidido em 23/06/2026 — projeto e' case/demo, ver
-"Diagnostico resumido" acima). Lista mantida so como registro do que
-ficaria pendente SE este projeto virasse produto real algum dia.
-
-- autenticacao, autorizacao e isolamento por usuario/organizacao;
-- CORS configuravel, rate limiting e controles de abuso;
-- logs estruturados, correlation IDs, metricas, tracing, alertas e monitoramento
-  de custo/latencia de LLM;
-- CI com testes, verificacao de migrations e analise estatica;
-- Dockerfiles e compose/manifestos para API e todos os workers;
-- backups, retencao de dados, limpeza de checkpoints e plano de rollback;
-- documentacao de operacao, variaveis de ambiente e runbooks.
-
-## P3 — Apresentacao do case
-
-**Diferencial escolhido (24/06/2026): rastreabilidade ponta a ponta** —
-toda recomendacao e citacao tem origem rastreavel, do URL bruto ate o
-briefing final. Os outros 2 candidatos (hibrido deterministico/agente por
-excecao, cobertura do NVIDIA Inception) ficam como apoio na narrativa, nao
-como o eixo principal da demo. Decisao registrada em
-`docs/decisoes_pendentes.md` (tabela "Decisoes ja resolvidas").
-
-O que essa escolha exigiu (gaps reais encontrados ao revisar o que ja
-existia, fechados em 24/06/2026):
-- evidencia clicavel por recomendacao e badge de fit — ja entregues no
-  fechamento do Frontend V3 (ver `docs/frontend/roadmap_frontend.md`);
-- citacoes NVIDIA (recommendations/briefing, RAG grounding) viravam texto
-  puro (`Fontes: url1, url2`) em vez de link Markdown — corrigido em
-  `generate_recommendations.py`/`generate_briefing.py`;
-- o briefing era renderizado como texto cru (`<pre>`) na tela da startup
-  — nenhum link (nem os de evidencia, que ja eram Markdown valido desde a
-  V1) ficava clicavel fora do PDF exportado. Corrigido com renderizacao
-  real de Markdown no frontend (`react-markdown`), reaplicada tambem na
-  justificativa de cada recomendacao e na resposta do chatbot.
-
-Ainda nesta secao, sem decisao de prioridade vs. o resto do backlog:
-- preparar demonstracao com uma startup real e fontes NVIDIA recuperaveis;
-- definir metricas de valor: tempo ate briefing, cobertura de evidencias,
-  qualidade das recomendacoes e taxa de revisao/aprovacao.
-
-## Ordem de implementacao recomendada (atualizado 23/06/2026 apos rodada de decisoes)
-
-Cruza a auditoria de regras arquiteturais
-(`docs/validacao_arquitetural_modulos_workers.md`), o roadmap de qualidade
-do pipeline (`docs/roadmap_evolucao_tecnica_mvp.md`), as secoes
-"Tecnologias candidatas" de cada `docs/<modulo>/roadmap_<modulo>.md` e as
-decisoes registradas em `docs/decisoes_pendentes.md`. Nao repete o detalhe
-de cada item — so a sequencia e o motivo da ordem.
+Entregue:
 
 ```txt
-JA ENTREGUE (nao repetir):
-1. Fix arquitetural rag->embeddings (Fase 5 da evolucao tecnica)
-2. Itens triviais (COHERE_RERANK_MODEL, cache por content_hash em
-   scraping/ingestion/embeddings)
-3. P1 #4/#5 (Recommendation Agent V11 + Briefing Agent V12 no caminho
-   sincrono)
-4. BM25/pg_search (Fase 3 da evolucao tecnica) — troca de imagem Postgres
-   (`paradedb/paradedb`), migration `b3f6e91c7d45`, ver
-   `docs/rag/roadmap_rag.md`
-5. RAG real em recommendations + briefing — `NvidiaKnowledgeGrounder`
-   (recommendations, 24/06/2026) + `NvidiaContextGrounder` (briefing,
-   24/06/2026), fallback deterministico nos dois sem `GEMINI_API_KEY`
-6. Protecao de modelo/dimensao no Qdrant — `EmbeddingCollectionSchemaMismatchError`,
-   recusa upsert com schema incompativel (24/06/2026)
-7. Frontend V3, primeira fatia — `GET /startups` paginado + pagina
-   `/startups` (24/06/2026)
-8. Frontend V3, resto completo — historico global de jobs
-   (`GET /url-ingestion/jobs` paginado + pagina `/jobs`), badge de fit +
-   evidencia clicavel em `startup-details.tsx`, chatbot sobre NVIDIA
-   Knowledge (`/knowledge`, so UI sobre `/rag/answer` ja existente),
-   export do briefing em PDF (24/06/2026 — ver decisao tecnica abaixo)
-9. P3 (diferencial do case) — rastreabilidade ponta a ponta, decidido e
-   implementado em 24/06/2026 (citacoes NVIDIA como link Markdown real +
-   frontend renderiza Markdown de verdade)
-10. Sincronia Qdrant<->Postgres — redefinida e implementada em
-    25/06/2026 (ver decisao tecnica abaixo): nao era reupsert no edit,
-    era limpeza de vetor orfao no re-scrape
-11. rapidfuzz para dedup de startups (Startups V4, slice inicial) —
-    25/06/2026: `domain/policies.py::find_duplicate_startup()`, limiar
-    92 calibrado com 17 pares reais (7 duplicatas + 10 empresas
-    diferentes) antes de codar; `CreateStartup` devolve registro
-    existente em vez de criar duplicata, transparente pra orchestration
+regras deterministicas
+RAG grounding com citacoes NVIDIA
+fallback deterministico
+confidence
+complexity
+GET /recommendations/stats
+Recommendation Agent V11 no caminho sincrono quando ha GEMINI_API_KEY
 ```
+
+Ainda futuro: feedback humano e versionamento de geracoes para revisao.
+
+### 5. Briefing V3 - ENTREGUE
+
+Entregue: contexto NVIDIA via RAG, prosa reescrita pelo Briefing Agent V12 quando possivel, Markdown rastreavel e export PDF real.
+
+## P2 - Prontidao de producao
+
+FORA DE ESCOPO do demo:
 
 ```txt
-DECISOES TECNICAS REGISTRADAS:
-- (24/06/2026, item 8) export do briefing trocou `weasyprint` (planejado
-  originalmente) por Playwright + Jinja2 + `markdown`. `weasyprint` exige
-  bibliotecas nativas (Pango/Cairo/GTK) com risco real de instalacao no
-  Windows (ambiente deste projeto); `playwright` ja e' dependencia do
-  projeto desde o Scraping V4 e ja funciona comprovadamente aqui. Ver
-  docs/briefing/briefing_v3_export_pdf.md.
-- (25/06/2026, item 10) "sincronia Qdrant<->Postgres" tinha premissa
-  errada — pressupunha edicao de `Document`/`ScrapingResult`, que nao
-  existe no codigo (write-once). Investigado antes de implementar
-  qualquer coisa especulativa (regra 8 do `CLAUDE.md`). Gatilho real
-  encontrado: re-scrape da mesma URL apos o cache de 3 dias expirar cria
-  um `Document` novo, deixando o antigo orfao no Qdrant pra sempre.
-  Implementado `VectorRepository.delete_by_document_id()` +
-  `AdvanceUrlIngestionJob._cleanup_superseded_vectors()`. Ver
-  docs/embeddings/roadmap_embeddings.md e
-  docs/orchestration/roadmap_orchestration.md.
+auth/autorizacao real
+CI/CD
+Dockerfiles de deploy
+backups e retencao
+rate limiting/CORS de producao
+alertas e runbooks
 ```
+
+Fundacoes ja existem: logging estruturado, Langfuse self-hosted no compose e separacao modular de infraestrutura.
+
+## P3 - Apresentacao do case
+
+Diferencial escolhido e implementado: rastreabilidade ponta a ponta. As recomendacoes e citacoes preservam origem em links Markdown clicaveis; o frontend renderiza Markdown em briefing, justificativas e chatbot.
+
+## Frontend V5 - ENTREGUE
+
+Revisao humana simples entregue para recommendations e briefings, com status (`pending`, `approved`, `rejected`), comentario, revisor textual e timestamp. Sem auth completa.
+
+## Startup Discovery - ENTREGUE V1
+
+Descoberta gratuita para demo entregue com tres hubs:
 
 ```txt
-PROXIMA SEQUENCIA (atualizado 25/06/2026 — tudo abaixo ja tem decisao
-tomada, ver docs/decisoes_pendentes.md):
-
-1. Descoberta de startups com fontes gratuitas (hubs como StartSe,
-   Distrito, Endeavor, etc. — ver `docs/scraping/roadmap_scraping.md`,
-   "Descoberta de startups") — DECIDIDO fazer pra demo, teto de custo
-   zero/gratuito.
-
-Antes do Frontend V4: Chain de enriquecimento quando a primeira fonte e'
-fraca - DECIDIDO como desenho tecnico, ainda nao implementado: `scraping`
-ja pode marcar `needs_more_sources` e o Search Planner Agent ja gera
-queries, mas falta o `SearchExecutorPort`/cliente de busca web, transformar
-queries em URLs candidatas, criar novos `url_ingestion_jobs` associados a
-mesma startup e rodar novo round de extract/classify/recommendations. Esta
-e' a peca que faz o produto "ir atras da startup na web" em vez de depender
-so da URL inicial. Ver `docs/orchestration/roadmap_orchestration.md`.
-
-2. Frontend V4 (graficos com Recharts, comparacao, fila em lote) — por
-   ultimo entre os itens decididos porque depende de endpoints agregados
-   novos no backend (GROUP BY) que nenhum item anterior cria.
+InovAtiva Brasil
+Abstartups
+100 Open Startups
 ```
+
+`POST /startup-discovery/runs` cria uma rodada, persiste `startup_discovery_runs` e submete URLs descobertas para `url_ingestion_jobs` respeitando `STARTUP_DISCOVERY_MAX_PER_RUN`.
+
+## Proxima sequencia recomendada
 
 ```txt
-FORA DE ESCOPO (decidido, nao revisitar sem motivo novo):
-- P2 inteiro (autenticacao, CI/CD, Dockerfiles, backup do Qdrant)
-- Redesenho do NVIDIA RAG Agent (V10) pra virar sub-tool de outro agente
+1. Validar a chain de enriquecimento com Tavily real e calibrar ranking/allowlist.
+2. Expandir Startup Discovery para mais hubs gratuitos alem dos 3 iniciais.
+3. Hardening de producao apenas se o projeto deixar de ser demo.
 ```
-
-`docs/decisoes_pendentes.md` nao tem pergunta sem decisao no momento —
-P3 (diferencial do case) foi a ultima e foi resolvida em 24/06/2026, ver
-secao P3 acima.
-
----
 
 ## Pendencias de documentacao e release
 
-- manter este roadmap como fonte de priorizacao;
-- atualizar documentos historicos quando uma entrega alterar seu status
-  (auditoria mais recente: 24/06/2026, ver `CLAUDE.md` "Authoritative
-  Current State");
-- manter o README raiz com o caminho de execucao atualizado.
-
-Item resolvido (removido desta lista em 24/06/2026): a migration
-`7d4f2a9c6e83` ja esta aplicada — `alembic current` confirma head em
-`b3f6e91c7d45`, que vem depois dela na cadeia.
+- Manter `docs/estado_atual_do_projeto.md` como fotografia operacional.
+- Atualizar `CLAUDE.md` quando uma entrega mudar migrations, testes ou comandos.
+- Evitar reabrir itens ja resolvidos em `docs/decisoes_pendentes.md`.

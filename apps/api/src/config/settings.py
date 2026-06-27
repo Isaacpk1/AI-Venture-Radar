@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     gemini_embedding_model: str = "models/gemini-embedding-001"
     cohere_api_key: str = ""
     cohere_rerank_model: str = "rerank-v3.5"
+    tavily_api_key: str = ""
+    tavily_search_url: str = "https://api.tavily.com/search"
 
     # Observability
     langfuse_public_key: str = ""

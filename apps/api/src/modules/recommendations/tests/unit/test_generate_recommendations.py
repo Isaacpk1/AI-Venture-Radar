@@ -87,6 +87,10 @@ class FakeRecommendationRepository(RecommendationRepository):
         if recommendation is not None:
             recommendation.justification = justification
 
+    async def update_review(self, recommendation: Recommendation) -> None:
+        if recommendation.id in self.items:
+            self.items[recommendation.id] = recommendation
+
     async def count_by_technology(self, *, limit: int = 10) -> list[tuple[str, str, int]]:
         return []
 

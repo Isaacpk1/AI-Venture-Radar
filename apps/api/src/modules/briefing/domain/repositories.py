@@ -27,3 +27,7 @@ class BriefingRepository(ABC):
     @abstractmethod
     async def update_content(self, briefing_id: UUID, content: str) -> None:
         """Atualiza so o conteudo de um briefing ja existente."""
+
+    @abstractmethod
+    async def update_review(self, briefing: Briefing) -> None:
+        """Atualiza os campos de revisao de um briefing existente."""

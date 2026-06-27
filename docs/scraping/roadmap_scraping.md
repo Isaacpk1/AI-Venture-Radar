@@ -70,8 +70,7 @@ evita chegar nesse caminho.
 
 ---
 
-## Descoberta de startups ("Radar" de verdade) — DECIDIDO em 23/06/2026
-
+## Descoberta de startups ("Radar" de verdade) - V1 ENTREGUE
 ```txt
 docs/decisoes_pendentes.md, secao 4 — "vou colocar isso o teto acho valido
 pensarmos para demo algo gratuito, somente provar que o projeto consegue
@@ -135,6 +134,4 @@ Entregaveis (descoberta, escopo de demo — gratuito, prova de conceito):
   chain de enriquecimento (que e' sobre startup ja conhecida, escopo
   diferente).
 
-Pendente: desenhar o extrator de links por hub antes de declarar isso
-implementavel de verdade — heterogeneo por site, nao e' so "reusar o
-registry da NVIDIA Knowledge" 1:1.
+V1 entregue no modulo `startup_discovery` com InovAtiva Brasil, Abstartups e 100 Open Startups. Ver `docs/startup_discovery/roadmap_startup_discovery.md`. Continua futuro expandir para os demais hubs e integrar a chain de enriquecimento por busca.

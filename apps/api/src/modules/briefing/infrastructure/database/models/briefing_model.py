@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Text
+from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,6 +24,14 @@ class BriefingModel(Base):
         index=True,
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    review_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending"
+    )
+    review_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

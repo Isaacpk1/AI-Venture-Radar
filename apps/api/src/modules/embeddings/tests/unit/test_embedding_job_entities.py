@@ -84,9 +84,10 @@ def test_finish_failed_when_no_successes() -> None:
     job = EmbeddingJob(document_id=uuid4())
     job.start(total_chunks=3)
 
-    job.finish(succeeded=0, failed=3)
+    job.finish(succeeded=0, failed=3, error_message="todos falharam")
 
     assert job.status is EmbeddingJobStatus.FAILED
+    assert job.error_message == "todos falharam"
 
 
 def test_finish_partial_when_mixed_results() -> None:

@@ -35,6 +35,8 @@ class CreateUrlIngestionJob:
             url=job_input.url,
             source_type=job_input.source_type,
             startup_id=job_input.startup_id,
+            parent_job_id=job_input.parent_job_id,
+            enrichment_round=job_input.enrichment_round,
         )
 
         async with self._uow_factory() as uow:
@@ -58,6 +60,8 @@ def to_url_ingestion_job_view(job: UrlIngestionJob) -> UrlIngestionJobView:
         document_id=job.document_id,
         embedding_job_id=job.embedding_job_id,
         startup_id=job.startup_id,
+        parent_job_id=job.parent_job_id,
+        enrichment_round=job.enrichment_round,
         recommendation_count=job.recommendation_count,
         briefing_id=job.briefing_id,
         error_message=job.error_message,

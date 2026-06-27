@@ -45,6 +45,10 @@ class FakeBriefingRepository(BriefingRepository):
         if briefing is not None:
             briefing.content = content
 
+    async def update_review(self, briefing: Briefing) -> None:
+        if briefing.id in self.items:
+            self.items[briefing.id] = briefing
+
 
 class FakeUoW(BriefingsUnitOfWork):
     def __init__(self, repository: FakeBriefingRepository) -> None:

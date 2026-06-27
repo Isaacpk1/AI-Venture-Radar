@@ -24,7 +24,19 @@ class RecommendationView:
     justification: str
     matched_keywords: list[str]
     evidence_ids: list[UUID]
+    review_status: str
+    review_comment: str | None
+    reviewed_by: str | None
+    reviewed_at: datetime | None
     created_at: datetime
+
+
+@dataclass(frozen=True)
+class ReviewRecommendationInput:
+    recommendation_id: UUID
+    status: str
+    comment: str | None = None
+    reviewed_by: str | None = None
 
 
 @dataclass(frozen=True)

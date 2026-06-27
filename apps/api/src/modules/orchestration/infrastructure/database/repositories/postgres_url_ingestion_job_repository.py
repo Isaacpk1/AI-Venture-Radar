@@ -75,3 +75,12 @@ class PostgresUrlIngestionJobRepository(UrlIngestionJobRepository):
         )
         models = (await self._session.scalars(statement)).all()
         return [UrlIngestionJobMapper.to_entity(model) for model in models]
+
+    async def list_by_startup_id(self, startup_id: UUID) -> list[UrlIngestionJob]:
+        statement = (
+            select(UrlIngestionJobModel)
+            .where(UrlIngestionJobModel.startup_id == startup_id)
+            .order_by(UrlIngestionJobModel.created_at.desc(), UrlIngestionJobModel.id.desc())
+        )
+        models = (await self._session.scalars(statement)).all()
+        return [UrlIngestionJobMapper.to_entity(model) for model in models]

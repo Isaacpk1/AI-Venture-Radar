@@ -28,6 +28,8 @@ class RecommendationsModuleSource(RecommendationsSource):
                 category=recommendation.category,
                 score=recommendation.score,
                 justification=recommendation.justification,
+                confidence=recommendation.confidence,
+                complexity=recommendation.complexity,
             )
             for recommendation in recommendations
         ]

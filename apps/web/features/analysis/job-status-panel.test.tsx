@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getUrlIngestionJob } from "@/lib/api/radar-client";
+import { getUrlIngestionJob, listUrlIngestionJobs } from "@/lib/api/radar-client";
 import type { UrlIngestionJob } from "@/lib/api/radar-types";
 
 import { JobStatusPanel } from "./job-status-panel";
@@ -16,6 +16,7 @@ vi.mock("next/link", () => ({
 }));
 
 const mockedGetJob = vi.mocked(getUrlIngestionJob);
+const mockedListJobs = vi.mocked(listUrlIngestionJobs);
 
 const JOB_ID = "22222222-2222-2222-2222-222222222222";
 
@@ -31,6 +32,8 @@ function baseJob(overrides: Partial<UrlIngestionJob> = {}): UrlIngestionJob {
     document_id: null,
     embedding_job_id: null,
     startup_id: null,
+    parent_job_id: null,
+    enrichment_round: 0,
     recommendation_count: null,
     briefing_id: null,
     error_message: null,
@@ -52,6 +55,7 @@ function renderWithClient(children: ReactNode) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mockedListJobs.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100 });
 });
 
 describe("JobStatusPanel", () => {
@@ -90,6 +94,33 @@ describe("JobStatusPanel", () => {
     renderWithClient(<JobStatusPanel jobId={JOB_ID} />);
 
     expect(await screen.findByText("scraping rejeitado")).toBeInTheDocument();
+  });
+
+  it("continua mostrando progresso quando o job raiz falhou mas ha enriquecimento rodando", async () => {
+    mockedGetJob.mockResolvedValue(
+      baseJob({ status: "failed", error_message: "fonte inicial rejeitada" }),
+    );
+    mockedListJobs.mockResolvedValue({
+      items: [
+        baseJob({
+          id: "child-1",
+          url: "https://news.example.com/acme",
+          status: "embedding",
+          parent_job_id: JOB_ID,
+          enrichment_round: 1,
+          startup_id: "startup-1",
+        }),
+      ],
+      total: 1,
+      page: 1,
+      page_size: 100,
+    });
+
+    renderWithClient(<JobStatusPanel jobId={JOB_ID} />);
+
+    expect(await screen.findByText(/fonte inicial foi rejeitada/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Indexando conhecimento")).toHaveLength(2);
+    expect(screen.queryByText("fonte inicial rejeitada")).not.toBeInTheDocument();
   });
 
   it("mostra link para o resultado quando o job conclui com startup_id", async () => {

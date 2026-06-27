@@ -297,6 +297,9 @@ async def test_all_chunks_fail_eventually_marks_job_failed() -> None:
     await use_case.execute(job_id=job.id)
 
     assert job_repo.jobs[job.id].status is EmbeddingJobStatus.FAILED
+    assert job_repo.jobs[job.id].error_message is not None
+    assert "2 chunk(s) falharam" in job_repo.jobs[job.id].error_message
+    assert "EmbeddingGenerationError: falha simulada" in job_repo.jobs[job.id].error_message
 
 
 @pytest.mark.anyio

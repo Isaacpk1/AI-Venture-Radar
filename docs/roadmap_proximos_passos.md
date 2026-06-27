@@ -1,8 +1,6 @@
-# Roadmap Atualizado
+﻿# Roadmap Atualizado
 
-Este roadmap substitui a leitura antiga em que `recommendations`, `briefing` e
-`orchestration` ainda eram pendentes. O codigo atual ja implementa esses
-modulos em V1.
+Atualizado em 26/06/2026. Este roadmap substitui leituras antigas em que `recommendations`, `briefing`, `orchestration`, `frontend` ou descoberta de startups ainda apareciam como pendentes.
 
 ---
 
@@ -10,90 +8,85 @@ modulos em V1.
 
 | Area | Estado |
 |---|---|
-| Scraping | Entregue |
-| Agents | Entregue ate V12 (8/8 do brief) |
+| Scraping | Entregue ate V8 |
+| Agents | Entregue ate V12 (8/8 agentes do brief) |
 | Ingestion | Entregue |
 | Embeddings/Qdrant | Entregue |
-| Startups estruturado | Entregue em slice inicial |
+| Startups estruturado | Entregue ate V4 |
 | RAG hibrido + reranking | Entregue |
-| Catalogo NVIDIA | Entregue em V1 estatico; V2 source_type + source registry + url_ingestion_jobs entregues |
-| Recommendations | Entregue em V1 deterministico |
-| Briefing | Entregue em V1 deterministico |
-| Orchestration | V1 entregue; V2 entregue (URL bruta ate briefing, sem etapas manuais) |
-| Frontend | V1/V2 entregues; V3 em andamento (portfolio de startups entregue) |
-| Auth/observabilidade/producao | Pendente |
+| Catalogo NVIDIA | NVIDIA Knowledge V2 entregue |
+| Recommendations | V3 entregue: RAG grounding, confidence/complexity e stats |
+| Briefing | V3 entregue: RAG grounding + export PDF |
+| Orchestration | V2.1 entregue: URL bruta ate briefing, com primeira rodada de enriquecimento por dominio |
+| Frontend | V1/V2/V3/V4/V5 entregues |
+| Startup Discovery | V1 entregue em 3 hubs publicos |
+| Auth/observabilidade/producao | Fora de escopo do demo, exceto fundacoes ja existentes |
 
 ---
 
-## Prioridade de Produto
+## Prioridade De Produto
 
-O backlog consolidado, com criterios de aceite, esta em
-`docs/roadmap_produto_final.md`. A ordem de execucao e:
-
-```txt
-1. Orchestration V2 completa: URL -> startup -> briefing — ENTREGUE
-2. Frontend operacional
-3. NVIDIA Knowledge V2 e Recommendations V2/V4
-4. Revisao humana, exportacao e ranking
-5. Auth, observabilidade, CI/CD e deploy
-```
-
-O worker automatico de `url_ingestion_jobs` ja esta entregue, e a jornada
-ate o briefing tambem (`docs/orchestration/orchestration_v2_jornada_completa.md`).
-A prioridade agora e concluir o Frontend V3: filtros interativos e historico
-global de jobs, sobre a listagem de startups ja entregue.
-
-## Proximas Entregas
-
-### NVIDIA Knowledge V2
-
-Ingerir documentacao oficial NVIDIA usando os modulos ja existentes:
+O backlog consolidado, com criterios de aceite, esta em `docs/roadmap_produto_final.md`. A ordem atual e:
 
 ```txt
-scraping -> ingestion -> embeddings -> RAG
+1. Validar a chain de enriquecimento com Tavily real e calibrar ranking/allowlist.
+2. Expandir Startup Discovery para mais hubs gratuitos.
+3. Hardening de producao apenas se o projeto deixar de ser demo.
 ```
 
-Decisao de escopo entregue: `documents.source_type`, payload `source_type` no
-Qdrant e filtro opcional em RAG. Registry de fontes entregue em
-`GET /nvidia-knowledge/sources`; submissao para Orchestration V2 entregue em
-`POST /nvidia-knowledge/ingestion/jobs`. O default continua
-`startup_evidence`; docs NVIDIA devem entrar como `nvidia_knowledge`.
+---
 
-O worker/dispatcher para reenfileirar `url_ingestion_jobs` ja foi entregue.
-Faltam validar as seis fontes P0 restantes e rodar os lotes P1/P2.
+## Entregas Fechadas
 
-### Agents V10-V12 - Entregues
-
-NVIDIA RAG, Recommendation e Briefing Agents estao implementados. A lacuna
-atual e integra-los ao fluxo principal — hoje o fluxo automatico da
-Orchestration V2 usa os geradores deterministicos
-(`recommendations`/`briefing` V1), nao os agentes; eles continuam
-acionaveis so pela fila generica `agent_runs`.
-
-### Orchestration V2 - ENTREGUE
-
-Entrada por URL bruta, ponta a ponta:
+### Orchestration V2
 
 ```txt
 URL -> scraping -> ingestion -> embeddings -> startup/extract/classify
 -> recommendations -> briefing
 ```
 
-Ver `docs/orchestration/orchestration_v2_jornada_completa.md`.
+Entregue com `url_ingestion_jobs`, worker automatico, historico paginado e limpeza best-effort de vetores orfaos no Qdrant em re-scrape.
 
-### Frontend
+### Orchestration V2.1
 
-Interface para operar o fluxo e visualizar resultados. Proxima prioridade.
+Primeira fatia da chain de enriquecimento entregue: quando a extracao deixa
+`founders`, `funding_stage` ou `customers` vazios, a orquestracao agenda ate
+2 jobs filhos no mesmo dominio da startup, com `parent_job_id`,
+`enrichment_round` e limite de uma rodada para evitar loop.
+
+### Orchestration V2.2
+
+Busca externa opcional entregue: `agents` expoe `SearchExecutorPort` com
+`TavilySearchExecutor`, e `AdvanceUrlIngestionJob` tenta URLs externas
+planejadas pelo Search Planner antes do fallback do mesmo dominio. Sem
+`TAVILY_API_KEY`, o fluxo continua local com o fallback por dominio.
+
+### NVIDIA Knowledge V2
+
+P0+P1+P2 completos: 20/20 fontes processadas, 17/20 com conteudo recuperavel via RAG. Os gaps restantes sao limitacoes de ambiente ou necessidade de fallback pago (Firecrawl), nao bloqueios do MVP.
+
+### Recommendations V3
+
+O modulo gera recomendacoes deterministicas, fundamenta justificativas via RAG NVIDIA quando ha contexto, persiste `confidence` e `complexity`, e expoe `GET /recommendations/stats` para o dashboard.
+
+### Frontend V4
+
+Interface para operar o fluxo e visualizar resultados: submissao de URL, job detail, startup detail, portfolio, historico, chat NVIDIA Knowledge, export PDF, dashboard, comparacao de startups e fila em lote.
+
+### Frontend V5
+
+Revisao humana simples entregue para recommendations e briefings, sem auth completa.
+
+### Startup Discovery V1
+
+Descoberta automatica em InovAtiva Brasil, Abstartups e 100 Open Startups, com `startup_discovery_runs` persistido e URLs submetidas ao pipeline de `url_ingestion_jobs`.
 
 ---
 
 ## Trilhas Paralelas
 
 ```txt
-hardening de integracao
-auth/autorizacao
-observabilidade
-custos de LLM
-exportacao PDF/HTML do briefing
-revisao humana de recommendations/briefing
+chain de enriquecimento com busca externa
+observabilidade mais profunda dentro dos use cases
+expansao gradual dos hubs de descoberta
 ```
