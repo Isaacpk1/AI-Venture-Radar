@@ -87,7 +87,7 @@ produz o score**, e a tool que ele embrulha e o motor de keyword fraco.
 | Briefing V1 | Implementado | Template executivo em Markdown |
 | Briefing V2 | Implementado (Agents V12) | Briefing gerado por agente (reescrita de prosa) |
 | Briefing V3 | Implementado (24/06/2026) | Exportacao em PDF preservando citacoes |
-| Briefing V4 | **Planejado (robusto)** | Briefing como analise: tese de fit, confianca geral, fortes vs. exploratorias, perguntas de qualificacao |
+| Briefing V4 | **Implementado (27/06/2026)** | Briefing como analise: tese de fit, confianca geral, fortes vs. exploratorias, perguntas de qualificacao |
 | Briefing V5 | Planejado | Avaliacao com casos conhecidos (golden set) + ranking de oportunidades |
 | Briefing V6 | Planejado | Robustez operacional: versionamento, auditoria, reprocessamento por etapa |
 
@@ -143,18 +143,30 @@ de bibliotecas nativas no Windows). Detalhe: `docs/briefing/briefing_v3_export_p
 
 ---
 
-## Briefing V4 — Briefing como Analise (planejado, prioridade maxima)
+## Briefing V4 - Briefing como Analise (implementado, 27/06/2026)
 
-Esta e a entrega que resolve o problema central. Ela tem tres frentes que
-precisam andar juntas, porque o briefing so melhora se o fit melhorar primeiro.
+Esta entrega resolve o problema central. Ela tem tres frentes que precisaram
+andar juntas, porque o briefing so melhora se o fit melhorar primeiro.
+
+Status em 27/06/2026:
+
+```txt
+StartupAIProfile estruturado                         ENTREGUE
+score composto + nova confianca em recommendations   ENTREGUE
+signal_origins / missing_signals                     ENTREGUE
+nivel / faltando                                     ENTREGUE
+prefiltro semantico de candidatos NVIDIA             ENTREGUE (best-effort)
+briefing analitico com matriz/perguntas/lacunas      ENTREGUE
+golden set e metricas                                V5
+```
 
 ### 4.1 Perfil estruturado da startup — `StartupAIProfile`
 
 Hoje o motor compara keyword contra texto cru. Falta um artefato intermediario
 que transforme evidencia coletada em campos comparaveis com o catalogo NVIDIA.
 
-Artefato novo `StartupAIProfile`, extraido das evidencias (via Extraction Agent
-ja existente, Agents V8), com origem registrada por campo:
+Artefato `StartupAIProfile`, extraido das evidencias (via Extraction Agent ja
+existente, Agents V8), com origem registrada por campo:
 
 ```txt
 ai_workload_type      NLP | visao | recomendacao | simulacao | analytics | MLOps | fala
@@ -180,8 +192,8 @@ o LLM nunca infere/inventa campo sem evidencia).
 
 ### 4.2 Fit como score composto, nao proporcao de keyword
 
-Trocar `score = keywords_batidas / total` por um **score composto** com rubrica
-explicita e auditavel:
+`score = keywords_batidas / total` foi substituido por um **score composto**
+com rubrica explicita e auditavel:
 
 ```txt
 fit = 0.35 * alinhamento_de_workload      (StartupAIProfile x criterio da tech)
@@ -258,8 +270,8 @@ motivo_rejeicao    quando NAO recomendar, por que (sem fit nao some, e explicado
 ### 4.5 Nova estrutura de saida do briefing
 
 A estrutura V1 (Resumo, Evidencias, Recomendacoes, Contexto NVIDIA, Riscos,
-Proximas Acoes) e substituida por uma que separa indicacao forte de hipotese e
-expoe a incerteza:
+Proximas Acoes) foi substituida por uma que separa indicacao forte de hipotese
+e expoe a incerteza:
 
 ```txt
 1.  Resumo executivo            o que e a startup, em 2-3 linhas
@@ -360,15 +372,14 @@ O briefing e considerado robusto quando:
 ## Ordem pratica de implementacao
 
 ```txt
-1. Breakdown de fit nas recomendacoes (expor sinais por recomendacao)         [base]
-2. StartupAIProfile estruturado, com origem e field_confidence por campo
-3. Score composto (4.2) + nova confianca (4.3), substituindo keyword puro
-4. Retrieval semantico de candidatos + ligar Recommendation Agent V11 ao
-   caminho sincrono (hoje ele existe fora do fluxo de producao)
-5. Matriz de decisao por tecnologia (4.4)
-6. Nova estrutura de saida do briefing (4.5) em build_briefing_markdown()
-7. Golden set + metricas (V5)
-8. Frontend: separar fortes de exploratorias, expor motivo de baixa confianca
+1. Breakdown de fit nas recomendacoes (expor sinais por recomendacao)         [ENTREGUE]
+2. StartupAIProfile estruturado, com origem e field_confidence por campo       [ENTREGUE]
+3. Score composto (4.2) + nova confianca (4.3), substituindo keyword puro      [ENTREGUE]
+4. Retrieval semantico de candidatos NVIDIA                                   [ENTREGUE best-effort]
+5. Matriz de decisao por tecnologia (4.4)                                      [ENTREGUE base]
+6. Nova estrutura de saida do briefing (4.5) em build_briefing_markdown()      [ENTREGUE]
+7. Golden set + metricas (V5)                                                  [PROXIMO]
+8. Frontend: separar fortes de exploratorias, expor motivo de baixa confianca  [PROXIMO]
 ```
 
 Os passos 1-3 e 6 sao puros em `domain/policies.py` dos dois modulos — sem rede,

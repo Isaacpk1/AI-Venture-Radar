@@ -1,6 +1,6 @@
 ﻿# Roadmap do Modulo Recommendations
 
-Atualizado em 26/06/2026.
+Atualizado em 27/06/2026.
 
 O modulo `recommendations` cruza perfil de startup, evidencias e conhecimento NVIDIA para gerar recomendacoes explicaveis.
 
@@ -13,7 +13,8 @@ O modulo `recommendations` cruza perfil de startup, evidencias e conhecimento NV
 | Recommendations V1 | Implementado | Regras deterministicas iniciais |
 | Recommendations V2 | Implementado | RAG grounding com citacoes NVIDIA |
 | Recommendations V3 | Implementado | Confidence, complexity e stats para dashboard |
-| Recommendations V4 | Futuro | Feedback humano, versionamento e revisao |
+| Recommendations V4 | Implementado | Score composto, nova confianca, sinais, nivel/faltando e prefiltro semantico |
+| Recommendations V5 | Futuro | Golden set, metricas, feedback humano e versionamento |
 
 ---
 
@@ -71,11 +72,37 @@ A rota de stats alimenta o dashboard do Frontend V4 com as tecnologias NVIDIA ma
 
 ---
 
-## V4 - Futuro
+## V4 - Score Composto e Nivel de Recomendacao
 
-Campos e fluxos que ficam para revisao humana:
+Entregue em 27/06/2026:
 
 ```txt
+StartupAIContext consumido via adapter de startups
+score composto por workload, evidencia, maturidade, keyword prior e viabilidade
+nova confianca separada do fit
+signal_origins
+missing_signals
+nivel: forte | moderada | exploratoria
+faltando
+prefiltro semantico best-effort de candidatos NVIDIA
+```
+
+Migrations:
+
+```txt
+a3c7f9e2b4d8_add_signal_origins_missing_signals_to_recommendations.py
+c5d9a3e7b2f1_add_nivel_faltando_to_recommendations.py
+```
+
+---
+
+## V5 - Futuro
+
+Campos e fluxos que ficam para avaliacao e revisao:
+
+```txt
+golden set de startups conhecidas
+precision@3 e taxa de falso positivo
 aprovar/rejeitar recomendacoes
 registrar comentarios
 versionar geracoes
@@ -92,4 +119,4 @@ riscos e tradeoffs estruturados
 | Justificativa template sem citar conteudo NVIDIA | Reusar `rag/application/public/question_answerer.py` filtrado por `source_type=nvidia_knowledge` | Concluido em V2 |
 | Dashboard precisava de top tecnologias | Agregacao em backend e `GET /recommendations/stats` | Concluido em V3 |
 | Sem versionamento de geracoes | Adicionar historico/versionamento antes de feedback humano | Futuro |
-| Setores fora do vocabulario do catalogo podem nao bater keyword | Complementar match com busca semantica via embeddings | Futuro |
+| Setores fora do vocabulario do catalogo podem nao bater keyword | Complementar match com busca semantica via embeddings | Concluido em V4 (best-effort) |

@@ -1,79 +1,53 @@
-# Documentacao do NVIDIA Startup AI Radar
+# Documentação — NVIDIA Startup AI Radar
 
-Este indice mostra como ler a documentacao atual sem cair em notas historicas
-antigas.
-
-Fonte de verdade operacional em 26/06/2026:
-
-```txt
-docs/diagnostico_case_original_e_novas_prioridades.md
-docs/estado_atual_do_projeto.md
-CLAUDE.md
-docs/roadmap_produto_final.md
-```
+Índice da documentação. A organização tem duas partes: **`geral/`** (a visão de
+sistema) e **uma pasta por módulo** (cada módulo com sua visão geral, roadmap e
+histórico de versões).
 
 ---
 
-## Leitura Recomendada
+## Visão geral do sistema (`geral/`)
 
-| Ordem | Documento | Uso |
-|---|---|---|
-| 1 | `docs/diagnostico_case_original_e_novas_prioridades.md` | Aderencia ao brief original e prioridades reais |
-| 2 | `docs/estado_atual_do_projeto.md` | Fotografia operacional atual |
-| 3 | `docs/roadmap_proximos_passos.md` | Roadmap macro atualizado |
-| 4 | `docs/validacao_arquitetural_modulos_workers.md` | Validacao de modulos, workers e contratos |
-| 5 | `docs/validacao_mensagens_interacoes_modulos.md` | Como os modulos conversam |
-| 6 | `docs/roadmap_produto_final.md` | Backlog priorizado para fechar o produto |
-| 7 | `docs/frontend/nextjs_arquitetura.md` | Arquitetura do frontend Next.js |
-| 8 | `docs/frontend/roadmap_frontend.md` | Versoes e entregas do frontend |
-| 9 | `docs/startup_discovery/roadmap_startup_discovery.md` | Descoberta automatica de startups |
-
----
-
-## Modulos Atuais
-
-| Modulo | Estado | Docs |
-|---|---|---|
-| scraping | Scraping V8 | `docs/scraping/` |
-| agents | Agents V12 | `docs/agents/` |
-| ingestion | Ingestion V1 + worker | `docs/ingestion/` |
-| embeddings | Embeddings V5 + worker | `docs/embeddings/` |
-| startups | Startups V4: campos estruturados, classificacao, paginacao e dedup com `rapidfuzz` | `docs/startups/` |
-| rag | RAG V4 | `docs/rag/` |
-| nvidia_knowledge | NVIDIA Knowledge V1 expandido + V2 completo (20/20 fontes, 17/20 com conteudo) | `docs/nvidia_knowledge/` |
-| recommendations | Recommendations V3: RAG grounding, confidence/complexity e stats | `docs/recommendations/` |
-| briefing | Briefing V3: RAG grounding + export PDF | `docs/briefing/` |
-| orchestration | Orchestration V1 + V2 completa | `docs/orchestration/` |
-| startup_discovery | Startup Discovery V1: 3 hubs publicos + `url_ingestion_jobs` | `docs/startup_discovery/` |
-| frontend | Frontend V5: jornada, portfolio, historico, chat, PDF, dashboard, comparacao, lote e revisao humana simples | `docs/frontend/` |
-
----
-
-## Entregas Do Case Original
-
-| Entregavel | Estado |
+| Documento | O que cobre |
 |---|---|
-| Pipeline de scraping | Completo |
-| Sistema multiagente LangGraph | Completo: 8/8 agentes implementados, Recommendation/Briefing com consumidor sincrono em orchestration |
-| RAG NVIDIA com busca hibrida + reranking | Completo |
-| Motor de recomendacao | V3: regras deterministicas + justificativa via RAG + confidence/complexity + stats |
-| Interface web | V1+V2+V3+V4+V5 entregues; auth completa segue fora de escopo |
-| Descoberta de startups | V1 entregue para InovAtiva Brasil, Abstartups e 100 Open Startups |
-| Diferencial do projeto | Rastreabilidade ponta a ponta implementada: citacoes em Markdown clicavel e evidencia ligada a recomendacao |
+| [`geral/arquitetura_monolito_modular_workers.md`](geral/arquitetura_monolito_modular_workers.md) | Por que monolito modular + workers; camadas, regras de dependência, repositório |
+| [`geral/comunicacao_entre_modulos.md`](geral/comunicacao_entre_modulos.md) | Os dois canais (contratos públicos + filas), tabela de contratos, adapters |
+| [`geral/fluxo_total.md`](geral/fluxo_total.md) | Jornada ponta a ponta: URL → briefing, orquestração, descoberta, RAG |
+| [`geral/stack_e_onde_e_usado.md`](geral/stack_e_onde_e_usado.md) | Cada tecnologia, em que camada/módulo entra e por quê |
+| [`geral/estado_atual_e_roadmap_futuro.md`](geral/estado_atual_e_roadmap_futuro.md) | Versão por módulo, o que está pronto, limites e roadmap futuro |
 
 ---
 
-## Proxima Ordem Recomendada
+## Módulos
 
-Atualizado em 26/06/2026. Startups V4, limpeza de vetores orfaos no Qdrant,
-Frontend V5, Startup Discovery V1, Recommendations V3 e a primeira fatia da
-chain de enriquecimento por dominio estao completos.
-`docs/decisoes_pendentes.md` nao tem pergunta em aberto.
+Cada pasta de módulo segue o mesmo padrão:
+`visao_geral.md` (importância, fluxo, estrutura de pastas, stack, histórico) +
+`roadmap.md` (evolução futura) + `versoes/` (um arquivo por versão entregue).
+
+| Módulo | Visão geral | Roadmap | Versões |
+|---|---|---|---|
+| Scraping | [visao_geral](scraping/visao_geral.md) | [roadmap](scraping/roadmap.md) | [versoes/](scraping/versoes/) |
+| Agents | [visao_geral](agents/visao_geral.md) | [roadmap](agents/roadmap.md) | [versoes/](agents/versoes/) |
+| Ingestion | [visao_geral](ingestion/visao_geral.md) | [roadmap](ingestion/roadmap.md) | [versoes/](ingestion/versoes/) |
+| Embeddings | [visao_geral](embeddings/visao_geral.md) | [roadmap](embeddings/roadmap.md) | [versoes/](embeddings/versoes/) |
+| Startups | [visao_geral](startups/visao_geral.md) | [roadmap](startups/roadmap.md) | [versoes/](startups/versoes/) |
+| RAG | [visao_geral](rag/visao_geral.md) | [roadmap](rag/roadmap.md) | [versoes/](rag/versoes/) |
+| NVIDIA Knowledge | [visao_geral](nvidia_knowledge/visao_geral.md) | [roadmap](nvidia_knowledge/roadmap.md) | [versoes/](nvidia_knowledge/versoes/) |
+| Recommendations | [visao_geral](recommendations/visao_geral.md) | [roadmap](recommendations/roadmap.md) | [versoes/](recommendations/versoes/) |
+| Briefing | [visao_geral](briefing/visao_geral.md) | [roadmap](briefing/roadmap.md) | [versoes/](briefing/versoes/) |
+| Orchestration | [visao_geral](orchestration/visao_geral.md) | [roadmap](orchestration/roadmap.md) | [versoes/](orchestration/versoes/) |
+| Startup Discovery | [visao_geral](startup_discovery/visao_geral.md) | [roadmap](startup_discovery/roadmap.md) | [versoes/](startup_discovery/versoes/) |
+| Frontend | [visao_geral](frontend/visao_geral.md) | [roadmap](frontend/roadmap.md) | [versoes/](frontend/versoes/) |
+
+---
+
+## Por onde começar
 
 ```txt
-1. Validar a chain de enriquecimento com Tavily real e calibrar ranking/allowlist.
-2. Expandir Startup Discovery para mais hubs gratuitos alem dos 3 iniciais.
+Novo no projeto?        geral/arquitetura_monolito_modular_workers.md -> geral/fluxo_total.md
+Vai mexer num módulo?   <modulo>/visao_geral.md -> <modulo>/roadmap.md -> <modulo>/versoes/
+Quer o estado atual?    geral/estado_atual_e_roadmap_futuro.md
 ```
 
-Hardening de producao (auth, CI/CD, deploy, backup do Qdrant) segue fora de
-escopo deliberadamente: este projeto continua case/demo, nao alvo de producao.
+> A fonte da verdade operacional (head de migrations, contagem de testes) vive em
+> `CLAUDE.md` na raiz do repositório; este índice é o mapa da documentação.

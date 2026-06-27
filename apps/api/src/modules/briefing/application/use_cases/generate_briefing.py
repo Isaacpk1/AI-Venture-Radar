@@ -21,6 +21,7 @@ from apps.api.src.modules.briefing.domain.entities import Briefing
 from apps.api.src.modules.briefing.domain.policies import (
     EvidenceItem,
     RecommendationItem,
+    StartupAIProfileItem,
     StartupSummary,
     assess_risks,
     build_briefing_markdown,
@@ -78,9 +79,31 @@ class GenerateBriefing(BriefingGenerator):
                 justification=recommendation.justification,
                 confidence=recommendation.confidence,
                 complexity=recommendation.complexity,
+                nivel=recommendation.nivel,
+                faltando=recommendation.faltando,
+                signal_origins=recommendation.signal_origins,
+                missing_signals=recommendation.missing_signals,
             )
             for recommendation in recommendation_snapshots
         ]
+        ai_profile = (
+            StartupAIProfileItem(
+                ai_workload_type=profile.ai_profile.ai_workload_type,
+                model_type=profile.ai_profile.model_type,
+                data_modality=profile.ai_profile.data_modality,
+                deployment_stage=profile.ai_profile.deployment_stage,
+                infra_environment=profile.ai_profile.infra_environment,
+                gpu_need=profile.ai_profile.gpu_need,
+                latency_requirement=profile.ai_profile.latency_requirement,
+                scale_signal=profile.ai_profile.scale_signal,
+                current_tools=profile.ai_profile.current_tools,
+                business_goal=profile.ai_profile.business_goal,
+                field_confidence=profile.ai_profile.field_confidence,
+                field_evidence_ids=profile.ai_profile.field_evidence_ids,
+            )
+            if profile.ai_profile is not None
+            else None
+        )
 
         nvidia_context = await self._ground_context(startup.sector, recommendations)
 
@@ -92,6 +115,7 @@ class GenerateBriefing(BriefingGenerator):
             recommendations=recommendations,
             risks=risks,
             next_actions=next_actions,
+            ai_profile=ai_profile,
             nvidia_context=nvidia_context,
         )
 

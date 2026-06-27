@@ -1,10 +1,4 @@
-"""Regras deterministicas de avaliacao e montagem do briefing executivo.
-
-Riscos e proximas acoes sao inferidos por regra de codigo, nao por LLM — o
-mesmo principio aplicado em ``recommendations/domain/policies.py``. Uma
-versao futura com agente (Briefing V2) pode substituir/complementar isto,
-nao esta.
-"""
+"""Regras deterministicas de avaliacao e montagem do briefing executivo."""
 
 from dataclasses import dataclass
 
@@ -19,6 +13,24 @@ class StartupSummary:
     description: str | None
     country: str | None
     website_url: str | None
+
+
+@dataclass(frozen=True)
+class StartupAIProfileItem:
+    """Perfil estruturado de IA usado pelo briefing analitico."""
+
+    ai_workload_type: str = "unknown"
+    model_type: str = "unknown"
+    data_modality: str = "unknown"
+    deployment_stage: str = "unknown"
+    infra_environment: str = "unknown"
+    gpu_need: str = "unknown"
+    latency_requirement: str = "unknown"
+    scale_signal: str | None = None
+    current_tools: tuple[str, ...] = ()
+    business_goal: str | None = None
+    field_confidence: dict[str, float] | None = None
+    field_evidence_ids: dict[str, list[str]] | None = None
 
 
 @dataclass(frozen=True)
@@ -37,6 +49,10 @@ class RecommendationItem:
     justification: str
     confidence: float = 0.0
     complexity: str = "medium"
+    nivel: str = "exploratoria"
+    faltando: tuple[str, ...] = ()
+    signal_origins: tuple[str, ...] = ()
+    missing_signals: tuple[str, ...] = ()
 
 
 def assess_risks(
@@ -95,9 +111,14 @@ def suggest_next_actions(recommendations: list[RecommendationItem]) -> list[str]
 
 
 def _recommendation_strength(recommendation: RecommendationItem) -> str:
+    if recommendation.nivel in {"forte", "moderada", "exploratoria"}:
+        return recommendation.nivel
     if recommendation.score >= 0.65 and recommendation.confidence >= 0.65:
         return "forte"
-    if recommendation.score >= LOW_SCORE_THRESHOLD and recommendation.confidence >= LOW_CONFIDENCE_THRESHOLD:
+    if (
+        recommendation.score >= LOW_SCORE_THRESHOLD
+        and recommendation.confidence >= LOW_CONFIDENCE_THRESHOLD
+    ):
         return "moderada"
     return "exploratoria"
 
@@ -128,6 +149,111 @@ def _recommendation_context(
     )
 
 
+def _unknown(value: str | None) -> bool:
+    return value is None or value.strip().lower() in {"", "unknown", "desconhecida"}
+
+
+def _profile_found_items(ai_profile: StartupAIProfileItem | None) -> list[str]:
+    if ai_profile is None:
+        return []
+
+    fields = [
+        ("Workload de IA", ai_profile.ai_workload_type),
+        ("Tipo de modelo", ai_profile.model_type),
+        ("Modalidade de dados", ai_profile.data_modality),
+        ("Estagio de deploy", ai_profile.deployment_stage),
+        ("Ambiente de infra", ai_profile.infra_environment),
+        ("Necessidade de GPU", ai_profile.gpu_need),
+        ("Latencia", ai_profile.latency_requirement),
+    ]
+    items = [f"{label}: {value}" for label, value in fields if not _unknown(value)]
+    if ai_profile.scale_signal:
+        items.append(f"Sinal de escala: {ai_profile.scale_signal}")
+    if ai_profile.current_tools:
+        items.append(f"Ferramentas atuais: {', '.join(ai_profile.current_tools)}")
+    if ai_profile.business_goal:
+        items.append(f"Objetivo de negocio: {ai_profile.business_goal}")
+    return items
+
+
+def _profile_missing_items(ai_profile: StartupAIProfileItem | None) -> list[str]:
+    if ai_profile is None:
+        return [
+            "perfil estruturado de IA ainda nao extraido",
+            "workload, maturidade tecnica e necessidade de GPU desconhecidos",
+        ]
+
+    fields = [
+        ("workload de IA", ai_profile.ai_workload_type),
+        ("tipo de modelo", ai_profile.model_type),
+        ("modalidade de dados", ai_profile.data_modality),
+        ("estagio de deploy", ai_profile.deployment_stage),
+        ("ambiente de infraestrutura", ai_profile.infra_environment),
+        ("necessidade de GPU", ai_profile.gpu_need),
+        ("requisito de latencia", ai_profile.latency_requirement),
+    ]
+    missing = [label for label, value in fields if _unknown(value)]
+    if not ai_profile.business_goal:
+        missing.append("objetivo de negocio")
+    if not ai_profile.current_tools:
+        missing.append("stack/ferramentas atuais")
+    return missing
+
+
+def _overall_confidence(recommendations: list[RecommendationItem]) -> tuple[str, str]:
+    if not recommendations:
+        return ("baixo", "nao ha recomendacoes sustentadas pelas evidencias atuais")
+
+    avg = sum(r.confidence for r in recommendations) / len(recommendations)
+    strong_count = sum(1 for r in recommendations if _recommendation_strength(r) == "forte")
+    if avg >= 0.65 and strong_count > 0:
+        return ("alto", "ha recomendacao forte com confianca media adequada")
+    if avg >= 0.35:
+        return (
+            "medio",
+            "ha sinais uteis, mas parte das recomendacoes ainda depende de validacao",
+        )
+    return (
+        "baixo",
+        "as recomendacoes sao exploratorias ou dependem de evidencias melhores",
+    )
+
+
+def _qualification_questions(
+    *,
+    ai_profile: StartupAIProfileItem | None,
+    recommendations: list[RecommendationItem],
+) -> list[str]:
+    questions: list[str] = []
+    missing = _profile_missing_items(ai_profile)
+
+    if "workload de IA" in missing:
+        questions.append(
+            "Qual e o workload principal de IA hoje: NLP, visao, fala, "
+            "analytics, simulacao ou outro?"
+        )
+    if "necessidade de GPU" in missing:
+        questions.append(
+            "Existe gargalo atual de custo, latencia ou throughput que "
+            "justificaria aceleracao por GPU?"
+        )
+    if "estagio de deploy" in missing:
+        questions.append("A solucao esta em pesquisa, MVP, piloto, producao ou escala?")
+    for recommendation in recommendations:
+        if recommendation.faltando:
+            questions.append(
+                f"Para {recommendation.technology_name}: validar "
+                f"{recommendation.faltando[0]}."
+            )
+
+    if not questions:
+        questions.append(
+            "Confirmar com o time tecnico quais workloads entrariam primeiro "
+            "em uma prova de valor NVIDIA."
+        )
+    return questions[:5]
+
+
 def build_briefing_markdown(
     *,
     startup: StartupSummary,
@@ -135,17 +261,26 @@ def build_briefing_markdown(
     recommendations: list[RecommendationItem],
     risks: list[str],
     next_actions: list[str],
+    ai_profile: StartupAIProfileItem | None = None,
     nvidia_context: str | None = None,
 ) -> str:
-    """Monta o briefing executivo em Markdown a partir de dados estruturados.
+    """Monta o briefing executivo analitico em Markdown.
 
-    ``nvidia_context`` e' texto ja formatado (citacoes embutidas como texto
-    plano) vindo de uma fundamentacao via RAG best-effort feita por quem
-    chama - a funcao continua pura, sem I/O; quando ``None`` (sem
-    `GEMINI_API_KEY` ou sem evidencia suficiente), a secao e' omitida.
+    A funcao continua pura: recebe perfil, evidencias, recomendacoes e contexto
+    ja buscados pelo caso de uso; nao faz rede nem banco.
     """
 
-    lines = [f"# Briefing Executivo — {startup.name}", "", "## Resumo"]
+    confidence_label, confidence_reason = _overall_confidence(recommendations)
+    found_items = _profile_found_items(ai_profile)
+    missing_items = _profile_missing_items(ai_profile)
+    strong_recommendations = [
+        r for r in recommendations if _recommendation_strength(r) == "forte"
+    ]
+    exploratory_recommendations = [
+        r for r in recommendations if _recommendation_strength(r) != "forte"
+    ]
+
+    lines = [f"# Briefing Executivo - {startup.name}", "", "## Resumo Executivo"]
 
     summary_parts = [part for part in (startup.sector, startup.country) if part]
     if summary_parts:
@@ -155,7 +290,7 @@ def build_briefing_markdown(
     if startup.website_url:
         lines.append(f"Site: {startup.website_url}")
 
-    lines += ["", "## Leitura Executiva"]
+    lines += ["", "## Tese de Fit NVIDIA"]
     lines.append(_best_recommendation_summary(recommendations))
     if recommendations and _recommendation_strength(recommendations[0]) == "exploratoria":
         lines.append(
@@ -163,26 +298,73 @@ def build_briefing_markdown(
             "nao como indicacao tecnica fechada."
         )
 
+    lines += ["", "## Nivel de Confianca Geral"]
+    lines.append(f"{confidence_label}: {confidence_reason}.")
+
+    lines += ["", "## O Que Foi Encontrado"]
+    if found_items:
+        lines += [f"- {item}" for item in found_items]
+    else:
+        lines.append("- Nenhum sinal estruturado de IA foi extraido ainda.")
+
+    lines += ["", "## O Que Nao Foi Encontrado"]
+    if missing_items:
+        lines += [f"- {item}" for item in missing_items]
+    else:
+        lines.append("- Nenhuma lacuna critica de perfil foi identificada.")
+
     lines += ["", "## Evidencias Principais"]
     if evidences:
         for evidence in evidences:
             label = evidence.title or evidence.source_url
-            lines.append(f"- [{label}]({evidence.source_url}) — {evidence.evidence_type}")
+            lines.append(f"- [{label}]({evidence.source_url}) - {evidence.evidence_type}")
     else:
         lines.append("- Nenhuma evidencia aprovada registrada.")
 
-    lines += ["", "## Recomendacoes NVIDIA"]
+    lines += ["", "## Matriz de Recomendacoes"]
     if recommendations:
+        lines.append("| Tecnologia | Fit | Confianca | Nivel | Complexidade |")
+        lines.append("|---|---:|---:|---|---|")
         for recommendation in recommendations:
             strength = _recommendation_strength(recommendation)
             lines.append(
-                f"- **{recommendation.technology_name}** "
-                f"({recommendation.category}, score {recommendation.score}) — "
-                f"{_recommendation_context(recommendation, strength)} "
-                f"{recommendation.justification}"
+                f"| {recommendation.technology_name} | "
+                f"{recommendation.score:.0%} | "
+                f"{recommendation.confidence:.0%} | "
+                f"{strength} | {recommendation.complexity} |"
             )
     else:
         lines.append("- Nenhuma recomendacao gerada ainda.")
+
+    lines += ["", "## Recomendacoes Fortes"]
+    if strong_recommendations:
+        for recommendation in strong_recommendations:
+            origins = (
+                "; ".join(recommendation.signal_origins)
+                or "sinais consolidados no motor de recomendacao"
+            )
+            lines.append(
+                f"- **{recommendation.technology_name}**: "
+                f"{_recommendation_context(recommendation, 'forte')} "
+                f"{recommendation.justification} Sinais: {origins}."
+            )
+    else:
+        lines.append("- Nenhuma recomendacao forte com as evidencias atuais.")
+
+    lines += ["", "## Hipoteses Exploratorias"]
+    if exploratory_recommendations:
+        for recommendation in exploratory_recommendations:
+            strength = _recommendation_strength(recommendation)
+            faltando = (
+                "; ".join(recommendation.faltando)
+                or "mais evidencias sobre o workload e maturidade tecnica"
+            )
+            lines.append(
+                f"- **{recommendation.technology_name}** ({strength}): "
+                f"{recommendation.justification} Para elevar o nivel: {faltando}."
+            )
+    else:
+        lines.append("- Nenhuma hipotese exploratoria separada das recomendacoes fortes.")
 
     if nvidia_context:
         lines += ["", "## Contexto NVIDIA", nvidia_context]
@@ -192,6 +374,15 @@ def build_briefing_markdown(
         lines += [f"- {risk}" for risk in risks]
     else:
         lines.append("- Nenhum risco identificado.")
+
+    lines += ["", "## Perguntas de Qualificacao"]
+    lines += [
+        f"- {question}"
+        for question in _qualification_questions(
+            ai_profile=ai_profile,
+            recommendations=recommendations,
+        )
+    ]
 
     lines += ["", "## Proximas Acoes"]
     lines += [f"- {action}" for action in next_actions]

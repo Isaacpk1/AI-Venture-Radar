@@ -10,6 +10,7 @@ from apps.api.src.modules.briefing.application.dto import (
     GenerateBriefingInput,
     GroundedContext,
     RecommendationSnapshot,
+    StartupAIProfileSnapshot,
     StartupProfileSnapshot,
     StartupSnapshot,
 )
@@ -151,6 +152,8 @@ async def test_generate_briefing_persists_markdown_content() -> None:
                 confidence=0.75,
                 complexity="medium",
                 justification="Evidencias mencionam llm e inference.",
+                nivel="forte",
+                signal_origins=("llm: evidencia acme",),
             )
         ]
     )
@@ -161,7 +164,8 @@ async def test_generate_briefing_persists_markdown_content() -> None:
     assert view.startup_id == startup_id
     assert "Acme AI" in view.content
     assert "NVIDIA NIM" in view.content
-    assert "## Leitura Executiva" in view.content
+    assert "## Tese de Fit NVIDIA" in view.content
+    assert "## Matriz de Recomendacoes" in view.content
     assert "fit 80%" in view.content
     assert "confianca 75%" in view.content
     assert uow.commits == 1
@@ -233,6 +237,33 @@ async def test_generate_briefing_includes_nvidia_context_when_grounder_succeeds(
     assert "NVIDIA NIM e NeMo aceleram atendimento" in view.content
     assert "[Fonte 1](https://nvidia.com/nim)" in view.content
     assert grounder.calls == [(STARTUP_SNAPSHOT.sector, ("NVIDIA NIM",))]
+
+
+@pytest.mark.anyio
+async def test_generate_briefing_includes_ai_profile() -> None:
+    startup_id = uuid4()
+    repository = FakeBriefingRepository()
+    uow = FakeUoW(repository)
+    profile_source = FakeProfileSource(
+        StartupProfileSnapshot(
+            startup=STARTUP_SNAPSHOT,
+            evidences=(),
+            ai_profile=StartupAIProfileSnapshot(
+                ai_workload_type="nlp",
+                deployment_stage="production",
+                gpu_need="high",
+                business_goal="reduzir custo de inferencia",
+            ),
+        )
+    )
+    recommendations_source = FakeRecommendationsSource([])
+
+    use_case = GenerateBriefing(lambda: uow, profile_source, recommendations_source)
+    view = await use_case.execute(GenerateBriefingInput(startup_id=startup_id))
+
+    assert "Workload de IA: nlp" in view.content
+    assert "Necessidade de GPU: high" in view.content
+    assert "Objetivo de negocio: reduzir custo de inferencia" in view.content
 
 
 @pytest.mark.anyio

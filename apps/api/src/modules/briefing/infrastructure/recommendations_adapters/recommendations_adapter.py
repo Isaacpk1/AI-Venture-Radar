@@ -30,6 +30,10 @@ class RecommendationsModuleSource(RecommendationsSource):
                 justification=recommendation.justification,
                 confidence=recommendation.confidence,
                 complexity=recommendation.complexity,
+                nivel=recommendation.nivel,
+                faltando=tuple(recommendation.faltando),
+                signal_origins=tuple(recommendation.signal_origins),
+                missing_signals=tuple(recommendation.missing_signals),
             )
             for recommendation in recommendations
         ]

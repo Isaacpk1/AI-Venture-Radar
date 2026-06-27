@@ -42,6 +42,24 @@ class StartupSnapshot:
 
 
 @dataclass(frozen=True)
+class StartupAIProfileSnapshot:
+    """Perfil estruturado de IA, no vocabulario de briefing."""
+
+    ai_workload_type: str = "unknown"
+    model_type: str = "unknown"
+    data_modality: str = "unknown"
+    deployment_stage: str = "unknown"
+    infra_environment: str = "unknown"
+    gpu_need: str = "unknown"
+    latency_requirement: str = "unknown"
+    scale_signal: str | None = None
+    current_tools: tuple[str, ...] = ()
+    business_goal: str | None = None
+    field_confidence: dict[str, float] | None = None
+    field_evidence_ids: dict[str, list[str]] | None = None
+
+
+@dataclass(frozen=True)
 class EvidenceSnapshot:
     """Evidencia da startup, no vocabulario de briefing."""
 
@@ -57,6 +75,7 @@ class StartupProfileSnapshot:
 
     startup: StartupSnapshot
     evidences: tuple[EvidenceSnapshot, ...]
+    ai_profile: StartupAIProfileSnapshot | None = None
 
 
 @dataclass(frozen=True)
@@ -69,6 +88,10 @@ class RecommendationSnapshot:
     justification: str
     confidence: float = 0.0
     complexity: str = "medium"
+    nivel: str = "exploratoria"
+    faltando: tuple[str, ...] = ()
+    signal_origins: tuple[str, ...] = ()
+    missing_signals: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

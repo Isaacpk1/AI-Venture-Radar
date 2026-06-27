@@ -3,6 +3,7 @@
 from apps.api.src.modules.briefing.domain.policies import (
     EvidenceItem,
     RecommendationItem,
+    StartupAIProfileItem,
     StartupSummary,
     assess_risks,
     build_briefing_markdown,
@@ -28,6 +29,19 @@ RECOMMENDATION = RecommendationItem(
     score=0.8,
     confidence=0.8,
     justification="Evidencias mencionam llm e inference.",
+    nivel="forte",
+    signal_origins=("llm: evidencia acme", "inference: descricao"),
+)
+AI_PROFILE = StartupAIProfileItem(
+    ai_workload_type="nlp",
+    model_type="fine_tuning",
+    data_modality="text",
+    deployment_stage="production",
+    infra_environment="cloud",
+    gpu_need="high",
+    latency_requirement="real_time",
+    current_tools=("LangChain", "Postgres"),
+    business_goal="reduzir tempo de atendimento",
 )
 
 
@@ -83,14 +97,22 @@ def test_build_briefing_markdown_includes_all_sections() -> None:
         next_actions=["Acao de exemplo."],
     )
 
-    assert "# Briefing Executivo — Acme AI" in content
-    assert "## Resumo" in content
+    assert "# Briefing Executivo - Acme AI" in content
+    assert "## Resumo Executivo" in content
+    assert "## Tese de Fit NVIDIA" in content
+    assert "## Nivel de Confianca Geral" in content
+    assert "## O Que Foi Encontrado" in content
+    assert "## O Que Nao Foi Encontrado" in content
     assert "## Evidencias Principais" in content
     assert "[Acme launches LLM chatbot](https://example.com/news)" in content
-    assert "## Recomendacoes NVIDIA" in content
+    assert "## Matriz de Recomendacoes" in content
+    assert "| NVIDIA NIM | 80% | 80% | forte | medium |" in content
+    assert "## Recomendacoes Fortes" in content
     assert "NVIDIA NIM" in content
+    assert "## Hipoteses Exploratorias" in content
     assert "## Riscos" in content
     assert "Risco de exemplo." in content
+    assert "## Perguntas de Qualificacao" in content
     assert "## Proximas Acoes" in content
     assert "Acao de exemplo." in content
 
@@ -106,7 +128,50 @@ def test_build_briefing_markdown_handles_empty_evidence_and_recommendations() ->
 
     assert "Nenhuma evidencia aprovada registrada." in content
     assert "Nenhuma recomendacao gerada ainda." in content
+    assert "Nenhum sinal estruturado de IA foi extraido ainda." in content
     assert "Nenhum risco identificado." in content
+
+
+def test_build_briefing_markdown_includes_ai_profile_signals() -> None:
+    content = build_briefing_markdown(
+        startup=STARTUP,
+        evidences=[EVIDENCE],
+        recommendations=[RECOMMENDATION],
+        risks=[],
+        next_actions=["Acao de exemplo."],
+        ai_profile=AI_PROFILE,
+    )
+
+    assert "Workload de IA: nlp" in content
+    assert "Necessidade de GPU: high" in content
+    assert "Ferramentas atuais: LangChain, Postgres" in content
+    assert "Nenhuma lacuna critica de perfil foi identificada." in content
+
+
+def test_build_briefing_markdown_separates_exploratory_recommendations() -> None:
+    exploratory = RecommendationItem(
+        technology_name="NVIDIA Riva",
+        category="speech_ai",
+        score=0.42,
+        confidence=0.28,
+        justification="Ha sinal inicial de voz.",
+        nivel="exploratoria",
+        faltando=("evidencias concretas sobre ASR/TTS",),
+    )
+
+    content = build_briefing_markdown(
+        startup=STARTUP,
+        evidences=[EVIDENCE],
+        recommendations=[exploratory],
+        risks=[],
+        next_actions=["Validar voz."],
+    )
+
+    assert "## Recomendacoes Fortes" in content
+    assert "Nenhuma recomendacao forte" in content
+    assert "## Hipoteses Exploratorias" in content
+    assert "Para elevar o nivel: evidencias concretas sobre ASR/TTS." in content
+    assert "Para NVIDIA Riva: validar evidencias concretas sobre ASR/TTS." in content
 
 
 def test_build_briefing_markdown_includes_nvidia_context_when_provided() -> None:
@@ -116,13 +181,17 @@ def test_build_briefing_markdown_includes_nvidia_context_when_provided() -> None
         recommendations=[RECOMMENDATION],
         risks=[],
         next_actions=["Acao de exemplo."],
-        nvidia_context="NVIDIA NIM e NeMo aceleram atendimento via LLM. Fontes: https://nvidia.com/nim.",
+        nvidia_context=(
+            "NVIDIA NIM e NeMo aceleram atendimento via LLM. "
+            "Fontes: https://nvidia.com/nim."
+        ),
     )
 
     assert "## Contexto NVIDIA" in content
     assert "NVIDIA NIM e NeMo aceleram atendimento via LLM." in content
-    # secao aparece entre Recomendacoes NVIDIA e Riscos, nessa ordem
-    assert content.index("## Recomendacoes NVIDIA") < content.index("## Contexto NVIDIA")
+    assert content.index("## Hipoteses Exploratorias") < content.index(
+        "## Contexto NVIDIA"
+    )
     assert content.index("## Contexto NVIDIA") < content.index("## Riscos")
 
 
