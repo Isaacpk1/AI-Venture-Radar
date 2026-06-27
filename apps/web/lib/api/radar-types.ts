@@ -96,6 +96,10 @@ export type Recommendation = {
   justification: string;
   matched_keywords: string[];
   evidence_ids: string[];
+  signal_origins: string[];
+  missing_signals: string[];
+  nivel: "forte" | "moderada" | "exploratoria";
+  faltando: string[];
   review_status: "pending" | "approved" | "rejected";
   review_comment: string | null;
   reviewed_by: string | null;

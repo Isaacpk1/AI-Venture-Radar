@@ -33,6 +33,16 @@ class RecommendationModel(Base):
     justification: Mapped[str] = mapped_column(Text, nullable=False)
     matched_keywords: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     evidence_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    signal_origins: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    missing_signals: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    nivel: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="exploratoria"
+    )
+    faltando: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     review_status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="pending"
     )

@@ -12,8 +12,13 @@ from apps.api.src.modules.startups.application.ports import (
 from apps.api.src.modules.startups.application.use_cases.extract_startup_profile import (
     ExtractStartupProfile,
 )
-from apps.api.src.modules.startups.domain.entities import Startup, StartupEvidence
-from apps.api.src.modules.startups.domain.enums import FundingStage
+from apps.api.src.modules.startups.domain.entities import Startup, StartupAIProfile, StartupEvidence
+from apps.api.src.modules.startups.domain.enums import (
+    AiDeploymentStage,
+    AiGpuNeed,
+    AiWorkloadType,
+    FundingStage,
+)
 from apps.api.src.modules.startups.domain.exceptions import (
     StartupExtractionUnavailableError,
     StartupNotFoundError,
@@ -161,6 +166,58 @@ async def test_try_extract_persists_outcome() -> None:
     await use_case.try_extract(startup.id)
 
     assert uow.startup_repository.items[startup.id].founders == ("Ana Silva",)
+
+
+@pytest.mark.anyio
+async def test_extract_startup_profile_persists_ai_profile() -> None:
+    """Quando o outcome tem ai_profile, ele e salvo na startup."""
+
+    uow = _make_uow()
+    startup = Startup(name="VoiceBot AI")
+    await uow.startup_repository.save(startup)
+
+    profile = StartupAIProfile(
+        ai_workload_type=AiWorkloadType.SPEECH,
+        deployment_stage=AiDeploymentStage.PRODUCTION,
+        gpu_need=AiGpuNeed.HIGH,
+        current_tools=("PyTorch", "Kubernetes"),
+        business_goal="Reduzir custo de atendimento via voz.",
+        field_confidence={"ai_workload_type": 0.95, "gpu_need": 0.8},
+    )
+    outcome = ExtractionOutcome(ai_profile=profile)
+    extractor = FakeExtractionPort(outcome)
+
+    use_case = ExtractStartupProfile(lambda: uow, extractor)
+    await use_case.execute(ExtractStartupProfileInput(startup_id=startup.id))
+
+    saved = uow.startup_repository.items[startup.id]
+    assert saved.ai_profile is not None
+    assert saved.ai_profile.ai_workload_type is AiWorkloadType.SPEECH
+    assert saved.ai_profile.deployment_stage is AiDeploymentStage.PRODUCTION
+    assert saved.ai_profile.gpu_need is AiGpuNeed.HIGH
+    assert "PyTorch" in saved.ai_profile.current_tools
+    assert saved.ai_profile.field_confidence["ai_workload_type"] == 0.95
+
+
+@pytest.mark.anyio
+async def test_extract_startup_profile_no_ai_profile_leaves_existing_intact() -> None:
+    """Quando o outcome nao tem ai_profile, o campo existente nao e apagado."""
+
+    uow = _make_uow()
+    startup = Startup(name="Acme AI")
+    existing_profile = StartupAIProfile(ai_workload_type=AiWorkloadType.NLP)
+    startup.update_ai_profile(existing_profile)
+    await uow.startup_repository.save(startup)
+
+    outcome = ExtractionOutcome(founders=["Ana Silva"])
+    extractor = FakeExtractionPort(outcome)
+
+    use_case = ExtractStartupProfile(lambda: uow, extractor)
+    await use_case.execute(ExtractStartupProfileInput(startup_id=startup.id))
+
+    saved = uow.startup_repository.items[startup.id]
+    assert saved.ai_profile is not None
+    assert saved.ai_profile.ai_workload_type is AiWorkloadType.NLP
 
 
 @pytest.mark.anyio

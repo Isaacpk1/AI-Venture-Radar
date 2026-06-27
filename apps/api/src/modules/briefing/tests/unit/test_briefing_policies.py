@@ -26,6 +26,7 @@ RECOMMENDATION = RecommendationItem(
     technology_name="NVIDIA NIM",
     category="model_serving",
     score=0.8,
+    confidence=0.8,
     justification="Evidencias mencionam llm e inference.",
 )
 

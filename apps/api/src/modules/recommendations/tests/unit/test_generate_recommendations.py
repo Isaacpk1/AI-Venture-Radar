@@ -15,6 +15,7 @@ from apps.api.src.modules.recommendations.application.dto import (
 from apps.api.src.modules.recommendations.application.ports import (
     NvidiaCatalogSource,
     NvidiaKnowledgeGrounder,
+    NvidiaSemanticCandidateSelector,
     StartupProfileSource,
 )
 from apps.api.src.modules.recommendations.application.unit_of_work import (
@@ -252,6 +253,105 @@ async def test_generate_recommendations_uses_grounded_justification_when_availab
     assert "[Fonte 1](https://nvidia.com/nim)" in views[0].justification
     assert "https://nvidia.com/nim" in views[0].justification
     assert grounder.calls == [("NVIDIA NIM", "servir LLMs em producao")]
+
+
+class FakeSemanticSelector(NvidiaSemanticCandidateSelector):
+    def __init__(self, slugs: set[str] | None = None) -> None:
+        self._slugs: set[str] = slugs if slugs is not None else set()
+        self.calls: list[tuple[str, dict]] = []
+
+    async def select(
+        self, query: str, technology_keywords: dict[str, tuple[str, ...]]
+    ) -> set[str]:
+        self.calls.append((query, technology_keywords))
+        return self._slugs
+
+
+RIVA_SNAPSHOT = NvidiaTechnologySnapshot(
+    slug="nvidia-riva",
+    name="NVIDIA Riva",
+    category="speech",
+    use_cases=("reconhecimento de fala",),
+    keywords=("speech", "asr", "tts", "voice"),
+)
+
+
+@pytest.mark.anyio
+async def test_semantic_selector_filters_out_technology_not_in_semantic_results() -> None:
+    startup_id = uuid4()
+    repository = FakeRecommendationRepository()
+    uow = FakeUoW(repository)
+    profile_source = FakeProfileSource(
+        StartupProfileSnapshot(
+            sector="LLM and generative AI",
+            description="Provides inference API with simple deployment as microservice.",
+            evidences=(),
+        )
+    )
+    catalog_source = FakeCatalogSource([NIM_SNAPSHOT, RIVA_SNAPSHOT])
+    # Semantic selector encontrou so NIM no conteudo NVIDIA
+    semantic_selector = FakeSemanticSelector(slugs={"nvidia-nim"})
+
+    use_case = GenerateRecommendations(
+        lambda: uow,
+        profile_source,
+        catalog_source,
+        semantic_selector=semantic_selector,
+    )
+    views = await use_case.execute(GenerateRecommendationsInput(startup_id=startup_id))
+
+    slugs = [v.technology_slug for v in views]
+    assert "nvidia-nim" in slugs
+    assert "nvidia-riva" not in slugs
+
+
+@pytest.mark.anyio
+async def test_semantic_selector_empty_result_falls_back_to_all_candidates() -> None:
+    startup_id = uuid4()
+    repository = FakeRecommendationRepository()
+    uow = FakeUoW(repository)
+    profile_source = FakeProfileSource(
+        StartupProfileSnapshot(
+            sector="LLM and generative AI",
+            description="Provides inference API with simple deployment as microservice.",
+            evidences=(),
+        )
+    )
+    catalog_source = FakeCatalogSource([NIM_SNAPSHOT])
+    # Selector retorna vazio = nvidia_knowledge nao indexado -> fallback
+    semantic_selector = FakeSemanticSelector(slugs=set())
+
+    use_case = GenerateRecommendations(
+        lambda: uow,
+        profile_source,
+        catalog_source,
+        semantic_selector=semantic_selector,
+    )
+    views = await use_case.execute(GenerateRecommendationsInput(startup_id=startup_id))
+
+    # NIM ainda aparece (fallback para todos os candidatos)
+    assert any(v.technology_slug == "nvidia-nim" for v in views)
+
+
+@pytest.mark.anyio
+async def test_without_semantic_selector_all_candidates_are_considered() -> None:
+    startup_id = uuid4()
+    repository = FakeRecommendationRepository()
+    uow = FakeUoW(repository)
+    profile_source = FakeProfileSource(
+        StartupProfileSnapshot(
+            sector="LLM and generative AI",
+            description="Provides inference API with simple deployment as microservice.",
+            evidences=(),
+        )
+    )
+    catalog_source = FakeCatalogSource([NIM_SNAPSHOT])
+
+    # Sem selector — comportamento anterior preservado
+    use_case = GenerateRecommendations(lambda: uow, profile_source, catalog_source)
+    views = await use_case.execute(GenerateRecommendationsInput(startup_id=startup_id))
+
+    assert any(v.technology_slug == "nvidia-nim" for v in views)
 
 
 @pytest.mark.anyio

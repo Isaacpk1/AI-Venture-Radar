@@ -87,6 +87,8 @@ class ExtractStartupProfile(ExtractionTrigger):
                 sector=outcome.sector,
                 description=outcome.description,
             )
+            if outcome.ai_profile is not None:
+                startup.update_ai_profile(outcome.ai_profile)
             await uow.startup_repository.save(startup)
             await uow.commit()
 

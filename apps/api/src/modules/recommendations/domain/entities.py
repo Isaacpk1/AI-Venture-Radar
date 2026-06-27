@@ -27,6 +27,10 @@ class Recommendation:
     evidence_ids: tuple[UUID, ...] = field(default_factory=tuple)
     confidence: float = 0.0
     complexity: str = "medium"
+    signal_origins: tuple[str, ...] = field(default_factory=tuple)
+    missing_signals: tuple[str, ...] = field(default_factory=tuple)
+    nivel: str = "exploratoria"
+    faltando: tuple[str, ...] = field(default_factory=tuple)
     review_status: str = "pending"
     review_comment: str | None = None
     reviewed_by: str | None = None
@@ -57,6 +61,8 @@ class Recommendation:
             raise RecommendationError("confidence deve ficar entre 0 e 1.")
         if self.complexity not in {"low", "medium", "high"}:
             raise RecommendationError("complexity deve ser low, medium ou high.")
+        if self.nivel not in {"forte", "moderada", "exploratoria"}:
+            raise RecommendationError("nivel deve ser forte, moderada ou exploratoria.")
         if self.review_status not in {"pending", "approved", "rejected"}:
             raise RecommendationError(
                 "review_status deve ser pending, approved ou rejected."

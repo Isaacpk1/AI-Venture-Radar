@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
-## Authoritative Current State (2026-06-26)
+## Authoritative Current State (2026-06-27)
 
 Use this section as the source of truth when older historical sections below
 disagree.
@@ -20,13 +20,15 @@ Startups V2 + V3 + V4 (slice inicial: campos estruturados + classificacao de mat
 RAG V4 (busca hibrida + reranking)
 NVIDIA Knowledge V1
 NVIDIA Knowledge V2 foundation + source registry + P0+P1+P2 complete (20/20 sources processed, 17/20 with retrievable content)
-Recommendations V1 + V2 (RAG grounding via NVIDIA Knowledge, com fallback deterministico) + V3 (confidence por qualidade de evidencia + complexity por tecnologia + priority ordinal por posicao; migration d7e3f1a2b9c4)
+Recommendations V1 + V2 (RAG grounding via NVIDIA Knowledge, com fallback deterministico) + V3 (confidence por qualidade de evidencia + complexity por tecnologia + priority ordinal por posicao; migration d7e3f1a2b9c4) + V4 (signal_origins + missing_signals; migration a3c7f9e2b4d8) + V5 (score composto 5 dimensoes + nova confianca 5 fatores + StartupAIContext + NvidiaSemanticCandidateSelector; passo 4 Briefing V4: retrieval semantico pre-filtra candidatos via nvidia_knowledge antes do keyword matching)
 Briefing V1 (+ extensao de RAG grounding + extensao de exportacao em PDF)
 Orchestration V1 + V2 completa (URL bruta -> scraping -> ingestion -> embeddings -> startup -> evidencia -> extract -> classify -> recommendations -> briefing, sem operacao manual entre etapas) + orchestration_worker automatico (+ extensao de historico paginado de jobs + limpeza de vetores orfaos no Qdrant quando URL e' re-raspada)
 Frontend V1 + V2 + V3 completa (jornada URL->job->resultado, portfolio paginado, historico global de jobs, badge de fit, evidencia clicavel por recomendacao, chatbot sobre NVIDIA Knowledge, export de briefing em PDF)
 Frontend V4 (dashboard /dashboard: graficos SVG de distribuicao por maturidade + top tecnologias NVIDIA, comparacao lado a lado de ate 3 startups, fila de analise em lote com resultados linkados; GET /startups/stats + GET /recommendations/stats novos no backend)
-Frontend V5 (revisao humana simples de recommendations/briefings: `pending`/`approved`/`rejected`, comentario, revisor textual e timestamp; sem auth completa; migration e8a7c4d2b1f9)
+Frontend V5 (revisao humana simples de recommendations/briefings: `pending`/`approved`/`rejected`, comentario, revisor textual e timestamp; sem auth completa; migration e8a7c4d2b1f9; PATCH /recommendations/{id}/review + PATCH /briefings/{id}/review; ReviewControls no startup-details.tsx)
 Startup Discovery V1 (descoberta automatica de startups em 3 hubs publicos: InovAtiva Brasil, Abstartups, 100 Open Startups; httpx + BS4; DiscoveryRun persistido no Postgres; POST /startup-discovery/runs, GET /startup-discovery/runs/{id}; limite configuravel via STARTUP_DISCOVERY_MAX_PER_RUN, padrao 20)
+Orchestration V2 — enriquecimento automatico (enrichment): quando scraping falha ou gera fonte fraca, AdvanceUrlIngestionJob agenda jobs de enriquecimento (URLs same-domain + busca Tavily/Search Planner); parent_job_id + enrichment_round rastreiam a cadeia; MAX_ENRICHMENT_ROUNDS=1; migration f4b2a9c8d6e1
+Agents V12 extensao: TavilySearchExecutor (infrastructure/search_adapters/) implementa SearchExecutorPort novo; AgentsFactory.create_search_executor() sem TAVILY_API_KEY retorna None; TAVILY_API_KEY + TAVILY_SEARCH_URL em settings
 ```
 
 MVP macro backlog (`docs/roadmap_proximos_passos.md`) is complete, and the
@@ -40,25 +42,23 @@ briefing and recommendations end to end automatically.
 Pending:
 
 ```txt
-Auth
+Auth (completamente fora de escopo, projeto e' demo/case — ver decisoes_pendentes.md)
 Production observability (foundation exists: shared/logging + shared/
 observability + Langfuse self-hosted via infra/docker-compose.yml,
 mas sem metricas/alertas/retencao de producao)
-Recommendations V2/V4 - RAG com citacoes ENTREGUE em 24/06/2026 (ver
-secao "Recommendations module"); aprofundar ai_maturity_level no score
-(bonus deterministico inicial entregue 23/06/2026 - ver
-match_technologies()), prioridade/confianca/complexidade ainda faltam
-Startups V4 - dedup por nome/dominio com rapidfuzz ENTREGUE em
-25/06/2026 (slice inicial, ver secao "Startups module"); confianca/
-auditoria por campo extraido continua futuro
+Startups V4 - confianca/auditoria por campo extraido (dedup ja entregue
+em 25/06/2026; slice restante continua futuro)
+Ragas context_recall pos-BM25 (baseline 0.67 pre-troca; medir custo
+real via RUN_RAGAS_EVAL=1 fica para quando o usuario decidir rodar)
 ```
 
 Recent validation:
 
 ```txt
-559 passed, 1 skipped (Postgres/Redis/Qdrant locais ativos, reconferido
-em 2026-06-25; o skip e o teste Ragas opt-in, RUN_RAGAS_EVAL=1;
-560 testes coletados via --collect-only)
+598 testes coletados via --collect-only (reconferido em 2026-06-27);
+com infra viva (Postgres/Redis/Qdrant), 559 passed, 1 skipped — o skip
+e o teste Ragas opt-in (RUN_RAGAS_EVAL=1).
+Frontend (Vitest): 32 passed (8 arquivos de teste, 2026-06-27).
 Integration tests are skipped explicitly when local Postgres/Redis/Qdrant
 are not reachable; with infra active, they run normally.
 
@@ -766,6 +766,23 @@ Tabelas: `agent_runs`, `agent_steps`, `checkpoints`, `checkpoint_blobs`, `checkp
 Worker: `workers/agent_worker/` — consome fila `agents`
 Testes: 50 unit
 
+Extensao feita em 26/06/2026 (continua V12 — SearchExecutorPort + TavilySearchExecutor,
+desbloqueado pelo enriquecimento automatico da Orchestration V2):
+- `SearchExecutorPort` (novo ABC em `application/ports.py`) — contrato para executar
+  uma query e retornar lista de `EnrichmentSearchCandidate`; mesmo padrao de
+  `SearchPlanningService` (contrato publico) vs. implementacao concreta
+- `SearchResultCandidate` + `SearchExecutionResult` (DTOs em `application/dto.py`)
+- `TavilySearchExecutor` (`infrastructure/search_adapters/`) — implementa
+  `SearchExecutorPort` via API HTTP do Tavily (`TAVILY_SEARCH_URL`,
+  default `https://api.tavily.com/search`); `httpx.AsyncClient` com 30s timeout;
+  sem `TAVILY_API_KEY`, factory devolve `None` (mesmo padrao dos outros providers)
+- `AgentSearchExecutionError` (nova excecao de dominio, `domain/exceptions.py`)
+- `AgentsFactory.create_search_executor()` — retorna `None` sem `TAVILY_API_KEY`
+- Settings novas: `tavily_api_key`, `tavily_search_url`
+- Consumidor real: `orchestration`, via `AgentsSearchExecutorAdapter`
+  (`orchestration/infrastructure/agents_adapters/`)
+- Testes: 106 unit (agents, inclui novos testes de TavilySearchExecutor e factory)
+
 ---
 
 ### Ingestion module
@@ -955,8 +972,9 @@ Testes (estado atual, todas as extensoes acima incluidas): 64 unit + 5 integraca
 | V2 | Entregue (slice inicial) | Campos estruturados (founders/funding/customers) |
 | V3 | Entregue (slice inicial) | Classificacao de maturidade em IA |
 | V4 | Entregue (slice inicial, 25/06/2026) | Dedup por nome/dominio (`rapidfuzz`); confianca/auditoria por campo extraido continua futuro |
+| V5 | Entregue (27/06/2026, passo 2 do Briefing V4) | `StartupAIProfile` estruturado: 7 enums de dimensao de IA + `current_tools`/`business_goal`/`scale_signal` + `field_confidence`/`field_evidence_ids` por campo; JSONB em `startups`; extraction adapter atualizado; `StartupAIProfileView` no DTO e `StartupAIProfileResponse` no schema REST |
 
-**Versao atual: V4 (slice inicial)**
+**Versao atual: V5 (passo 2 do Briefing V4)**
 
 O que a V1 entregou: ver `docs/startups/startups_v1_modelo_relacional.md`.
 
@@ -1172,10 +1190,110 @@ Documento: `docs/nvidia_knowledge/nvidia_knowledge_v2_primeira_validacao_real.md
 | V1 | Entregue | Regras deterministicas: cruzamento perfil da startup x catalogo NVIDIA |
 | V2 | Entregue (24/06/2026) | Recomendacao com RAG |
 | V3 | Entregue (25/06/2026) | Confidence por qualidade de evidencia + complexity estatica por tecnologia + priority ordinal |
-| V4 | Futuro | Agent Recommendation |
-| V5 | Futuro | Feedback humano |
+| V4 | Entregue (27/06/2026, passo 1 do Briefing V4) | Breakdown de fit: `signal_origins` (por keyword, qual sinal a sustentou) + `missing_signals` (keywords do catalogo que nao bateram) |
+| V5 | Entregue (27/06/2026, passos 3+4 do Briefing V4) | Score composto (5 dimensoes ponderadas) + nova confianca (5 fatores); `StartupAIContext`; `NvidiaSemanticCandidateSelector` pre-filtra candidatos via retrieval semantico no nvidia_knowledge antes do keyword matching |
+| V6 | Futuro | Matriz de decisao por tecnologia + Agent Recommendation |
+| V7 | Futuro | Feedback humano |
 
-**Versao atual: V3**
+**Versao atual: V5 (passos 3+4 do Briefing V4)**
+
+O que a V4 entregou (27/06/2026 — Briefing V4, passo 1: "Breakdown de fit nas
+recomendacoes"):
+- `MatchResult` ganha `signal_origins: tuple[str, ...]` e `missing_signals:
+  tuple[str, ...]` — ambos `default_factory=tuple`, sem quebrar nenhum teste existente
+- `match_technologies()` loop refatorado: para cada keyword do catalogo, rastreia
+  se o hit veio do perfil (`"setor/descrição"`), de uma ou mais evidencias
+  (`"evidencia {id[:8]}"`), ou de ambos. Keyword sem nenhum hit vai pra
+  `missing_signals`. O score e o filtro de `min_score` continuam inalterados
+- `Recommendation` (entidade) ganha os dois campos: `signal_origins`/`missing_signals`
+- `RecommendationModel` (SQLAlchemy) ganha 2 colunas JSONB com `server_default='[]'`
+- `RecommendationMapper` traduz nos dois sentidos (list <-> tuple)
+- `RecommendationView` (DTO) e `RecommendationResponse` (schema) expoe os dois
+  campos; `RecommendationView` os tem com `default_factory=list` (campos opcionais
+  para nao quebrar testes de outros modulos que criam views sem eles)
+- `generate_recommendations.py:_to_recommendation()` propaga os dois campos do
+  `MatchResult` para a entidade; `to_recommendation_view()` os inclui na view
+- Migration `a3c7f9e2b4d8` (down_revision `f4b2a9c8d6e1`): ADD COLUMN
+  `signal_origins JSONB NOT NULL DEFAULT '[]'` + `missing_signals JSONB NOT NULL DEFAULT '[]'`
+- Frontend: `radar-types.ts` ganha `signal_origins: string[]` e
+  `missing_signals: string[]` no tipo `Recommendation`
+- Bug pre-existente corrigido junto: fixture `RECOMMENDATION` em
+  `briefing/tests/unit/test_briefing_policies.py` nao definia `confidence`,
+  causando `suggest_next_actions()` cair no ramo "Validar" em vez de "Agendar" —
+  corrigido com `confidence=0.8` (fixture e' do ramo "recomendacao forte")
+- Testes: 42 -> 47 unit em recommendations (+5 policy: signal_origins via
+  perfil, signal_origins via evidencia, ambas origens juntas, missing_signals
+  com keywords ausentes, missing_signals vazio quando tudo bate)
+
+O que a V5 entregou (27/06/2026 — Briefing V4, passo 3: "Score composto +
+nova confianca"):
+- `NvidiaTechnology` (`nvidia_knowledge/domain/entities.py`) ganha
+  `supported_workloads: dict[str, float]` — mapa de `AiWorkloadType.value`
+  para relevancia (0-1) por tecnologia; 16 tecnologias do catalogo atualizadas
+  em `catalog_data.py`
+- `StartupAIContext` (novo dataclass frozen em `recommendations/domain/policies.py`)
+  — subconjunto de IA da startup no vocabulario deste modulo: `ai_workload_type`,
+  `deployment_stage`, `gpu_need`, `has_operational_signal`; sem importar enums
+  do modulo startups (fronteira respeitada)
+- `TechnologyCandidate` ganha `supported_workloads: dict[str, float]`
+- `MatchResult` ganha `score_breakdown: dict[str, float]` — as 5 dimensoes do
+  score composto com seus valores individuais (para observabilidade)
+- Score composto com 5 dimensoes ponderadas (substitui `score = keywords_batidas/total`):
+  ```
+  fit = 0.35 * workload_alignment      (StartupAIContext.ai_workload_type x supported_workloads)
+      + 0.25 * evidence_signal         (qualidade+profundidade das evidencias que bateram)
+      + 0.15 * startup_maturity        (deployment_stage: research=0.25 ... scale=1.0)
+      + 0.15 * keyword_prior           (ratio de keywords — mantido como sinal, nao mais o total)
+      + 0.10 * implementation_viability (matriz gpu_need x complexity)
+  ```
+- `ai_native` bonus migrado do score final para a dimensao `impl_viab`
+  (+0.05 p.p. nela), para nao distorcer o total
+- `MIN_MATCH_SCORE` ajustado de 0.25 para 0.20 (o score composto pondera
+  fatores alem de keywords, valor absoluto menor e' equivalente semanticamente)
+- Nova confianca com 5 fatores (substitui `_compute_confidence()`):
+  ```
+  confidence = 0.25 * source_quality        (media confidence_score das evidencias que bateram)
+             + 0.25 * signal_clarity        (keyword_prior: fracao de keywords que bateram)
+             + 0.20 * workload_proximity    (workload_alignment, reutilizado)
+             + 0.20 * evidence_depth        (min(1.0, n_evidencias/3))
+             + 0.10 * operational_signal    (1 se stage=producao/escala ou has_operational_signal)
+  ```
+- `AIProfileSnapshot` (novo DTO em `recommendations/application/dto.py`) +
+  `StartupProfileSnapshot.ai_profile` — subconjunto do `StartupAIProfileView`
+  (startups) traduzido pelo adapter
+- `NvidiaTechnologySnapshot.supported_workloads` + adapter NVIDIA propagando o campo
+- `startup_profile_adapter.py` mapeia `has_operational_signal` (True se
+  `deployment_stage in ("production","scale")` ou `scale_signal` presente)
+- `generate_recommendations.py` constroi `StartupAIContext` a partir do perfil
+  e passa como `ai_context` para `match_technologies()`
+- `nvidia_knowledge/domain/entities.py`: import `field` adicionado
+- Testes: 47 -> 75 unit em recommendations (passo 3, +28)
+
+Extensao feita em 27/06/2026 (continua V5 — passo 4 do Briefing V4,
+retrieval semantico de candidatos):
+- `NvidiaSemanticCandidateSelector` (novo ABC em `application/ports.py`) —
+  recebe texto da startup + mapa {slug: keywords} do catalogo, devolve
+  `set[str]` de slugs cujo conteudo NVIDIA apareceu no retrieval semantico;
+  best-effort: implementacoes nunca propagam excecao, set vazio = fallback
+- `RagSemanticNvidiaCandidateSelector` (`infrastructure/rag_adapters/`) —
+  chama `rag/application/public/retriever.py` (`Retriever.search()`) filtrado
+  por `source_type="nvidia_knowledge"`, limit=20; mapeamento chunk->slug via
+  `re.search(r"\b{keyword}\b", text)` (mesmo padrao \b dos outros matchers);
+  captura toda excecao e devolve set()
+- `GenerateRecommendations._apply_semantic_prefilter()` — chamado antes de
+  `match_technologies()`; constroi query combinando setor + descricao + textos
+  de evidencia; chama `selector.select()`; se resultado nao-vazio, filtra
+  `candidates` para so os slugs retornados; se vazio (nvidia_knowledge nao
+  indexado ou conteudo insuficiente), usa todos os candidatos (graceful
+  fallback — nenhuma recomendacao perdida)
+- `RecommendationsFactory.create_semantic_candidate_selector()` — sempre
+  instanciado; sem GEMINI_API_KEY o embedding do Qdrant falha, o adapter
+  captura a excecao e retorna set() (fallback automatico)
+- Wired em `create_generate_recommendations()` e `create_recommendation_generator()`
+- Testes: 75 -> 87 unit em recommendations (+8 adapter, +3 prefilter em
+  generate_recommendations: filtra tech nao-semantica, fallback em set()
+  vazio, comportamento sem selector)
+- Total: 606 -> 617 coletados
 
 O que a V1 entregou:
 - `Recommendation` (`domain/entities.py`) — tecnologia recomendada, score (0-1), justificativa, `matched_keywords` e `evidence_ids` para rastreabilidade
@@ -1507,6 +1625,45 @@ limpava o Qdrant.
 - Testes: 29 -> 31 unit (+2: deleta vetor de job anterior com mesma URL, nao deleta quando nao ha job anterior) + 3 -> 4 integracao (+1, `list_completed_by_url`)
 - Validado contra Postgres e Qdrant reais (nao so fakes): script manual confirma a factory real encontra o job anterior e chama o delete do Qdrant sem erro
 
+Extensao feita em 26/06/2026 (continua V2 — enriquecimento automatico de perfil,
+migration `f4b2a9c8d6e1`; quando scraping falha ou produz fonte fraca, a
+orquestracao agenda automaticamente jobs de enriquecimento para buscar
+evidencias complementares):
+- `UrlIngestionJob` ganha `parent_job_id: UUID | None` e `enrichment_round: int = 0`
+  — permitem rastrear a cadeia job-original -> job-de-enriquecimento
+- `EnrichmentSearchPlannerPort` e `EnrichmentSearchExecutorPort`
+  (`application/ports.py`, vocabulario proprio de orchestration) —
+  ports para pedir queries (`plan_queries()`) e executar buscas web
+  (`search()`); ambos opcionais (sem chave de API, `AdvanceUrlIngestionJob`
+  usa heuristicas deterministicas)
+- `EnrichmentSearchCandidate` (DTO): `url`, `title`, `snippet`
+- `_deterministic_enrichment_queries()` — fallback sem LLM: 3 queries fixas
+  por nome da startup + missing_signals (founders/funding/customers)
+- `_score_enrichment_candidate()` — descarta hosts bloqueados
+  (`BLOCKED_ENRICHMENT_HOSTS`: redes sociais, wikipedia, youtube), prioriza
+  same-domain (50), Crunchbase/LinkedIn/Wellfound (90), ou nome da startup
+  no texto do resultado (60); score < 0 = descarta
+- `AdvanceUrlIngestionJob._try_schedule_enrichment_after_scraping_failure()` —
+  quando scraping falha, tenta agendar jobs de enriquecimento (ate
+  `MAX_ENRICHMENT_ROUNDS = 1`, `MAX_ENRICHMENT_URLS_PER_ROUND = 2`)
+- `AdvanceUrlIngestionJob._schedule_enrichment_if_needed()` — chamado
+  tambem ao concluir ANALYZING quando o perfil ainda tem missing_signals
+  (sem founders/funding/customers); cria `UrlIngestionJob`s filhos com
+  `parent_job_id` e `enrichment_round + 1`, dispatcha para a fila
+- `AgentsSearchPlannerAdapter` e `AgentsSearchExecutorAdapter`
+  (`infrastructure/agents_adapters/search_enrichment_adapters.py`) —
+  adaptam `SearchPlanningService` e `SearchExecutorPort` (de `agents`)
+  para os contratos proprios de `orchestration`; o consumidor nao sabe
+  de nada de `agents` diretamente
+- `OrchestrationFactory.create_advance_url_ingestion_job()` agora injeta
+  `search_planner_port` e `search_executor_port` quando disponiveis
+  (`AgentsFactory.create_search_planning_service()` + `create_search_executor()`)
+- Migration `f4b2a9c8d6e1`: `parent_job_id` (UUID nullable, FK implicita),
+  `enrichment_round` (int, server_default 0), indice em `parent_job_id`
+- `UrlIngestionJobView`/`UrlIngestionJobResponse` expoem `parent_job_id` e
+  `enrichment_round` para o frontend rastrear a cadeia de enriquecimento
+- Testes: 41 unit (orchestration, inclui novos testes de enriquecimento)
+
 ---
 
 ### Startup Discovery module
@@ -1551,9 +1708,9 @@ Testes: 8 unit
 | V2 | Entregue | Resultado da startup: evidencias, recomendacoes e briefing |
 | V3 | Entregue | Portfolio paginado, historico global de jobs, badge de fit, evidencia clicavel, chatbot NVIDIA Knowledge, export PDF do briefing |
 | V4 | Entregue (25/06/2026) | Dashboard /dashboard: graficos SVG (maturidade + top tecnologias), comparacao de startups, fila em lote |
-| V5 | Futuro | Revisao humana, auth e colaboracao |
+| V5 | Entregue (26/06/2026) | Revisao humana de recommendations e briefings: pending/approved/rejected, comentario, revisor, timestamp |
 
-**Versao atual: V4 — dashboard de oportunidades**
+**Versao atual: V5 — revisao humana**
 
 Stack: Next.js + TypeScript + App Router + Tailwind CSS + TanStack Query
 (`apps/web/`). Frontend nao executa regras de negocio: envia comandos ao
@@ -1660,6 +1817,26 @@ O que a V4 entregou (25/06/2026 — painel BI de oportunidades):
   URLs, detecta URLs, exibe links apos submissao).
 - `tsc --noEmit` e `npm test` passam sem erro (30 passed).
 
+O que a V5 entregou (26/06/2026 — revisao humana de recommendations e briefings):
+- Migration `e8a7c4d2b1f9`: 4 colunas novas (`review_status`, `review_comment`,
+  `reviewed_by`, `reviewed_at`) em `recommendations` e `briefings`;
+  `server_default='pending'`, sem data migration necessaria
+- **Backend** — `ReviewRecommendation` (use case) + `PATCH /recommendations/{id}/review`;
+  `ReviewBriefing` (use case) + `PATCH /briefings/{id}/review`; entidade `Recommendation`
+  e `Briefing` ganham metodo `.review(status, comment, reviewed_by)` e campo
+  `review_status`/`review_comment`/`reviewed_by`/`reviewed_at`; `RecommendationResponse`
+  e `BriefingResponse` expõem os 4 novos campos
+- **Frontend** — `ReviewControls` (componente interno de `startup-details.tsx`):
+  campo de texto para nome do revisor, botoes `Aprovar`/`Rejeitar`/`Pendente`;
+  `reviewRecommendation()` e `reviewBriefing()` em `radar-client.ts`; tipo
+  `ReviewInput` em `radar-types.ts`; `useMutation` para cada acao; timestamp de
+  revisao exibido quando preenchido
+- Sem auth completa: qualquer usuario pode revisar; `reviewed_by` e um campo de texto livre
+- Testes backend: recommendations +2 unit (`test_review_recommendation.py`),
+  briefing +2 unit (`test_review_briefing.py`) — testes de entidade e de caso de uso
+- Testes frontend: 30 -> 32 (+2: `startup-details.test.tsx` ganha "registra revisao de
+  recomendacao ao clicar em aprovar"; `startup-portfolio.test.tsx` novo, 2 testes)
+
 ---
 
 ## Database state
@@ -1691,8 +1868,11 @@ O que a V4 entregou (25/06/2026 — painel BI de oportunidades):
 | `c9d3e7f0a4b8` | 2026-06-25 | Cria tabela `startup_discovery_runs` (Startup Discovery V1) |
 | `d7e3f1a2b9c4` | 2026-06-25 | Adiciona `confidence` e `complexity` em `recommendations` (Recommendations V3) |
 | `e8a7c4d2b1f9` | 2026-06-26 | Adiciona campos de revisao humana em `recommendations` e `briefings` (Frontend V5) |
+| `f4b2a9c8d6e1` | 2026-06-26 | Adiciona `parent_job_id` e `enrichment_round` em `url_ingestion_jobs` (Orchestration V2 enrichment) |
+| `a3c7f9e2b4d8` | 2026-06-27 | Adiciona `signal_origins` e `missing_signals` em `recommendations` (Briefing V4, passo 1) |
+| `b4c8e2f1a9d7` | 2026-06-27 | Adiciona coluna `ai_profile` JSONB em `startups` (Briefing V4, passo 2) |
 
-**Head atual: `e8a7c4d2b1f9`**
+**Head atual: `b4c8e2f1a9d7`**
 
 ### Tabelas existentes
 
@@ -1716,7 +1896,7 @@ startup_evidences       evidencia aprovada associada a uma startup (FK scraping_
 recommendations         tecnologia NVIDIA recomendada por startup (score, justificativa, matched_keywords, evidence_ids)
 briefings               briefing executivo em Markdown por startup (substitui o anterior a cada geracao)
 analysis_jobs           historico de execucoes recommendations->briefing por startup (status, recommendation_count, briefing_id, error_message)
-url_ingestion_jobs      orquestracao URL -> scraping -> ingestion -> embeddings -> startup -> recommendations -> briefing, com source_type/startup_id/recommendation_count/briefing_id
+url_ingestion_jobs      orquestracao URL -> scraping -> ingestion -> embeddings -> startup -> recommendations -> briefing, com source_type/startup_id/recommendation_count/briefing_id/parent_job_id/enrichment_round
 startup_discovery_runs  rodada de descoberta automatica de startups em hubs publicos (status, hubs_processed, urls_found, jobs_submitted)
 ```
 
@@ -1726,35 +1906,28 @@ startup_discovery_runs  rodada de descoberta automatica de startups em hubs publ
 
 | Modulo | Testes | Ultima verificacao |
 |---|---|---|
-| scraping | 132 unit + 6 integracao | 2026-06-24 |
-| agents | 102 unit + 1 integracao | 2026-06-24 |
-| ingestion | 37 unit + 1 integracao | 2026-06-24 |
-| embeddings | 64 unit + 5 integracao | 2026-06-25 |
-| startups | 65 unit + 2 integracao | 2026-06-25 |
-| rag | 19 unit + 2 integracao | 2026-06-24 |
-| nvidia_knowledge | 15 unit | 2026-06-24 |
-| recommendations | 31 unit + 1 integracao | 2026-06-24 |
-| briefing | 30 unit + 2 integracao | 2026-06-24 |
-| orchestration | 31 unit + 4 integracao | 2026-06-25 |
-| startup_discovery | 8 unit | 2026-06-25 |
-| shared | 10 unit (logging + observability) | 2026-06-24 |
-| **Total backend** | **568 testes coletados** | **2026-06-25** |
-| **Frontend (`apps/web`, Vitest)** | **30 testes** | **2026-06-25** |
+| scraping | 138 (unit + integracao) | 2026-06-27 |
+| agents | 106 (unit + integracao) | 2026-06-27 |
+| ingestion | 38 (unit + integracao) | 2026-06-27 |
+| embeddings | 69 (unit + integracao) | 2026-06-27 |
+| startups | 72 (unit + integracao) | 2026-06-27 |
+| rag | 21 (unit + integracao) | 2026-06-27 |
+| nvidia_knowledge | 15 unit | 2026-06-27 |
+| recommendations | 65 (unit + integracao) | 2026-06-27 |
+| briefing | 33 (unit + integracao) | 2026-06-27 |
+| orchestration | 41 (unit + integracao) | 2026-06-27 |
+| startup_discovery | 8 unit | 2026-06-27 |
+| shared | 10 unit (logging + observability) | 2026-06-27 |
+| **Total backend** | **617 testes coletados** | **2026-06-27** |
+| **Frontend (`apps/web`, Vitest)** | **32 testes** | **2026-06-27** |
 
 Nota: numeros desta tabela vem de `pytest --collect-only -q` por modulo
 (nao exige Postgres/Redis/Qdrant vivos, so confirma quantos testes existem
-no codigo). Reconferido direto por modulo no fechamento do dedup de
-startups (25/06/2026): `startups` (36→65 unit/1→2 integracao,
-calibracao do `rapidfuzz` + `list_all()`) subiu nesta entrega, alem de
-`embeddings` (3→5 integracao, `delete_by_document_id`) e `orchestration`
-(29→31 unit/3→4 integracao, `_cleanup_superseded_vectors`/
-`list_completed_by_url`) da entrega anterior; soma das 11 linhas backend
-confere exatamente com os 560 coletados. Execucao completa com infra
-viva (Postgres/Redis/Qdrant via `infra/docker-compose.yml` rodando):
-**559 passed, 1 skipped em 2026-06-25** (o skip e o teste Ragas opt-in,
-`RUN_RAGAS_EVAL=1` nao definido — chama Gemini de verdade, lento e pago).
-Frontend (`npm test` em `apps/web/`): **25 passed** (sem mudanca nesta
-entrega, so backend).
+no codigo). Reconferido direto por modulo em 2026-06-27 via --collect-only:
+soma das linhas backend confere com os 606 coletados.
+Com infra viva (Postgres/Redis/Qdrant): **559 passed, 1 skipped** (o skip
+e o teste Ragas opt-in, `RUN_RAGAS_EVAL=1` nao definido).
+Frontend (`npx vitest run` em `apps/web/`): **32 passed** (reconferido 2026-06-27).
 
 Comando para verificar:
 ```bash
@@ -1950,7 +2123,7 @@ pytest -k "test_acceptance_policy_rejects_captcha" -v
 # Run DB migrations
 alembic upgrade head
 
-# Current migration head: e8a7c4d2b1f9 (human review fields, Frontend V5)
+# Current migration head: b4c8e2f1a9d7 (ai_profile JSONB on startups, Briefing V4 step 2)
 ```
 
 ---
@@ -1972,6 +2145,8 @@ COHERE_RERANK_MODEL  ← modelo do Cohere Rerank, default rerank-v3.5 (configura
 LANGFUSE_PUBLIC_KEY  ← tracing de LLM (shared/observability); opcional, sem ela chamadas seguem sem tracing
 LANGFUSE_SECRET_KEY
 LANGFUSE_HOST        ← URL do Langfuse self-hosted, default http://localhost:3300 (infra/docker-compose.yml)
+TAVILY_API_KEY       ← busca web para enriquecimento automatico de perfil (Orchestration V2 enrichment); opcional, sem ela usa heuristicas deterministicas
+TAVILY_SEARCH_URL    ← endpoint da API Tavily, default https://api.tavily.com/search
 ENVIRONMENT
 LOG_LEVEL
 ```

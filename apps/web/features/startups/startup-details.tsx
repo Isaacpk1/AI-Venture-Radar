@@ -125,6 +125,12 @@ function RecommendationCard({ recommendation, evidences, startupId }: { recommen
     medium: "bg-yellow-900/40 text-yellow-300",
     high: "bg-red-900/40 text-red-300",
   };
+  const nivelLabel: Record<string, string> = { forte: "Forte", moderada: "Moderada", exploratoria: "Exploratória" };
+  const nivelColor: Record<string, string> = {
+    forte: "bg-green-900/60 text-green-200 border border-green-700",
+    moderada: "bg-blue-900/40 text-blue-300 border border-blue-700",
+    exploratoria: "bg-neutral-800 text-neutral-400 border border-neutral-600",
+  };
 
   return (
     <article className="rounded-md border border-[var(--surface-border)] p-4">
@@ -134,8 +140,11 @@ function RecommendationCard({ recommendation, evidences, startupId }: { recommen
           <h3 className="font-medium">{recommendation.technology_name}</h3>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${nivelColor[recommendation.nivel] ?? nivelColor.exploratoria}`}>
+            {nivelLabel[recommendation.nivel] ?? recommendation.nivel}
+          </span>
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${complexityColor[recommendation.complexity] ?? complexityColor.medium}`}>
-            Complexidade {complexityLabel[recommendation.complexity] ?? recommendation.complexity}
+            {complexityLabel[recommendation.complexity] ?? recommendation.complexity}
           </span>
           <span className="text-sm text-[var(--accent)]">{Math.round(recommendation.score * 100)}% fit</span>
           <span className="text-xs text-[var(--muted)]" title="Confiança baseada na qualidade das evidências">
@@ -144,6 +153,12 @@ function RecommendationCard({ recommendation, evidences, startupId }: { recommen
         </div>
       </div>
       <MarkdownContent className="mt-2 text-sm text-[var(--muted)] [&_p]:mt-0" content={recommendation.justification} />
+      {recommendation.faltando && recommendation.faltando.length > 0 && (
+        <div className="mt-2 rounded-md bg-neutral-900/60 px-3 py-2 text-xs text-[var(--muted)] border border-neutral-700">
+          <span className="font-semibold text-neutral-300">Para elevar: </span>
+          {recommendation.faltando.join(" · ")}
+        </div>
+      )}
       {recommendation.matched_keywords.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {recommendation.matched_keywords.map((keyword) => <span className="rounded-full bg-[#20334d] px-2 py-1 text-xs text-[var(--muted)]" key={keyword}>{keyword}</span>)}

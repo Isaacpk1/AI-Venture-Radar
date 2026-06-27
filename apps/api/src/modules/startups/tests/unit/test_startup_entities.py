@@ -4,9 +4,12 @@ from uuid import uuid4
 
 import pytest
 
-from apps.api.src.modules.startups.domain.entities import Startup, StartupEvidence
+from apps.api.src.modules.startups.domain.entities import Startup, StartupAIProfile, StartupEvidence
 from apps.api.src.modules.startups.domain.enums import (
+    AiDeploymentStage,
+    AiGpuNeed,
     AiMaturityLevel,
+    AiWorkloadType,
     FundingStage,
     StartupEvidenceType,
 )
@@ -122,3 +125,34 @@ def test_evidence_defaults_type_to_other() -> None:
     )
 
     assert evidence.evidence_type is StartupEvidenceType.OTHER
+
+
+def test_startup_ai_profile_defaults_to_unknown() -> None:
+    profile = StartupAIProfile()
+
+    assert profile.ai_workload_type is AiWorkloadType.UNKNOWN
+    assert profile.gpu_need is AiGpuNeed.UNKNOWN
+    assert profile.deployment_stage is AiDeploymentStage.UNKNOWN
+    assert profile.current_tools == ()
+    assert profile.field_confidence == {}
+
+
+def test_update_ai_profile_sets_profile_and_updates_timestamp() -> None:
+    startup = Startup(name="Acme AI")
+    original_updated_at = startup.updated_at
+
+    profile = StartupAIProfile(
+        ai_workload_type=AiWorkloadType.NLP,
+        gpu_need=AiGpuNeed.HIGH,
+        current_tools=("PyTorch",),
+    )
+    startup.update_ai_profile(profile)
+
+    assert startup.ai_profile is profile
+    assert startup.updated_at > original_updated_at
+
+
+def test_startup_ai_profile_is_initially_none() -> None:
+    startup = Startup(name="New Startup")
+
+    assert startup.ai_profile is None

@@ -9,6 +9,7 @@ contrato publico do modulo ``agents``.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
+from apps.api.src.modules.startups.domain.entities import StartupAIProfile
 from apps.api.src.modules.startups.domain.enums import AiMaturityLevel, FundingStage
 
 
@@ -47,6 +48,7 @@ class ExtractionOutcome:
     customers: list[str] = field(default_factory=list)
     sector: str | None = None
     description: str | None = None
+    ai_profile: StartupAIProfile | None = None
 
 
 class ExtractionPort(ABC):

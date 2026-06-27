@@ -2,14 +2,25 @@
 
 Os cenarios espelham o mapeamento de tecnologias NVIDIA documentado no
 CLAUDE.md (ex: "LLMs in customer service -> NIM, NeMo, TensorRT-LLM").
+
+Passo 3 do Briefing V4: score composto substituiu o ratio de keywords puro.
+Testes que antes assertavam score == 1.0 (keyword ratio perfeito) agora
+verificam ranges e comportamentos relativos — a logica de negocio e a mesma,
+mas a escala numerica mudou.
 """
 
 from uuid import uuid4
 
 from apps.api.src.modules.recommendations.domain.policies import (
     EvidenceSignal,
+    StartupAIContext,
     TechnologyCandidate,
+    _compute_nivel,
+    _compute_faltando,
     match_technologies,
+    NIVEL_FORTE,
+    NIVEL_MODERADA,
+    NIVEL_EXPLORATORIA,
 )
 
 NIM = TechnologyCandidate(
@@ -18,6 +29,8 @@ NIM = TechnologyCandidate(
     category="model_serving",
     use_cases=("servir LLMs e modelos generativos em producao",),
     keywords=("llm", "generative ai", "inference", "api", "deployment", "microservice"),
+    complexity="low",
+    supported_workloads={"nlp": 0.80, "speech": 0.50, "analytics": 0.40},
 )
 NEMO = TechnologyCandidate(
     slug="nvidia-nemo",
@@ -25,6 +38,8 @@ NEMO = TechnologyCandidate(
     category="model_training",
     use_cases=("fine-tuning de modelos generativos",),
     keywords=("training", "fine tuning", "llm", "agent", "generative ai", "speech"),
+    complexity="high",
+    supported_workloads={"nlp": 0.90, "speech": 0.70, "mlops": 0.50},
 )
 RIVA = TechnologyCandidate(
     slug="riva",
@@ -32,6 +47,8 @@ RIVA = TechnologyCandidate(
     category="speech_ai",
     use_cases=("automatic speech recognition",),
     keywords=("speech", "asr", "tts", "voice", "translation", "conversational ai"),
+    complexity="medium",
+    supported_workloads={"speech": 0.99, "nlp": 0.40},
 )
 MONAI = TechnologyCandidate(
     slug="monai",
@@ -39,6 +56,8 @@ MONAI = TechnologyCandidate(
     category="healthcare_ai",
     use_cases=("analise de imagens medicas",),
     keywords=("healthcare", "medical imaging", "monai", "segmentation", "radiology", "clinical ai"),
+    complexity="high",
+    supported_workloads={"vision": 0.95, "analytics": 0.30},
 )
 RAPIDS = TechnologyCandidate(
     slug="rapids",
@@ -46,6 +65,8 @@ RAPIDS = TechnologyCandidate(
     category="data_science",
     use_cases=("acelerar pipelines de data science",),
     keywords=("data science", "analytics", "dataframe", "gpu", "pandas", "spark"),
+    complexity="medium",
+    supported_workloads={"analytics": 0.95, "recommendation": 0.75, "mlops": 0.60},
 )
 CATALOG = [NIM, NEMO, RIVA, MONAI, RAPIDS]
 
@@ -68,8 +89,9 @@ def test_llm_customer_service_profile_matches_nim_and_nemo() -> None:
     assert "monai" not in slugs
 
     nim_result = next(result for result in results if result.technology.slug == "nvidia-nim")
-    assert nim_result.score == 1.0
     assert set(nim_result.matched_keywords) == set(NIM.keywords)
+    # Com score composto, perfil-only sem ai_context: score esta em torno de 0.40-0.55
+    assert nim_result.score > 0.30
 
 
 def test_healthcare_profile_matches_monai_only() -> None:
@@ -84,7 +106,7 @@ def test_healthcare_profile_matches_monai_only() -> None:
 
     slugs = [result.technology.slug for result in results]
     assert slugs == ["monai"]
-    assert results[0].score == 1.0
+    assert results[0].score > 0.30
 
 
 def test_voice_profile_matches_riva_only() -> None:
@@ -100,7 +122,7 @@ def test_voice_profile_matches_riva_only() -> None:
 
     slugs = [result.technology.slug for result in results]
     assert slugs == ["riva"]
-    assert results[0].score == 1.0
+    assert results[0].score > 0.30
 
 
 def test_profile_without_ai_evidence_returns_no_matches() -> None:
@@ -163,8 +185,10 @@ def test_operational_aliases_match_ai_infrastructure_signals() -> None:
     assert "nvidia-nemo" in slugs
 
 
-def test_ai_native_bonus_can_promote_a_candidate_with_enough_signals() -> None:
-    results = match_technologies(
+def test_ai_native_maturity_level_boosts_implementation_viability() -> None:
+    """ai_native recebe bonus na dimensao impl_viab — score deve ser maior."""
+
+    results_native = match_technologies(
         sector=None,
         description=None,
         ai_maturity_level="ai_native",
@@ -173,9 +197,18 @@ def test_ai_native_bonus_can_promote_a_candidate_with_enough_signals() -> None:
         ],
         technologies=[NEMO],
     )
+    results_enabled = match_technologies(
+        sector=None,
+        description=None,
+        ai_maturity_level="ai_enabled",
+        evidence_signals=[
+            EvidenceSignal(evidence_id=uuid4(), text="fine-tune llm models")
+        ],
+        technologies=[NEMO],
+    )
 
-    assert results[0].technology.slug == "nvidia-nemo"
-    assert results[0].score == 0.43
+    assert results_native[0].technology.slug == "nvidia-nemo"
+    assert results_native[0].score > results_enabled[0].score
 
 
 def test_single_generic_keyword_is_not_enough_for_recommendation() -> None:
@@ -251,11 +284,11 @@ def test_word_boundary_still_matches_real_standalone_keywords() -> None:
     assert "llm" in results[0].matched_keywords
 
 
-def test_confidence_reflects_evidence_quality() -> None:
-    """Match com evidencia de alta qualidade gera confianca mais alta."""
+def test_confidence_higher_with_strong_evidence_than_profile_only() -> None:
+    """Match com evidencia de alta qualidade tem confianca maior que perfil puro."""
 
     high_conf_id = uuid4()
-    results = match_technologies(
+    results_with_evidence = match_technologies(
         sector=None,
         description=None,
         evidence_signals=[
@@ -267,13 +300,24 @@ def test_confidence_reflects_evidence_quality() -> None:
         ],
         technologies=[NIM],
     )
+    results_profile_only = match_technologies(
+        sector="LLM and generative AI inference API deployment microservice",
+        description=None,
+        evidence_signals=[],
+        technologies=[NIM],
+    )
 
-    assert len(results) == 1
-    assert results[0].confidence == 0.9
+    assert len(results_with_evidence) == 1
+    assert len(results_profile_only) == 1
+    assert results_with_evidence[0].confidence > results_profile_only[0].confidence
 
 
 def test_confidence_is_lower_for_profile_only_match() -> None:
-    """Match que veio so do perfil (setor/descricao) recebe confianca reduzida."""
+    """Match que veio so do perfil (setor/descricao) recebe confianca reduzida.
+
+    Com a nova formula, source_quality=0 e evidence_depth=0 quando nao ha
+    evidencias. A confianca fica abaixo do score composto.
+    """
 
     results = match_technologies(
         sector="LLM and generative AI inference API deployment microservice",
@@ -283,28 +327,134 @@ def test_confidence_is_lower_for_profile_only_match() -> None:
     )
 
     assert len(results) == 1
-    # Score 1.0 -> confianca = min(0.5, 1.0 * 0.5) = 0.5
-    assert results[0].confidence == 0.5
+    assert results[0].confidence < 0.5
     assert results[0].confidence < results[0].score
 
 
-def test_confidence_averages_multiple_evidence_quality_scores() -> None:
-    """Confianca e' a media dos confidence_scores das evidencias que matcharam."""
+def test_confidence_reflects_multiple_evidence_sources() -> None:
+    """Mais evidencias independentes → profundidade maior → confianca maior."""
 
-    id1, id2 = uuid4(), uuid4()
+    results_two_evid = match_technologies(
+        sector=None,
+        description=None,
+        evidence_signals=[
+            EvidenceSignal(evidence_id=uuid4(), text="llm inference api deployment microservice", confidence_score=0.8),
+            EvidenceSignal(evidence_id=uuid4(), text="generative ai deployment", confidence_score=0.4),
+        ],
+        technologies=[NIM],
+    )
+    results_one_evid = match_technologies(
+        sector=None,
+        description=None,
+        evidence_signals=[
+            EvidenceSignal(evidence_id=uuid4(), text="llm inference api deployment microservice", confidence_score=0.8),
+        ],
+        technologies=[NIM],
+    )
+
+    assert len(results_two_evid) == 1
+    assert len(results_one_evid) == 1
+    # Mais evidencias independentes deve produzir maior confianca
+    assert results_two_evid[0].confidence > results_one_evid[0].confidence
+
+
+def test_signal_origins_identifies_profile_source() -> None:
+    """signal_origins marca 'setor/descricao' quando a keyword bateu no perfil."""
+
+    results = match_technologies(
+        sector="llm inference api deployment microservice",
+        description=None,
+        evidence_signals=[],
+        technologies=[NIM],
+    )
+
+    assert len(results) == 1
+    origins = results[0].signal_origins
+    assert any("setor/descrição" in o for o in origins)
+    assert not any("evidência" in o for o in origins)
+
+
+def test_signal_origins_identifies_evidence_source() -> None:
+    """signal_origins marca a evidencia quando a keyword bateu so em evidencia."""
+
+    eid = uuid4()
     results = match_technologies(
         sector=None,
         description=None,
         evidence_signals=[
-            EvidenceSignal(evidence_id=id1, text="llm inference api deployment microservice", confidence_score=0.8),
-            EvidenceSignal(evidence_id=id2, text="generative ai deployment", confidence_score=0.4),
+            EvidenceSignal(
+                evidence_id=eid,
+                text="generative ai llm inference api deployment microservice",
+            )
         ],
         technologies=[NIM],
     )
 
     assert len(results) == 1
-    # Ambas as evidencias matcham, media = (0.8 + 0.4) / 2 = 0.6
-    assert results[0].confidence == 0.6
+    short = str(eid)[:8]
+    assert any(f"evidência {short}" in o for o in results[0].signal_origins)
+    assert not any("setor/descrição" in o for o in results[0].signal_origins)
+
+
+def test_signal_origins_marks_both_when_keyword_hits_profile_and_evidence() -> None:
+    """Keyword que bate no perfil E na evidencia aparece com as duas origens."""
+
+    eid = uuid4()
+    results = match_technologies(
+        sector="llm inference api deployment microservice",
+        description=None,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=eid,
+                text="llm inference api deployment microservice",
+            )
+        ],
+        technologies=[NIM],
+    )
+
+    assert len(results) == 1
+    short = str(eid)[:8]
+    llm_origin = next(o for o in results[0].signal_origins if o.startswith("llm:"))
+    assert "setor/descrição" in llm_origin
+    assert f"evidência {short}" in llm_origin
+
+
+def test_missing_signals_lists_unmatched_catalog_keywords() -> None:
+    """missing_signals contem as keywords do catalogo que nao encontraram sinal."""
+
+    results = match_technologies(
+        sector="llm generative ai inference",
+        description=None,
+        evidence_signals=[],
+        technologies=[NIM],
+    )
+
+    assert len(results) == 1
+    missing = results[0].missing_signals
+    # "api", "deployment", "microservice" nao aparecem no perfil acima
+    assert "api" in missing
+    assert "deployment" in missing
+    assert "microservice" in missing
+    # keywords que bateram NAO devem aparecer em missing_signals
+    assert "llm" not in missing
+    assert "inference" not in missing
+
+
+def test_missing_signals_is_empty_when_all_keywords_match() -> None:
+    """Quando todas as keywords batem, missing_signals fica vazio."""
+
+    results = match_technologies(
+        sector="LLM and generative AI",
+        description=(
+            "Provides inference API with simple deployment as microservice architecture."
+        ),
+        evidence_signals=[],
+        technologies=[NIM],
+    )
+
+    assert len(results) == 1
+    assert results[0].matched_keywords == NIM.keywords
+    assert results[0].missing_signals == ()
 
 
 def test_complexity_propagated_from_candidate() -> None:
@@ -327,3 +477,343 @@ def test_complexity_propagated_from_candidate() -> None:
 
     assert len(results) == 1
     assert results[0].technology.complexity == "low"
+
+
+# ---------------------------------------------------------------------------
+# Novos testes: score composto (passo 3, Briefing V4)
+# ---------------------------------------------------------------------------
+
+
+def test_score_breakdown_has_five_dimensions() -> None:
+    """MatchResult.score_breakdown contem as 5 dimensoes do score composto."""
+
+    results = match_technologies(
+        sector="llm inference api deployment microservice generative ai",
+        description=None,
+        evidence_signals=[],
+        technologies=[NIM],
+    )
+
+    assert len(results) == 1
+    breakdown = results[0].score_breakdown
+    assert set(breakdown.keys()) == {
+        "workload_alignment",
+        "evidence_signal",
+        "startup_maturity",
+        "keyword_prior",
+        "implementation_viability",
+    }
+    for v in breakdown.values():
+        assert 0.0 <= v <= 1.0
+
+
+def test_workload_alignment_boosts_score_for_matching_workload() -> None:
+    """Startup NLP com ai_context nlp → alinhamento alto com NIM (nlp=0.80)."""
+
+    ctx_nlp = StartupAIContext(ai_workload_type="nlp")
+    ctx_analytics = StartupAIContext(ai_workload_type="analytics")
+
+    results_nlp = match_technologies(
+        sector="llm generative ai inference api deployment microservice",
+        description=None,
+        ai_context=ctx_nlp,
+        evidence_signals=[],
+        technologies=[NIM],
+    )
+    results_analytics = match_technologies(
+        sector="llm generative ai inference api deployment microservice",
+        description=None,
+        ai_context=ctx_analytics,
+        evidence_signals=[],
+        technologies=[NIM],
+    )
+
+    assert results_nlp[0].score > results_analytics[0].score
+    assert results_nlp[0].score_breakdown["workload_alignment"] == 0.80
+    assert results_analytics[0].score_breakdown["workload_alignment"] == 0.40
+
+
+def test_production_stage_increases_startup_maturity_score() -> None:
+    """Startup em producao tem score de maturidade maior que startup em research."""
+
+    ctx_prod = StartupAIContext(deployment_stage="production")
+    ctx_research = StartupAIContext(deployment_stage="research")
+
+    results_prod = match_technologies(
+        sector="llm generative ai inference api deployment microservice",
+        description=None,
+        ai_context=ctx_prod,
+        evidence_signals=[],
+        technologies=[NIM],
+    )
+    results_research = match_technologies(
+        sector="llm generative ai inference api deployment microservice",
+        description=None,
+        ai_context=ctx_research,
+        evidence_signals=[],
+        technologies=[NIM],
+    )
+
+    assert results_prod[0].score > results_research[0].score
+    assert results_prod[0].score_breakdown["startup_maturity"] == 0.85
+    assert results_research[0].score_breakdown["startup_maturity"] == 0.25
+
+
+def test_low_gpu_high_complexity_reduces_viability() -> None:
+    """Startup com baixa necessidade de GPU + tech de alta complexidade = impl_viab 0.20."""
+
+    ctx_low_gpu = StartupAIContext(gpu_need="low")
+    high_complexity_tech = TechnologyCandidate(
+        slug="nvidia-nemo",
+        name="NVIDIA NeMo",
+        category="model_training",
+        use_cases=("fine-tuning",),
+        keywords=("training", "fine tuning", "llm", "agent"),
+        complexity="high",
+    )
+    results = match_technologies(
+        sector="llm training fine tuning agent",
+        description=None,
+        ai_context=ctx_low_gpu,
+        evidence_signals=[],
+        technologies=[high_complexity_tech],
+    )
+
+    assert len(results) == 1
+    assert results[0].score_breakdown["implementation_viability"] == 0.20
+
+
+def test_high_gpu_high_complexity_maximizes_viability() -> None:
+    """Startup com alta GPU + tech complexa = impl_viab 0.90 (fit perfeito)."""
+
+    ctx_high_gpu = StartupAIContext(gpu_need="high")
+    results = match_technologies(
+        sector="llm training fine tuning agent generative ai speech",
+        description=None,
+        ai_context=ctx_high_gpu,
+        evidence_signals=[],
+        technologies=[NEMO],
+    )
+
+    assert len(results) == 1
+    assert results[0].score_breakdown["implementation_viability"] == 0.90
+
+
+def test_operational_signal_increases_confidence() -> None:
+    """Startup em producao tem confianca maior que startup sem sinal operacional."""
+
+    ctx_prod = StartupAIContext(deployment_stage="production")
+    ctx_unknown = StartupAIContext()
+
+    results_prod = match_technologies(
+        sector=None,
+        description=None,
+        ai_context=ctx_prod,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=uuid4(),
+                text="llm generative ai inference api deployment microservice",
+                confidence_score=0.7,
+            )
+        ],
+        technologies=[NIM],
+    )
+    results_unknown = match_technologies(
+        sector=None,
+        description=None,
+        ai_context=ctx_unknown,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=uuid4(),
+                text="llm generative ai inference api deployment microservice",
+                confidence_score=0.7,
+            )
+        ],
+        technologies=[NIM],
+    )
+
+    assert results_prod[0].confidence > results_unknown[0].confidence
+
+
+def test_has_operational_signal_counts_as_production_for_confidence() -> None:
+    """has_operational_signal=True equivale a sinal operacional mesmo sem stage."""
+
+    ctx_with_signal = StartupAIContext(has_operational_signal=True)
+    ctx_without = StartupAIContext()
+
+    eid = uuid4()
+    results_with = match_technologies(
+        sector=None,
+        description=None,
+        ai_context=ctx_with_signal,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=eid,
+                text="llm generative ai inference api deployment microservice",
+            )
+        ],
+        technologies=[NIM],
+    )
+    results_without = match_technologies(
+        sector=None,
+        description=None,
+        ai_context=ctx_without,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=eid,
+                text="llm generative ai inference api deployment microservice",
+            )
+        ],
+        technologies=[NIM],
+    )
+
+    assert results_with[0].confidence > results_without[0].confidence
+
+
+# ---------------------------------------------------------------------------
+# Novos testes: nivel e faltando (passo 5, Briefing V4)
+# ---------------------------------------------------------------------------
+
+
+def test_compute_nivel_forte_when_score_and_confidence_are_high() -> None:
+    assert _compute_nivel(score=0.65, confidence=0.60) == NIVEL_FORTE
+
+
+def test_compute_nivel_moderada_when_score_moderate_and_confidence_meets_floor() -> None:
+    assert _compute_nivel(score=0.45, confidence=0.30) == NIVEL_MODERADA
+
+
+def test_compute_nivel_exploratoria_when_below_moderada_thresholds() -> None:
+    assert _compute_nivel(score=0.30, confidence=0.15) == NIVEL_EXPLORATORIA
+
+
+def test_compute_nivel_exploratoria_when_score_high_but_confidence_low() -> None:
+    assert _compute_nivel(score=0.70, confidence=0.20) == NIVEL_EXPLORATORIA
+
+
+def test_compute_nivel_moderada_when_confidence_meets_but_score_below_forte() -> None:
+    assert _compute_nivel(score=0.45, confidence=0.58) == NIVEL_MODERADA
+
+
+def test_compute_faltando_empty_for_forte() -> None:
+    faltando = _compute_faltando(
+        nivel=NIVEL_FORTE,
+        score_breakdown={},
+        confidence=0.80,
+        missing_signals=("speech",),
+        evidence_count=2,
+    )
+    assert faltando == ()
+
+
+def test_compute_faltando_suggests_evidence_for_exploratoria_with_low_evidence_signal() -> None:
+    faltando = _compute_faltando(
+        nivel=NIVEL_EXPLORATORIA,
+        score_breakdown={"evidence_signal": 0.20, "keyword_prior": 0.60, "startup_maturity": 0.50, "workload_alignment": 0.50},
+        confidence=0.30,
+        missing_signals=(),
+        evidence_count=0,
+    )
+    assert any("evidência" in item.lower() for item in faltando)
+
+
+def test_compute_faltando_lists_missing_signals_for_exploratoria() -> None:
+    faltando = _compute_faltando(
+        nivel=NIVEL_EXPLORATORIA,
+        score_breakdown={"evidence_signal": 0.25, "keyword_prior": 0.30, "startup_maturity": 0.50, "workload_alignment": 0.40},
+        confidence=0.30,
+        missing_signals=("tts", "asr"),
+        evidence_count=0,
+    )
+    assert any("tts" in item or "asr" in item for item in faltando)
+
+
+def test_compute_faltando_suggests_maturity_for_moderada() -> None:
+    faltando = _compute_faltando(
+        nivel=NIVEL_MODERADA,
+        score_breakdown={"workload_alignment": 0.50, "startup_maturity": 0.50, "evidence_signal": 0.40},
+        confidence=0.40,
+        missing_signals=(),
+        evidence_count=2,
+    )
+    assert any("produção" in item or "escala" in item for item in faltando)
+
+
+def test_match_technologies_populates_nivel_in_results() -> None:
+    """match_technologies deve retornar MatchResult com nivel preenchido."""
+
+    results = match_technologies(
+        sector="llm generative ai inference api deployment microservice",
+        description=None,
+        evidence_signals=[],
+        technologies=[NIM],
+    )
+
+    assert len(results) == 1
+    assert results[0].nivel in {NIVEL_FORTE, NIVEL_MODERADA, NIVEL_EXPLORATORIA}
+
+
+def test_match_technologies_forte_with_strong_context_and_evidence() -> None:
+    """Startup com workload NLP, producao, alta GPU e boa evidencia → forte."""
+
+    results = match_technologies(
+        sector="llm generative ai inference api deployment microservice",
+        description=None,
+        ai_maturity_level="ai_native",
+        ai_context=StartupAIContext(
+            ai_workload_type="nlp",
+            deployment_stage="production",
+            gpu_need="high",
+            has_operational_signal=True,
+        ),
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=uuid4(),
+                text="llm generative ai inference api deployment microservice",
+                confidence_score=0.9,
+            ),
+            EvidenceSignal(
+                evidence_id=uuid4(),
+                text="inference api generative ai deployment",
+                confidence_score=0.8,
+            ),
+        ],
+        technologies=[NIM],
+    )
+
+    assert len(results) == 1
+    assert results[0].nivel == NIVEL_FORTE
+
+
+def test_match_technologies_faltando_present_for_non_forte() -> None:
+    """Recomendacao nao-forte deve ter faltando com pelo menos 1 sugestao."""
+
+    results = match_technologies(
+        sector="llm inference api",
+        description=None,
+        evidence_signals=[],
+        technologies=[NIM],
+    )
+
+    assert len(results) == 1
+    assert results[0].nivel != NIVEL_FORTE
+    assert len(results[0].faltando) >= 1
+
+
+def test_no_ai_context_uses_neutral_defaults() -> None:
+    """Sem ai_context, todos os componentes sao neutros e o resultado e valido."""
+
+    results = match_technologies(
+        sector="llm generative ai inference api deployment microservice",
+        description=None,
+        ai_context=None,
+        evidence_signals=[],
+        technologies=[NIM],
+    )
+
+    assert len(results) == 1
+    # workload_alignment=0.40, evidence_signal=0.20, startup_maturity=0.50,
+    # keyword_prior=1.0, impl_viab=0.60
+    # score = 0.35*0.40 + 0.25*0.20 + 0.15*0.50 + 0.15*1.0 + 0.10*0.60
+    #       = 0.14 + 0.05 + 0.075 + 0.15 + 0.06 = 0.475 → 0.48
+    assert 0.40 <= results[0].score <= 0.60

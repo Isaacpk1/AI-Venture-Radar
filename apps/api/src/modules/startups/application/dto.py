@@ -5,7 +5,14 @@ from datetime import datetime
 from uuid import UUID
 
 from apps.api.src.modules.startups.domain.enums import (
+    AiDataModality,
+    AiDeploymentStage,
+    AiGpuNeed,
+    AiInfraEnvironment,
+    AiLatencyRequirement,
     AiMaturityLevel,
+    AiModelType,
+    AiWorkloadType,
     FundingStage,
     StartupEvidenceType,
 )
@@ -56,6 +63,25 @@ class ExtractStartupProfileInput:
 
 
 @dataclass
+class StartupAIProfileView:
+    """Perfil estruturado de IA da startup, para consumo externo."""
+
+    ai_workload_type: str
+    model_type: str
+    data_modality: str
+    deployment_stage: str
+    infra_environment: str
+    gpu_need: str
+    latency_requirement: str
+    scale_signal: str | None
+    current_tools: list[str]
+    business_goal: str | None
+    field_confidence: dict[str, float]
+    field_evidence_ids: dict[str, list[str]]
+    extracted_at: datetime | None
+
+
+@dataclass
 class StartupView:
     id: UUID
     name: str
@@ -72,6 +98,7 @@ class StartupView:
     customers: list[str]
     created_at: datetime
     updated_at: datetime
+    ai_profile: StartupAIProfileView | None = None
 
 
 @dataclass

@@ -17,6 +17,8 @@ Cada modulo mantem seu proprio vocabulario (enums e DTOs). Esta classe e o
 unico lugar onde os dois vocabularios se encontram.
 """
 
+from datetime import UTC, datetime
+
 from apps.api.src.modules.agents.application.dto import ExtractionInput
 from apps.api.src.modules.agents.application.public.extractor import (
     ExtractionService,
@@ -25,7 +27,25 @@ from apps.api.src.modules.startups.application.ports import (
     ExtractionOutcome,
     ExtractionPort,
 )
-from apps.api.src.modules.startups.domain.enums import FundingStage
+from apps.api.src.modules.startups.domain.entities import StartupAIProfile
+from apps.api.src.modules.startups.domain.enums import (
+    AiDataModality,
+    AiDeploymentStage,
+    AiGpuNeed,
+    AiInfraEnvironment,
+    AiLatencyRequirement,
+    AiModelType,
+    AiWorkloadType,
+    FundingStage,
+)
+
+
+def _safe_enum(enum_cls, value: str, default):
+    """Converte string para enum; retorna default quando o valor e invalido."""
+    try:
+        return enum_cls(value)
+    except ValueError:
+        return default
 
 
 class AgentsExtractor(ExtractionPort):
@@ -50,19 +70,36 @@ class AgentsExtractor(ExtractionPort):
             description=description,
             evidence_texts=evidence_texts,
         )
-        agents_result = await self.extraction_service.extract(agents_input)
+        r = await self.extraction_service.extract(agents_input)
 
         # Os dois enums (``agents.ExtractedFundingStage`` e
         # ``startups.FundingStage``) compartilham os mesmos valores de
         # string, de proposito, para que esta traducao seja so uma troca
         # de tipo.
-        funding_stage = FundingStage(agents_result.funding_stage.value)
+        funding_stage = FundingStage(r.funding_stage.value)
+
+        ai_profile = StartupAIProfile(
+            ai_workload_type=_safe_enum(AiWorkloadType, r.ai_workload_type, AiWorkloadType.UNKNOWN),
+            model_type=_safe_enum(AiModelType, r.model_type, AiModelType.UNKNOWN),
+            data_modality=_safe_enum(AiDataModality, r.data_modality, AiDataModality.UNKNOWN),
+            deployment_stage=_safe_enum(AiDeploymentStage, r.deployment_stage, AiDeploymentStage.UNKNOWN),
+            infra_environment=_safe_enum(AiInfraEnvironment, r.infra_environment, AiInfraEnvironment.UNKNOWN),
+            gpu_need=_safe_enum(AiGpuNeed, r.gpu_need, AiGpuNeed.UNKNOWN),
+            latency_requirement=_safe_enum(AiLatencyRequirement, r.latency_requirement, AiLatencyRequirement.UNKNOWN),
+            scale_signal=r.scale_signal,
+            current_tools=tuple(r.current_tools),
+            business_goal=r.business_goal,
+            field_confidence=r.field_confidence,
+            field_evidence_ids=r.field_evidence_ids,
+            extracted_at=datetime.now(UTC),
+        )
 
         return ExtractionOutcome(
-            founders=agents_result.founders,
+            founders=r.founders,
             funding_stage=funding_stage,
-            funding_amount_usd=agents_result.funding_amount_usd,
-            customers=agents_result.customers,
-            sector=agents_result.sector,
-            description=agents_result.description,
+            funding_amount_usd=r.funding_amount_usd,
+            customers=r.customers,
+            sector=r.sector,
+            description=r.description,
+            ai_profile=ai_profile,
         )

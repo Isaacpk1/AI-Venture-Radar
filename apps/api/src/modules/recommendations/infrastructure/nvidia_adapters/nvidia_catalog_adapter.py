@@ -37,6 +37,7 @@ class NvidiaKnowledgeCatalogAdapter(NvidiaCatalogSource):
                 use_cases=tuple(technology.use_cases),
                 keywords=tuple(technology.keywords),
                 complexity=technology.complexity,
+                supported_workloads=dict(technology.supported_workloads),
             )
             for technology in technologies
         ]

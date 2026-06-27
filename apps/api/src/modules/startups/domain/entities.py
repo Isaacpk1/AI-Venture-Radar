@@ -5,7 +5,14 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from apps.api.src.modules.startups.domain.enums import (
+    AiDataModality,
+    AiDeploymentStage,
+    AiGpuNeed,
+    AiInfraEnvironment,
+    AiLatencyRequirement,
     AiMaturityLevel,
+    AiModelType,
+    AiWorkloadType,
     FundingStage,
     StartupEvidenceType,
 )
@@ -14,6 +21,33 @@ from apps.api.src.modules.startups.domain.exceptions import InvalidStartupDataEr
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+@dataclass(frozen=True)
+class StartupAIProfile:
+    """Perfil estruturado de IA extraido das evidencias da startup.
+
+    Cada campo opcional fica em UNKNOWN quando a evidencia nao menciona o
+    dado — isso e informacao util no briefing, nao um buraco a ser preenchido
+    com chute (anti-alucinacao, regra 9 do CLAUDE.md).
+
+    field_confidence: confianca por nome de campo (0-1).
+    field_evidence_ids: evidence_ids por nome de campo que sustentaram o dado.
+    """
+
+    ai_workload_type: AiWorkloadType = AiWorkloadType.UNKNOWN
+    model_type: AiModelType = AiModelType.UNKNOWN
+    data_modality: AiDataModality = AiDataModality.UNKNOWN
+    deployment_stage: AiDeploymentStage = AiDeploymentStage.UNKNOWN
+    infra_environment: AiInfraEnvironment = AiInfraEnvironment.UNKNOWN
+    gpu_need: AiGpuNeed = AiGpuNeed.UNKNOWN
+    latency_requirement: AiLatencyRequirement = AiLatencyRequirement.UNKNOWN
+    scale_signal: str | None = None
+    current_tools: tuple[str, ...] = ()
+    business_goal: str | None = None
+    field_confidence: dict[str, float] = field(default_factory=dict)
+    field_evidence_ids: dict[str, list[str]] = field(default_factory=dict)
+    extracted_at: datetime | None = None
 
 
 def _normalize_optional(value: str | None) -> str | None:
@@ -45,6 +79,8 @@ class Startup:
     funding_stage: FundingStage | None = None
     funding_amount_usd: float | None = None
     customers: tuple[str, ...] = ()
+
+    ai_profile: StartupAIProfile | None = None
 
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utc_now)
@@ -101,6 +137,12 @@ class Startup:
             self.funding_amount_usd = funding_amount_usd
         if customers is not None:
             self.customers = _normalize_str_list(customers)
+        self.updated_at = utc_now()
+
+    def update_ai_profile(self, profile: StartupAIProfile) -> None:
+        """Registra o perfil estruturado de IA extraido pelo agente."""
+
+        self.ai_profile = profile
         self.updated_at = utc_now()
 
     def classify(self, level: AiMaturityLevel, reason: str) -> None:

@@ -11,6 +11,7 @@ somente aqui.
 from uuid import UUID
 
 from apps.api.src.modules.recommendations.application.dto import (
+    AIProfileSnapshot,
     EvidenceSnapshot,
     StartupProfileSnapshot,
 )
@@ -38,6 +39,19 @@ class StartupsModuleProfileSource(StartupProfileSource):
         except StartupNotFoundError as error:
             raise StartupProfileUnavailableError(str(error)) from error
 
+        ai_profile_snapshot: AIProfileSnapshot | None = None
+        if profile.startup.ai_profile is not None:
+            p = profile.startup.ai_profile
+            ai_profile_snapshot = AIProfileSnapshot(
+                ai_workload_type=p.ai_workload_type,
+                deployment_stage=p.deployment_stage,
+                gpu_need=p.gpu_need,
+                has_operational_signal=(
+                    p.deployment_stage in ("production", "scale")
+                    or bool(p.scale_signal)
+                ),
+            )
+
         return StartupProfileSnapshot(
             sector=profile.startup.sector,
             description=profile.startup.description,
@@ -46,6 +60,7 @@ class StartupsModuleProfileSource(StartupProfileSource):
                 if profile.startup.ai_maturity_level is not None
                 else None
             ),
+            ai_profile=ai_profile_snapshot,
             evidences=tuple(
                 EvidenceSnapshot(
                     evidence_id=evidence.id,

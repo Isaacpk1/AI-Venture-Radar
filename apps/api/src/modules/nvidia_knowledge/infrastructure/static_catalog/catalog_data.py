@@ -30,6 +30,14 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         ),
         official_url="https://docs.nvidia.com/nim/",
         complexity="low",
+        supported_workloads={
+            "nlp": 0.80,
+            "speech": 0.50,
+            "recommendation": 0.40,
+            "analytics": 0.40,
+            "vision": 0.30,
+            "mlops": 0.50,
+        },
     ),
     NvidiaTechnology(
         slug="nvidia-nemo",
@@ -56,6 +64,12 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "https://docs.nvidia.com/nemo-framework/user-guide/latest/overview.html"
         ),
         complexity="high",
+        supported_workloads={
+            "nlp": 0.90,
+            "speech": 0.70,
+            "mlops": 0.50,
+            "vision": 0.20,
+        },
     ),
     NvidiaTechnology(
         slug="triton-inference-server",
@@ -82,6 +96,14 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/"
         ),
         complexity="medium",
+        supported_workloads={
+            "mlops": 0.70,
+            "vision": 0.60,
+            "nlp": 0.55,
+            "analytics": 0.50,
+            "speech": 0.50,
+            "recommendation": 0.45,
+        },
     ),
     NvidiaTechnology(
         slug="tensorrt-llm",
@@ -106,6 +128,11 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         ),
         official_url="https://nvidia.github.io/TensorRT-LLM/",
         complexity="high",
+        supported_workloads={
+            "nlp": 0.95,
+            "speech": 0.30,
+            "vision": 0.20,
+        },
     ),
     NvidiaTechnology(
         slug="tensorrt",
@@ -132,6 +159,13 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
             "https://docs.nvidia.com/deeplearning/tensorrt/latest/index.html"
         ),
         complexity="high",
+        supported_workloads={
+            "vision": 0.70,
+            "mlops": 0.60,
+            "nlp": 0.50,
+            "analytics": 0.40,
+            "speech": 0.30,
+        },
     ),
     NvidiaTechnology(
         slug="rapids",
@@ -156,6 +190,12 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         ),
         official_url="https://docs.rapids.ai/",
         complexity="medium",
+        supported_workloads={
+            "analytics": 0.95,
+            "recommendation": 0.75,
+            "mlops": 0.60,
+            "vision": 0.20,
+        },
     ),
     NvidiaTechnology(
         slug="riva",
@@ -180,6 +220,10 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         ),
         official_url="https://docs.nvidia.com/deeplearning/riva/user-guide/docs/index.html",
         complexity="medium",
+        supported_workloads={
+            "speech": 0.99,
+            "nlp": 0.40,
+        },
     ),
     NvidiaTechnology(
         slug="cuda",
@@ -204,6 +248,14 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         ),
         official_url="https://docs.nvidia.com/cuda/",
         complexity="high",
+        supported_workloads={
+            "analytics": 0.55,
+            "simulation": 0.60,
+            "mlops": 0.50,
+            "vision": 0.45,
+            "nlp": 0.30,
+            "recommendation": 0.30,
+        },
     ),
     NvidiaTechnology(
         slug="nvidia-ai-enterprise",
@@ -228,6 +280,13 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         ),
         official_url="https://docs.nvidia.com/ai-enterprise/",
         complexity="medium",
+        supported_workloads={
+            "mlops": 0.70,
+            "nlp": 0.55,
+            "analytics": 0.55,
+            "vision": 0.45,
+            "speech": 0.35,
+        },
     ),
     NvidiaTechnology(
         slug="monai",
@@ -252,6 +311,10 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         ),
         official_url="https://docs.nvidia.com/clara/monai/",
         complexity="high",
+        supported_workloads={
+            "vision": 0.95,
+            "analytics": 0.30,
+        },
     ),
     NvidiaTechnology(
         slug="nvidia-inception",
@@ -280,6 +343,15 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         ),
         official_url="https://www.nvidia.com/en-us/startups/",
         complexity="low",
+        supported_workloads={
+            "nlp": 0.40,
+            "vision": 0.40,
+            "analytics": 0.40,
+            "speech": 0.40,
+            "mlops": 0.40,
+            "recommendation": 0.40,
+            "simulation": 0.40,
+        },
     ),
     NvidiaTechnology(
         slug="nemo-guardrails",
@@ -305,6 +377,10 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         ),
         official_url="https://github.com/NVIDIA/NeMo-Guardrails",
         complexity="medium",
+        supported_workloads={
+            "nlp": 0.90,
+            "recommendation": 0.25,
+        },
     ),
     NvidiaTechnology(
         slug="nvidia-clara",
@@ -330,6 +406,10 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         ),
         official_url="https://www.nvidia.com/en-us/clara/",
         complexity="high",
+        supported_workloads={
+            "vision": 0.80,
+            "analytics": 0.55,
+        },
     ),
     NvidiaTechnology(
         slug="cudf",
@@ -354,6 +434,11 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         ),
         official_url="https://docs.rapids.ai/api/cudf/stable/",
         complexity="low",
+        supported_workloads={
+            "analytics": 0.95,
+            "recommendation": 0.55,
+            "mlops": 0.50,
+        },
     ),
     NvidiaTechnology(
         slug="cuml",
@@ -378,6 +463,11 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         ),
         official_url="https://docs.rapids.ai/api/cuml/stable/",
         complexity="low",
+        supported_workloads={
+            "analytics": 0.85,
+            "recommendation": 0.70,
+            "mlops": 0.70,
+        },
     ),
     NvidiaTechnology(
         slug="nvidia-omniverse",
@@ -403,6 +493,10 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         ),
         official_url="https://www.nvidia.com/en-us/omniverse/",
         complexity="high",
+        supported_workloads={
+            "simulation": 0.99,
+            "vision": 0.45,
+        },
     ),
     NvidiaTechnology(
         slug="nvidia-isaac",
@@ -427,6 +521,10 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         ),
         official_url="https://developer.nvidia.com/isaac",
         complexity="high",
+        supported_workloads={
+            "simulation": 0.95,
+            "vision": 0.35,
+        },
     ),
     NvidiaTechnology(
         slug="nvidia-morpheus",
@@ -451,5 +549,8 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         ),
         official_url="https://developer.nvidia.com/morpheus-cybersecurity",
         complexity="high",
+        supported_workloads={
+            "analytics": 0.65,
+        },
     ),
 )

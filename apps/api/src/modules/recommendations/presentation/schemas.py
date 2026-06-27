@@ -35,6 +35,10 @@ class RecommendationResponse(BaseModel):
     justification: str
     matched_keywords: list[str]
     evidence_ids: list[UUID]
+    signal_origins: list[str]
+    missing_signals: list[str]
+    nivel: str
+    faltando: list[str]
     review_status: str
     review_comment: str | None
     reviewed_by: str | None
@@ -56,6 +60,10 @@ class RecommendationResponse(BaseModel):
             justification=view.justification,
             matched_keywords=view.matched_keywords,
             evidence_ids=view.evidence_ids,
+            signal_origins=view.signal_origins,
+            missing_signals=view.missing_signals,
+            nivel=view.nivel,
+            faltando=view.faltando,
             review_status=view.review_status,
             review_comment=view.review_comment,
             reviewed_by=view.reviewed_by,

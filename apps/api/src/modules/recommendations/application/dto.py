@@ -1,6 +1,6 @@
 """DTOs do modulo recommendations."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID
 
@@ -29,6 +29,10 @@ class RecommendationView:
     reviewed_by: str | None
     reviewed_at: datetime | None
     created_at: datetime
+    signal_origins: list[str] = field(default_factory=list)
+    missing_signals: list[str] = field(default_factory=list)
+    nivel: str = "exploratoria"
+    faltando: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -50,6 +54,20 @@ class EvidenceSnapshot:
 
 
 @dataclass(frozen=True)
+class AIProfileSnapshot:
+    """Subconjunto do StartupAIProfile necessario para o score composto.
+
+    Vocabulario deste modulo — nao importa enums do modulo startups.
+    Traducao e responsabilidade do adapter em infrastructure/startups_adapters/.
+    """
+
+    ai_workload_type: str = "unknown"
+    deployment_stage: str = "unknown"
+    gpu_need: str = "unknown"
+    has_operational_signal: bool = False
+
+
+@dataclass(frozen=True)
 class StartupProfileSnapshot:
     """Perfil minimo de startup necessario para gerar recomendacoes."""
 
@@ -57,6 +75,7 @@ class StartupProfileSnapshot:
     description: str | None
     evidences: tuple[EvidenceSnapshot, ...]
     ai_maturity_level: str | None = None
+    ai_profile: AIProfileSnapshot | None = None
 
 
 @dataclass(frozen=True)
@@ -69,6 +88,7 @@ class NvidiaTechnologySnapshot:
     use_cases: tuple[str, ...]
     keywords: tuple[str, ...]
     complexity: str = "medium"
+    supported_workloads: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

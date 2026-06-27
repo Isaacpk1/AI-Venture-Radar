@@ -34,6 +34,7 @@ class StartupModel(Base):
     funding_stage: Mapped[str | None] = mapped_column(String(32), nullable=True)
     funding_amount_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
     customers: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    ai_profile: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

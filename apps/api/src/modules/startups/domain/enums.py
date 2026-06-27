@@ -26,6 +26,65 @@ class AiMaturityLevel(str, Enum):
     NON_AI = "non_ai"
 
 
+class AiWorkloadType(str, Enum):
+    NLP = "nlp"
+    VISION = "vision"
+    RECOMMENDATION = "recommendation"
+    SIMULATION = "simulation"
+    ANALYTICS = "analytics"
+    MLOPS = "mlops"
+    SPEECH = "speech"
+    UNKNOWN = "unknown"
+
+
+class AiModelType(str, Enum):
+    TRAINS_OWN = "trains_own"
+    FINE_TUNING = "fine_tuning"
+    API_BASED = "api_based"
+    CLASSICAL_ML = "classical_ml"
+    UNKNOWN = "unknown"
+
+
+class AiDataModality(str, Enum):
+    TEXT = "text"
+    IMAGE = "image"
+    AUDIO = "audio"
+    TABULAR = "tabular"
+    THREE_D = "3d"
+    LOG_NETWORK = "log_network"
+    UNKNOWN = "unknown"
+
+
+class AiDeploymentStage(str, Enum):
+    RESEARCH = "research"
+    MVP = "mvp"
+    PILOT = "pilot"
+    PRODUCTION = "production"
+    SCALE = "scale"
+    UNKNOWN = "unknown"
+
+
+class AiInfraEnvironment(str, Enum):
+    CLOUD = "cloud"
+    ON_PREMISE = "on_premise"
+    EDGE = "edge"
+    HYBRID = "hybrid"
+    UNKNOWN = "unknown"
+
+
+class AiGpuNeed(str, Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    UNKNOWN = "unknown"
+
+
+class AiLatencyRequirement(str, Enum):
+    REALTIME = "realtime"
+    BATCH = "batch"
+    UNKNOWN = "unknown"
+
+
 class FundingStage(str, Enum):
     """Estagio de funding publico da startup.
 

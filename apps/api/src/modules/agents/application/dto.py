@@ -168,6 +168,11 @@ class ExtractionResult:
     Campos sao "melhor esforco": quando a evidencia nao menciona o dado,
     o agente deve devolver lista vazia/``UNKNOWN``/``None``, nunca
     inferir ou inventar.
+
+    Os campos de perfil de IA (ai_workload_type etc.) usam strings simples
+    ("unknown" como padrao) em vez dos enums de ``startups`` — isso mantem o
+    boundary correto. O adaptador em
+    ``startups/infrastructure/agent_adapters/`` faz a traducao para os enums.
     """
 
     founders: list[str]
@@ -176,6 +181,19 @@ class ExtractionResult:
     customers: list[str]
     sector: str | None = None
     description: str | None = None
+    # Perfil estruturado de IA (Briefing V4, passo 2)
+    ai_workload_type: str = "unknown"
+    model_type: str = "unknown"
+    data_modality: str = "unknown"
+    deployment_stage: str = "unknown"
+    infra_environment: str = "unknown"
+    gpu_need: str = "unknown"
+    latency_requirement: str = "unknown"
+    scale_signal: str | None = None
+    current_tools: list[str] = field(default_factory=list)
+    business_goal: str | None = None
+    field_confidence: dict[str, float] = field(default_factory=dict)
+    field_evidence_ids: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

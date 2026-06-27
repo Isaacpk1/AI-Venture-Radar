@@ -1,6 +1,6 @@
 """Entidades do dominio do modulo NVIDIA Knowledge."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from apps.api.src.modules.nvidia_knowledge.domain.enums import (
     NvidiaKnowledgeSourcePriority,
@@ -25,6 +25,7 @@ class NvidiaTechnology:
     keywords: tuple[str, ...]
     official_url: str
     complexity: str = "medium"
+    supported_workloads: dict[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "slug", _normalize_slug(self.slug))

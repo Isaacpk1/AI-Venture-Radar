@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from apps.api.src.modules.startups.application.dto import (
     MaturityDistributionView,
+    StartupAIProfileView,
     StartupEvidenceView,
     StartupPageView,
     StartupView,
@@ -43,6 +44,40 @@ class AddStartupEvidenceRequest(BaseModel):
     notes: str | None = None
 
 
+class StartupAIProfileResponse(BaseModel):
+    ai_workload_type: str
+    model_type: str
+    data_modality: str
+    deployment_stage: str
+    infra_environment: str
+    gpu_need: str
+    latency_requirement: str
+    scale_signal: str | None
+    current_tools: list[str]
+    business_goal: str | None
+    field_confidence: dict[str, float]
+    field_evidence_ids: dict[str, list[str]]
+    extracted_at: datetime | None
+
+    @classmethod
+    def from_view(cls, view: StartupAIProfileView) -> "StartupAIProfileResponse":
+        return cls(
+            ai_workload_type=view.ai_workload_type,
+            model_type=view.model_type,
+            data_modality=view.data_modality,
+            deployment_stage=view.deployment_stage,
+            infra_environment=view.infra_environment,
+            gpu_need=view.gpu_need,
+            latency_requirement=view.latency_requirement,
+            scale_signal=view.scale_signal,
+            current_tools=view.current_tools,
+            business_goal=view.business_goal,
+            field_confidence=view.field_confidence,
+            field_evidence_ids=view.field_evidence_ids,
+            extracted_at=view.extracted_at,
+        )
+
+
 class StartupResponse(BaseModel):
     id: UUID
     name: str
@@ -59,6 +94,7 @@ class StartupResponse(BaseModel):
     customers: list[str]
     created_at: datetime
     updated_at: datetime
+    ai_profile: StartupAIProfileResponse | None = None
 
     @classmethod
     def from_view(cls, view: StartupView) -> "StartupResponse":
@@ -84,6 +120,11 @@ class StartupResponse(BaseModel):
             customers=view.customers,
             created_at=view.created_at,
             updated_at=view.updated_at,
+            ai_profile=(
+                StartupAIProfileResponse.from_view(view.ai_profile)
+                if view.ai_profile is not None
+                else None
+            ),
         )
 
 

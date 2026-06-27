@@ -4,6 +4,7 @@ from uuid import UUID
 
 from apps.api.src.modules.startups.application.dto import (
     CreateStartupInput,
+    StartupAIProfileView,
     StartupView,
 )
 from apps.api.src.modules.startups.application.public.startup_creator import (
@@ -63,6 +64,24 @@ class CreateStartup(StartupCreator):
 
 
 def to_startup_view(startup: Startup) -> StartupView:
+    ai_profile_view = None
+    if startup.ai_profile is not None:
+        p = startup.ai_profile
+        ai_profile_view = StartupAIProfileView(
+            ai_workload_type=p.ai_workload_type.value,
+            model_type=p.model_type.value,
+            data_modality=p.data_modality.value,
+            deployment_stage=p.deployment_stage.value,
+            infra_environment=p.infra_environment.value,
+            gpu_need=p.gpu_need.value,
+            latency_requirement=p.latency_requirement.value,
+            scale_signal=p.scale_signal,
+            current_tools=list(p.current_tools),
+            business_goal=p.business_goal,
+            field_confidence=dict(p.field_confidence),
+            field_evidence_ids=dict(p.field_evidence_ids),
+            extracted_at=p.extracted_at,
+        )
     return StartupView(
         id=startup.id,
         name=startup.name,
@@ -79,4 +98,5 @@ def to_startup_view(startup: Startup) -> StartupView:
         customers=list(startup.customers),
         created_at=startup.created_at,
         updated_at=startup.updated_at,
+        ai_profile=ai_profile_view,
     )
