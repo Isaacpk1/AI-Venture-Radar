@@ -6,11 +6,42 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from apps.api.src.database.relational.session import check_database_connection
-from apps.api.src.modules.scraping.infrastructure.queue.dramatiq_broker import (
+from apps.api.src.shared.queue.dramatiq_broker import (
     check_redis_connection,
+)
+from apps.api.src.modules.agents.presentation.routes import (
+    router as agents_router,
+)
+from apps.api.src.modules.briefing.presentation.routes import (
+    router as briefing_router,
+)
+from apps.api.src.modules.embeddings.presentation.routes import (
+    router as embeddings_router,
+)
+from apps.api.src.modules.ingestion.presentation.routes import (
+    router as ingestion_router,
+)
+from apps.api.src.modules.nvidia_knowledge.presentation.routes import (
+    router as nvidia_knowledge_router,
+)
+from apps.api.src.modules.orchestration.presentation.routes import (
+    router as orchestration_router,
+    url_ingestion_router,
+)
+from apps.api.src.modules.rag.presentation.routes import (
+    router as rag_router,
+)
+from apps.api.src.modules.recommendations.presentation.routes import (
+    router as recommendations_router,
 )
 from apps.api.src.modules.scraping.presentation.routes import (
     router as scraping_router,
+)
+from apps.api.src.modules.startup_discovery.presentation.router import (
+    router as startup_discovery_router,
+)
+from apps.api.src.modules.startups.presentation.routes import (
+    router as startups_router,
 )
 
 
@@ -55,3 +86,14 @@ async def health_check() -> JSONResponse:
 # Cada modulo expoe seu proprio router. O main apenas conecta esses routers a
 # aplicacao global, sem conhecer regras internas de scraping.
 app.include_router(scraping_router)
+app.include_router(agents_router)
+app.include_router(ingestion_router)
+app.include_router(embeddings_router)
+app.include_router(startups_router)
+app.include_router(rag_router)
+app.include_router(nvidia_knowledge_router)
+app.include_router(recommendations_router)
+app.include_router(briefing_router)
+app.include_router(orchestration_router)
+app.include_router(url_ingestion_router)
+app.include_router(startup_discovery_router)

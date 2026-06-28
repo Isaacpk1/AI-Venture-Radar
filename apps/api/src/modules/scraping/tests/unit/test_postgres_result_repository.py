@@ -1,7 +1,7 @@
 """Testes unitários do repositório PostgreSQL de resultados."""
 
 from hashlib import sha256
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
 from uuid import uuid4
 
 import pytest
@@ -42,7 +42,7 @@ def make_result() -> ScrapingResult:
 async def test_save_adds_new_result_and_flushes() -> None:
     """Resultado inexistente deve gerar novo model."""
 
-    session = Mock()
+    session = MagicMock()
     session.get = AsyncMock(return_value=None)
     session.add = Mock()
     session.flush = AsyncMock()
@@ -63,7 +63,7 @@ async def test_save_updates_existing_result() -> None:
 
     result = make_result()
     existing_model = ScrapingResultMapper.to_model(result)
-    session = Mock()
+    session = MagicMock()
     session.get = AsyncMock(return_value=existing_model)
     session.add = Mock()
     session.flush = AsyncMock()

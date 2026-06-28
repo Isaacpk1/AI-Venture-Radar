@@ -24,7 +24,7 @@ from apps.api.src.modules.scraping.factories.scraping_factory import ScrapingFac
 from apps.api.src.modules.scraping.infrastructure.database.models import (
     ScrapingJobModel,
 )
-from apps.api.src.modules.scraping.infrastructure.queue.dramatiq_broker import broker
+from apps.api.src.shared.queue.dramatiq_broker import broker
 from apps.api.src.modules.scraping.infrastructure.scrapers.beautifulsoup_scraper import (
     BeautifulSoupScraper,
 )

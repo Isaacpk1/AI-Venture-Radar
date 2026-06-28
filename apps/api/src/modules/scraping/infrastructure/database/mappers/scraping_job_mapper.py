@@ -25,6 +25,7 @@ class ScrapingJobMapper:
             url=entity.url,
             status=entity.status.value,
             error_message=entity.error_message,
+            source_type=entity.source_type,
             created_at=entity.created_at,
             started_at=entity.started_at,
             finished_at=entity.finished_at,
@@ -48,6 +49,7 @@ class ScrapingJobMapper:
             status=JobStatus(model.status),
             result_id=result_id,
             error_message=model.error_message,
+            source_type=model.source_type,
             created_at=model.created_at,
             started_at=model.started_at,
             finished_at=model.finished_at,
@@ -60,6 +62,7 @@ class ScrapingJobMapper:
         model.url = entity.url
         model.status = entity.status.value
         model.error_message = entity.error_message
+        model.source_type = entity.source_type
         model.created_at = entity.created_at
         model.started_at = entity.started_at
         model.finished_at = entity.finished_at

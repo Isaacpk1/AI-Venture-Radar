@@ -36,6 +36,32 @@ from apps.api.src.modules.scraping.infrastructure.database.models import (  # no
     scraping_job_model,
     scraping_result_model,
 )
+from apps.api.src.modules.agents.infrastructure.database.models import (  # noqa: F401
+    agent_run_model,
+    agent_step_model,
+)
+from apps.api.src.modules.ingestion.infrastructure.database.models import (  # noqa: F401
+    chunk_model,
+    document_model,
+    ingestion_job_model,
+)
+from apps.api.src.modules.embeddings.infrastructure.database.models import (  # noqa: F401
+    embedding_job_chunk_model,
+    embedding_job_model,
+)
+from apps.api.src.modules.startups.infrastructure.database.models import (  # noqa: F401
+    startup_evidence_model,
+    startup_model,
+)
+from apps.api.src.modules.recommendations.infrastructure.database.models import (  # noqa: F401
+    recommendation_model,
+)
+from apps.api.src.modules.briefing.infrastructure.database.models import (  # noqa: F401
+    briefing_model,
+)
+from apps.api.src.modules.orchestration.infrastructure.database.models import (  # noqa: F401
+    analysis_job_model,
+)
 
 # Objeto de configuração do Alembic, vindo do alembic.ini.
 config = context.config

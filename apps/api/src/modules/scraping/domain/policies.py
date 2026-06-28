@@ -6,8 +6,25 @@ estratégia ou precisa ser rejeitada.
 """
 
 from dataclasses import dataclass, field
+from datetime import timedelta
 
 from .enums import ValidationDecision
+
+# Por quanto tempo um ScrapingResult aprovado para uma URL pode ser
+# reaproveitado em vez de raspar de novo. Janela curta o suficiente para
+# nao arriscar dado muito desatualizado se o site mudar.
+SCRAPING_RESULT_CACHE_TTL = timedelta(days=3)
+
+# Circuit breaker por dominio: apos N falhas em uma janela de T horas com
+# a mesma estrategia no mesmo host, aquela estrategia e ignorada para aquele
+# host — evita re-tentar BS4 em dominios que sempre precisam de Playwright.
+CIRCUIT_BREAKER_FAILURE_THRESHOLD = 3
+CIRCUIT_BREAKER_WINDOW_HOURS = 24
+
+
+def is_circuit_open(failure_count: int) -> bool:
+    """Retorna True quando o host+metodo acumulou falhas suficientes para cortar."""
+    return failure_count >= CIRCUIT_BREAKER_FAILURE_THRESHOLD
 
 
 @dataclass(frozen=True)
@@ -37,6 +54,10 @@ class ContentAcceptancePolicy:
         "blocked_status",
         "captcha",
         "empty_content",
+        "high_boilerplate",
+        "insufficient_text",
+        "javascript_required",
+        "link_farm",
         "missing_source_url",
         "unsupported_content_type",
     }
@@ -58,11 +79,17 @@ class FallbackPolicy:
     """Decide se outra estratégia de scraping pode corrigir a coleta."""
 
     # Estes problemas podem ser resolvidos usando outra tecnologia de coleta.
+    # "link_farm" entrou aqui apos encontrar paginas de documentacao tecnica
+    # (ex. TensorRT-LLM no GitHub Pages) com barra lateral de navegacao densa
+    # em links: o BS4 mede a proporcao de links no HTML bruto e rejeita como
+    # "link farm", mas o Trafilatura (proxima estrategia) isola o conteudo
+    # principal do menu de navegacao e nao tem esse problema.
     fallback_problems = {
         "empty_content",
         "high_boilerplate",
         "insufficient_text",
         "javascript_required",
+        "link_farm",
     }
 
     def should_fallback(
@@ -78,6 +105,31 @@ class FallbackPolicy:
         )
 
         return has_next_strategy and has_recoverable_problem
+
+
+class LLMReviewPolicy:
+    """Decide quando vale pagar o custo de uma revisao semantica."""
+
+    minimum_quality_score = 0.45
+    maximum_quality_score = 0.75
+    minimum_technical_score = 0.70
+    minimum_text_score = 0.60
+
+    blocking_problems = ContentAcceptancePolicy.blocking_problems
+
+    def requires_review(self, summary: ValidationSummary) -> bool:
+        """Seleciona apenas conteudo utilizavel, mas semanticamente ambiguo."""
+
+        has_blocker = bool(self.blocking_problems.intersection(summary.problems))
+
+        return (
+            not has_blocker
+            and summary.technical_score >= self.minimum_technical_score
+            and summary.text_score >= self.minimum_text_score
+            and self.minimum_quality_score
+            <= summary.quality_score
+            < self.maximum_quality_score
+        )
 
 
 class ValidationDecisionPolicy:

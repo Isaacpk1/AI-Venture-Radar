@@ -36,10 +36,15 @@ class PipelineLimits:
     Diferente de ``ScrapingLimits``, estes valores não pertencem a BeautifulSoup
     ou Playwright individualmente. Quando um limite global é atingido, nenhuma
     outra tecnologia deve continuar.
+
+    ``total_timeout_seconds`` se aplica a startup_evidence.
+    ``reference_total_timeout_seconds`` se aplica a fontes curadas (ex:
+    nvidia_knowledge) — documentacao tecnica tende a ser maior e mais lenta.
     """
 
     max_strategies: int = 4
     total_timeout_seconds: float = 90.0
+    reference_total_timeout_seconds: float = 120.0
 
     def __post_init__(self) -> None:
         if self.max_strategies <= 0:
@@ -47,3 +52,12 @@ class PipelineLimits:
 
         if self.total_timeout_seconds <= 0:
             raise ValueError("O timeout total precisa ser maior que zero.")
+
+        if self.reference_total_timeout_seconds <= 0:
+            raise ValueError("O timeout de referencia precisa ser maior que zero.")
+
+    def timeout_for(self, source_type: str) -> float:
+        """Retorna o timeout adequado para o source_type do job."""
+        if source_type == "startup_evidence":
+            return self.total_timeout_seconds
+        return self.reference_total_timeout_seconds

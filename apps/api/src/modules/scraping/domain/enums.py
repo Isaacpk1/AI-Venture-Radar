@@ -45,6 +45,10 @@ class AttemptStatus(StrEnum):
     # A tentativa sofreu uma falha técnica inesperada.
     FAILED = "failed"
 
+    # O agente investigou e concluiu que o conteúdo atual não basta: o fluxo
+    # global pode precisar criar novos jobs de scraping para esta startup.
+    NEEDS_MORE_SOURCES = "needs_more_sources"
+
 
 class ScrapingMethod(StrEnum):
     """Tecnologias de coleta que o módulo reconhece."""
@@ -53,7 +57,11 @@ class ScrapingMethod(StrEnum):
     BEAUTIFULSOUP = "beautifulsoup"
 
     # Estratégia futura para páginas que dependem de JavaScript.
+    TRAFILATURA = "trafilatura"
     PLAYWRIGHT = "playwright"
+
+    # Fallback pago para domínios que esgotam as estratégias gratuitas.
+    FIRECRAWL = "firecrawl"
 
 
 class ValidationDecision(StrEnum):
@@ -67,3 +75,31 @@ class ValidationDecision(StrEnum):
 
     # O conteúdo não deve ser utilizado.
     REJECT = "reject"
+
+
+class SemanticReviewDecision(StrEnum):
+    """Decisoes permitidas para uma revisao semantica simples."""
+
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    NEEDS_AGENT_REVIEW = "needs_agent_review"
+
+
+class AgentInvestigationDecision(StrEnum):
+    """Decisoes finais permitidas para a investigacao de um agente (v8).
+
+    Este enum pertence ao dominio de ``scraping`` porque e o vocabulario que
+    a pipeline de scraping entende. O modulo ``agents`` tem seu proprio
+    vocabulario interno; o adaptador (``infrastructure/agent_adapters``) e
+    responsavel por traduzir a saida do contrato publico de ``agents`` para
+    este enum.
+    """
+
+    # O agente confirmou que o conteudo pode ser aceito.
+    ACCEPTED = "accepted"
+
+    # O agente concluiu que o conteudo nao deve ser aproveitado.
+    REJECTED = "rejected"
+
+    # O agente concluiu que faltam fontes para decidir com seguranca.
+    NEEDS_MORE_SOURCES = "needs_more_sources"

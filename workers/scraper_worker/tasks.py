@@ -7,10 +7,13 @@ import dramatiq
 # Este import configura o RedisBroker e o middleware AsyncIO antes de o actor
 # abaixo ser registrado. O nome importado tambem e passado explicitamente ao
 # decorator para deixar clara a dependencia da task.
-from apps.api.src.modules.scraping.infrastructure.queue.dramatiq_broker import (
+from apps.api.src.shared.queue.dramatiq_broker import (
     broker,
 )
 from apps.api.src.modules.scraping.factories.scraping_factory import ScrapingFactory
+from apps.api.src.shared.logging import get_logger, log_job
+
+logger = get_logger(__name__)
 
 
 @dramatiq.actor(
@@ -26,5 +29,6 @@ async def execute_scraping_job(job_id: str) -> None:
     ou regras de negocio.
     """
 
-    use_case = ScrapingFactory.create_execute_scraping_job()
-    await use_case.execute(UUID(job_id))
+    with log_job(logger, "scraping job", job_id=job_id):
+        use_case = ScrapingFactory.create_execute_scraping_job()
+        await use_case.execute(UUID(job_id))

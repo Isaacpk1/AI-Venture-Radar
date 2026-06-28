@@ -74,3 +74,32 @@ def test_updates_existing_attempt_model() -> None:
     assert model.status == "failed"
     assert model.error_message == "Timeout."
     assert model.finished_at == attempt.finished_at
+
+
+def test_preserves_agent_review_fields() -> None:
+    """Campos da investigacao por agente devem ir e voltar do model."""
+
+    attempt = ScrapingAttempt(
+        job_id=uuid4(),
+        method=ScrapingMethod.BEAUTIFULSOUP,
+    )
+    attempt.finish_validation(
+        decision=ValidationDecision.ACCEPT,
+        technical_score=1.0,
+        text_score=0.80,
+        evidence_score=0.40,
+        quality_score=0.64,
+        problems=[],
+        warnings=["semantic_reviewed", "agent_reviewed"],
+        semantic_confidence=0.72,
+        agent_reviewed=True,
+        agent_reason="Agente encontrou evidencia complementar.",
+    )
+
+    restored = ScrapingAttemptMapper.to_entity(
+        ScrapingAttemptMapper.to_model(attempt)
+    )
+
+    assert restored.semantic_confidence == 0.72
+    assert restored.agent_reviewed is True
+    assert restored.agent_reason == "Agente encontrou evidencia complementar."

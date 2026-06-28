@@ -1,11 +1,16 @@
 """Implementação PostgreSQL do contrato ``ScrapingResultRepository``."""
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.src.modules.scraping.domain.entities import ScrapingResult
+from apps.api.src.modules.scraping.domain.exceptions import (
+    DuplicateScrapingContentError,
+)
 from apps.api.src.modules.scraping.domain.repositories import (
     ScrapingResultRepository,
 )
@@ -28,12 +33,26 @@ class PostgresScrapingResultRepository(ScrapingResultRepository):
 
         model = await self.session.get(ScrapingResultModel, result.id)
 
-        if model is None:
-            self.session.add(ScrapingResultMapper.to_model(result))
-        else:
-            ScrapingResultMapper.update_model(model, result)
+        try:
+            # O savepoint isola uma violacao do hash unico. Assim, a transacao
+            # externa continua utilizavel para registrar a falha do job.
+            async with self.session.begin_nested():
+                if model is None:
+                    self.session.add(ScrapingResultMapper.to_model(result))
+                else:
+                    ScrapingResultMapper.update_model(model, result)
 
-        await self.session.flush()
+                await self.session.flush()
+        except IntegrityError as error:
+            duplicate = await self.get_by_content_hash(result.content_hash)
+            if duplicate is not None and duplicate.id != result.id:
+                raise DuplicateScrapingContentError(
+                    "O conteudo coletado ja foi persistido pelo resultado "
+                    f"{duplicate.id}."
+                ) from error
+
+            # Violacoes de outras regras do banco continuam inesperadas.
+            raise
 
     async def get_by_id(self, result_id: UUID) -> ScrapingResult | None:
         """Consulta um resultado pelo identificador primário."""
@@ -54,6 +73,25 @@ class PostgresScrapingResultRepository(ScrapingResultRepository):
             select(ScrapingResultModel).where(
                 ScrapingResultModel.content_hash == content_hash
             )
+        )
+        if model is None:
+            return None
+
+        return ScrapingResultMapper.to_entity(model)
+
+    async def get_recent_by_url(
+        self, url: str, *, since: datetime
+    ) -> ScrapingResult | None:
+        """Consulta o resultado mais recente para a URL dentro da janela."""
+
+        model = await self.session.scalar(
+            select(ScrapingResultModel)
+            .where(
+                ScrapingResultModel.url == url,
+                ScrapingResultModel.created_at >= since,
+            )
+            .order_by(ScrapingResultModel.created_at.desc())
+            .limit(1)
         )
         if model is None:
             return None

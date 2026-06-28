@@ -31,6 +31,9 @@ class ScrapingAttemptMapper:
             problems=list(entity.problems),
             warnings=list(entity.warnings),
             error_message=entity.error_message,
+            semantic_confidence=entity.semantic_confidence,
+            agent_reviewed=entity.agent_reviewed,
+            agent_reason=entity.agent_reason,
             started_at=entity.started_at,
             finished_at=entity.finished_at,
         )
@@ -56,6 +59,9 @@ class ScrapingAttemptMapper:
             problems=list(model.problems),
             warnings=list(model.warnings),
             error_message=model.error_message,
+            semantic_confidence=model.semantic_confidence,
+            agent_reviewed=model.agent_reviewed,
+            agent_reason=model.agent_reason,
             started_at=model.started_at,
             finished_at=model.finished_at,
         )
@@ -80,5 +86,8 @@ class ScrapingAttemptMapper:
         model.problems = list(entity.problems)
         model.warnings = list(entity.warnings)
         model.error_message = entity.error_message
+        model.semantic_confidence = entity.semantic_confidence
+        model.agent_reviewed = entity.agent_reviewed
+        model.agent_reason = entity.agent_reason
         model.started_at = entity.started_at
         model.finished_at = entity.finished_at
