@@ -50,6 +50,9 @@ class FakeDocRepo(DocumentRepository):
     async def get_by_id(self, document_id: UUID) -> Document | None:
         return None
 
+    async def find_by_content_hash(self, content_hash: str) -> Document | None:
+        return None
+
 
 class FakeChunkRepo(ChunkRepository):
     async def save(self, chunk: Chunk) -> None:

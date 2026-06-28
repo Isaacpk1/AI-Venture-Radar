@@ -258,14 +258,11 @@ O teste opt-in agora exige piso `0.75` para `faithfulness`,
 
 ---
 
-## Tecnologias candidatas (auditoria de codigo, 23/06/2026)
+## Dividas tecnicas
 
-| Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
-|---|---|---|---|
-| `context_recall` foi o gargalo medido da V5 (`0.583333` na revalidacao Ragas); busca lexical antiga usava `to_tsvector('simple')`, sem stemming ("treinar" != "treinamento") | `pg_search` (ParadeDB) como extensao Postgres para BM25 nativo - decisao contra `rank-bm25` (Python) ja tomada e documentada em V3 acima - **CONCLUIDO em 23/06/2026**. Complemento curado do catalogo NVIDIA Knowledge tambem concluido; nova medicao Ragas colocou `context_recall` em `1.000000` | Fase 3/V5 de `docs/roadmap_evolucao_tecnica_mvp.md` | Alto - troca de imagem Postgres + migration + reindexacao |
-| Modelo do Cohere Rerank fixo em codigo (`rerank-v3.5`) | extrair para `Settings` (`COHERE_RERANK_MODEL`, default `rerank-v3.5`) — **concluido em 23/06/2026** | Fase 4 de `docs/roadmap_evolucao_tecnica_mvp.md` | Trivial |
-| Filtro de busca so por `source_type`, nada por startup/data/categoria | estender `LexicalSearchRepository`/`VectorRepository` com filtros estruturados adicionais (sem lib nova, so mais parametros de query) | V3.5 mencionada acima ("busca filtrada") | Medio |
+Ver inventario consolidado: `docs/geral/dividas_tecnicas.md`.
 
-Nao reabrir `rank-bm25` (Python): exigiria carregar todos os chunks em
-memoria a cada busca, contradizendo a regra de Postgres como fonte da
-verdade — decisao ja tomada e ainda valida.
+Itens deste modulo: DT-08 (filtros estruturados adicionais alem de source_type).
+Itens fechados deste modulo: DT-F02 (BM25 via pg_search, 23/06/2026), DT-F03 (COHERE_RERANK_MODEL configuravel, 23/06/2026).
+
+Decisao permanente: nao usar `rank-bm25` (Python) — exigiria carregar todos os chunks em memoria, contradiz Postgres como fonte da verdade.

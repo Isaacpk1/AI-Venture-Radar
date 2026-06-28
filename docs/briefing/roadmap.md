@@ -88,7 +88,7 @@ produz o score**, e a tool que ele embrulha e o motor de keyword fraco.
 | Briefing V2 | Implementado (Agents V12) | Briefing gerado por agente (reescrita de prosa) |
 | Briefing V3 | Implementado (24/06/2026) | Exportacao em PDF preservando citacoes |
 | Briefing V4 | **Implementado (27/06/2026)** | Briefing como analise: tese de fit, confianca geral, fortes vs. exploratorias, perguntas de qualificacao |
-| Briefing V5 | Planejado | Avaliacao com casos conhecidos (golden set) + ranking de oportunidades |
+| Briefing V5 | **Implementado (27/06/2026)** | Golden set de 6 arquetipos de referencia; test_golden_set.py em recommendations/tests/unit/; media p@3 = 0.78 (piso 0.50); 10/10 testes passando |
 | Briefing V6 | Planejado | Robustez operacional: versionamento, auditoria, reprocessamento por etapa |
 
 As prioridades transversais de produto estao em `docs/roadmap_produto_final.md`.
@@ -310,33 +310,32 @@ evidencias coletadas
 
 ---
 
-## Briefing V5 — Avaliacao + Ranking (planejado)
+## Briefing V5 — Golden Set e Metricas (implementado, 27/06/2026)
 
-Sem medir, nao da pra saber se um ajuste melhora precisao ou so muda o estilo.
-
-Golden set pequeno de startups de referencia com expectativa manual:
+Entregue:
 
 ```txt
-- startup com IA forte e necessidade clara de GPU
-- startup que usa IA so superficialmente (via API)
-- SaaS sem workload NVIDIA claro
-- startup de visao computacional
-- startup de analytics tabular
-- startup enterprise com MLOps/governanca
+test_golden_set.py (recommendations/tests/unit/)
+6 arquetipos de startups de referencia com perfil completo e assercoes de qualidade
+media p@3 = 0.78 (piso assertado: 0.50)
+10/10 testes passando
+nenhum falso positivo para tecnologias claramente fora do perfil
+helpers _precision_at_k(), _false_positive_slugs(), _slug_rank() para regressao futura
+teste consolidado test_golden_set_overall_metrics com relatorio completo via capsys
 ```
 
-Metricas:
+Arquetipos cobertos:
 
 ```txt
-precision@3 das recomendacoes
-taxa de falsos positivos
-% de exploratorias corretamente marcadas como exploratorias
-% de recomendacoes com evidencia rastreavel
-avaliacao humana da justificativa (rubrica)
+LLM inference (AI-native, nlp, production)         -> NIM/Triton/TensorRT-LLM
+API-only SaaS (AI-enabled, mvp)                    -> nenhuma recomendacao forte
+SaaS sem IA (non_ai)                               -> nenhuma tech NVIDIA
+Computer vision (AI-native, vision, pilot)         -> TensorRT/Triton
+Tabular analytics (AI-enabled, analytics)          -> RAPIDS/cuDF/cuML
+Enterprise MLOps (AI-native, mlops, scale)         -> AI Enterprise/Triton/NeMo
 ```
 
-Em cima do golden set, o ranking de oportunidades: comparar varias startups,
-ranquear por fit forte com NVIDIA, gerar sumario de lote, destacar alto-fit.
+Ranking de oportunidades (comparacao em lote entre startups) continua planejado para V6.
 
 ---
 
@@ -378,8 +377,8 @@ O briefing e considerado robusto quando:
 4. Retrieval semantico de candidatos NVIDIA                                   [ENTREGUE best-effort]
 5. Matriz de decisao por tecnologia (4.4)                                      [ENTREGUE base]
 6. Nova estrutura de saida do briefing (4.5) em build_briefing_markdown()      [ENTREGUE]
-7. Golden set + metricas (V5)                                                  [PROXIMO]
-8. Frontend: separar fortes de exploratorias, expor motivo de baixa confianca  [PROXIMO]
+7. Golden set + metricas (V5)                                                  [ENTREGUE]
+8. Frontend: separar fortes de exploratorias, expor motivo de baixa confianca  [ENTREGUE]
 ```
 
 Os passos 1-3 e 6 sao puros em `domain/policies.py` dos dois modulos — sem rede,

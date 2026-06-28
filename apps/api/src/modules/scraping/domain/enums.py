@@ -60,6 +60,9 @@ class ScrapingMethod(StrEnum):
     TRAFILATURA = "trafilatura"
     PLAYWRIGHT = "playwright"
 
+    # Fallback pago para domínios que esgotam as estratégias gratuitas.
+    FIRECRAWL = "firecrawl"
+
 
 class ValidationDecision(StrEnum):
     """Decisões que a validação pode tomar sobre uma tentativa."""

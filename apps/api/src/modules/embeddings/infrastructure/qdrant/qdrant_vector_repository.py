@@ -13,6 +13,7 @@ from qdrant_client.models import (
     Distance,
     FieldCondition,
     Filter,
+    MatchAny,
     MatchValue,
     PointStruct,
     VectorParams,
@@ -61,11 +62,14 @@ class QdrantVectorRepository(VectorRepository):
         *,
         limit: int = 5,
         source_type: str | None = None,
+        document_ids: list[UUID] | None = None,
     ) -> list[ChunkSearchResult]:
+        if document_ids is not None and len(document_ids) == 0:
+            return []
         response = await self._client.query_points(
             collection_name=self._collection_name,
             query=list(query_vector),
-            query_filter=self._build_filter(source_type),
+            query_filter=self._build_filter(source_type, document_ids),
             limit=limit,
         )
         return [
@@ -119,17 +123,26 @@ class QdrantVectorRepository(VectorRepository):
             ),
         )
 
-    def _build_filter(self, source_type: str | None) -> Filter | None:
-        if source_type is None:
-            return None
-        return Filter(
-            must=[
+    def _build_filter(
+        self,
+        source_type: str | None,
+        document_ids: list[UUID] | None = None,
+    ) -> Filter | None:
+        conditions = []
+        if source_type is not None:
+            conditions.append(
+                FieldCondition(key="source_type", match=MatchValue(value=source_type))
+            )
+        if document_ids is not None:
+            conditions.append(
                 FieldCondition(
-                    key="source_type",
-                    match=MatchValue(value=source_type),
+                    key="document_id",
+                    match=MatchAny(any=[str(did) for did in document_ids]),
                 )
-            ]
-        )
+            )
+        if not conditions:
+            return None
+        return Filter(must=conditions)
 
     async def _ensure_collection(self, dimension: int, model_name: str) -> None:
         if not await self._client.collection_exists(self._collection_name):

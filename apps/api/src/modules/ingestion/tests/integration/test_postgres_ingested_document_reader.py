@@ -80,6 +80,7 @@ async def test_reader_lists_chunks_and_summary_for_real_document() -> None:
             clean_text="texto limpo do documento",
             word_count=4,
             chunk_count=2,
+            content_hash="testhash0001",
         )
         await PostgresDocumentRepository(session).save(document)
 

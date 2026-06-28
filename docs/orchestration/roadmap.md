@@ -183,57 +183,11 @@ Entregaveis:
 
 ---
 
-## Tecnologias candidatas (auditoria de codigo, 23/06/2026)
+## Dividas tecnicas
 
-Confirmado em `application/use_cases/advance_url_ingestion_job.py`: a etapa
-`ANALYZING` roda create/associate `Startup` -> attach evidence ->
-try_extract/try_classify -> recommendations -> briefing numa unica
-entrega; se falhar no meio, o job inteiro vai para `failed` (terminal, sem
-retry granular) mesmo que os primeiros passos tenham funcionado.
+Ver inventario consolidado: `docs/geral/dividas_tecnicas.md`.
 
-| Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
-|---|---|---|---|
-| `ANALYZING` falha por completo mesmo quando so o ultimo sub-passo (ex: briefing) deu erro | mais campos de progresso na propria tabela `url_ingestion_jobs` (ja existe `startup_id`/`evidence_attached`/`recommendation_count`/`briefing_id` como guardas de idempotencia parcial) — registrar explicitamente qual sub-passo falhou para o retry pular os ja concluidos | Orchestration V3 (Retomada de jobs falhados) | Medio — migration pequena + logica em `advance_url_ingestion_job.py`, sem infra nova |
-| Frontend so descobre conclusao via polling (`GET /url-ingestion/jobs/{id}` a cada 3s) | nenhuma tecnologia nova necessaria agora: webhook simples (POST de callback) resolve o caso de uso da V4 sem precisar de WebSocket/SSE, ja que o consumidor e' o proprio backend do frontend (BFF), nao o navegador direto | Orchestration V4 (Notificacoes) | Baixo |
+Itens deste modulo: DT-09 (retry granular por sub-passo em ANALYZING), DT-10 (validar Tavily real + calibrar allowlist).
+Itens fechados deste modulo: DT-F04 (enriquecimento de campo vazio, 26/06/2026), DT-F05 (limite de rounds, 26/06/2026), DT-F06 (resgate de URL fraca, 26/06/2026).
 
-Nao adotar uma fila de eventos nova (Kafka, RabbitMQ, Redis Streams) para
-notificar etapas: o projeto ja usa Dramatiq+Redis para todo o assincrono, e
-a propria fila `url_ingestion` ja funciona como o loop de polling
-(`UrlIngestionStillProcessingError` + reentrega). Adicionar um barramento de
-eventos resolveria um problema de latencia que ainda nao foi medido como
-real, e contradiria a regra 8 do `CLAUDE.md` ("construir so o que e
-necessario agora").
-
-### Chain de enriquecimento por busca
-
-Pergunta original: depois de raspar uma URL e extrair o perfil da startup,
-campos como `founders` muitas vezes ficam vazios porque a pagina raspada
-nunca mencionou isso. Hoje `AdvanceUrlIngestionJob` roda `try_extract` uma
-unica vez e para — se o campo nao estava na evidencia, fica vazio para
-sempre, sem nova tentativa.
-
-Status em 26/06/2026: a chain ja detecta perfil incompleto, limita a uma
-rodada, cria jobs filhos e, quando `GEMINI_API_KEY` + `TAVILY_API_KEY` estao
-configuradas, tenta fontes externas planejadas pelo Search Planner antes de
-cair no fallback do mesmo dominio. Tambem cobre o caso em que a URL inicial
-e' fraca demais e falha ainda no scraping: a fonte e marcada como falha, mas
-dispara enriquecimento para a startup minima.
-
-O que ainda falta: validar com Tavily real, calibrar ranking/allowlist de
-dominios confiaveis e decidir se a segunda rodada deve existir alem do limite
-inicial `MAX_ENRICHMENT_ROUNDS = 1`.
-
-| Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
-|---|---|---|---|
-| `try_extract` roda uma vez; campo vazio fica vazio para sempre | checagem de `founders`/`funding_stage`/`customers` vazios e criacao de ate 2 jobs filhos do mesmo dominio | Entregue em 26/06/2026 | Baixo |
-| Risco de loop sem fim se a busca nunca achar o dado | `parent_job_id` + `enrichment_round`, com limite inicial `MAX_ENRICHMENT_ROUNDS = 1` | Entregue em 26/06/2026 | Baixo |
-| Encontrar fontes fora do dominio original | Search Planner Agent + `SearchExecutorPort` Tavily opcional para achar 1-2 URLs candidatas externas, como LinkedIn, Crunchbase ou paginas de imprensa | Entregue em 26/06/2026; falta validar com chave real | Medio |
-| URL inicial fraca falha antes de `ANALYZING` | resgate em `SCRAPING`: cria startup minima e agenda enriquecimento, sem aceitar a fonte fraca como evidencia | Entregue em 26/06/2026 | Baixo |
-
-Custo real desta feature: cada round gasta 1 chamada Gemini (Search
-Planner) + 1 chamada de API de busca (Tavily) + 1 scraping completo + 1
-nova chamada de extracao (Gemini) — caro o suficiente para so disparar
-quando o campo faltante de fato muda o score de uma recomendacao (ex:
-`founders`/`funding_stage`, nao qualquer campo). Por isso esta feature
-fica depois das fases mais baratas no `docs/roadmap_evolucao_tecnica_mvp.md`
-(ver Fase 7).
+Decisao permanente: nao adotar Kafka/RabbitMQ/Redis Streams para notificacoes de etapa — o Dramatiq+Redis ja cobre o caso de uso, adicionar outro barramento seria prematuro (regra 8 do CLAUDE.md).

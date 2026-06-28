@@ -1,11 +1,17 @@
 """Entidades do domínio do módulo de ingestion."""
 
+import hashlib
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from .enums import DocumentSourceType, IngestionJobStatus
 from .exceptions import InvalidIngestionJobTransitionError
+
+
+def document_content_hash(clean_text: str) -> str:
+    """SHA-256 hex do texto limpo — usado para dedup de Document por conteudo."""
+    return hashlib.sha256(clean_text.encode()).hexdigest()
 
 
 def utc_now() -> datetime:
@@ -74,6 +80,7 @@ class Document:
     clean_text: str
     word_count: int
     chunk_count: int
+    content_hash: str
     source_type: DocumentSourceType = DocumentSourceType.STARTUP_EVIDENCE
 
     id: UUID = field(default_factory=uuid4)

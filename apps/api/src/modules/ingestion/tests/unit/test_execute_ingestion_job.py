@@ -14,7 +14,12 @@ from apps.api.src.modules.ingestion.application.unit_of_work import IngestionUni
 from apps.api.src.modules.ingestion.application.use_cases.execute_ingestion_job import (
     ExecuteIngestionJob,
 )
-from apps.api.src.modules.ingestion.domain.entities import Chunk, Document, IngestionJob
+from apps.api.src.modules.ingestion.domain.entities import (
+    Chunk,
+    Document,
+    IngestionJob,
+    document_content_hash,
+)
 from apps.api.src.modules.ingestion.domain.enums import (
     DocumentSourceType,
     IngestionJobStatus,
@@ -60,6 +65,9 @@ class FakeDocRepo(DocumentRepository):
 
     async def get_by_id(self, document_id: UUID) -> Document | None:
         return next((d for d in self.saved if d.id == document_id), None)
+
+    async def find_by_content_hash(self, content_hash: str) -> Document | None:
+        return next((d for d in self.saved if d.content_hash == content_hash), None)
 
 
 class FakeChunkRepo(ChunkRepository):
@@ -265,3 +273,64 @@ async def test_execute_cleans_text_before_chunking() -> None:
 
     doc = doc_repo.saved[0]
     assert "\r" not in doc.clean_text
+
+
+@pytest.mark.anyio
+async def test_execute_document_has_content_hash() -> None:
+    job = IngestionJob(scraping_result_id=uuid4())
+    result_data = _make_result_data("Texto qualquer para hash.")
+    use_case, _, doc_repo, _ = _make_use_case(job=job, result_data=result_data)
+
+    await use_case.execute(job_id=job.id)
+
+    doc = doc_repo.saved[0]
+    assert len(doc.content_hash) == 64  # SHA-256 hex
+
+
+@pytest.mark.anyio
+async def test_execute_reuses_existing_document_on_duplicate_content() -> None:
+    """Re-scrape com conteudo identico nao cria Document nem Chunk novos."""
+
+    # Simula um Document ja salvo com o mesmo hash do texto que vamos processar
+    raw_text = "Texto de exemplo para dedup."
+    clean = TextCleaner().clean(raw_text)
+    existing_hash = document_content_hash(clean)
+
+    job_first = IngestionJob(scraping_result_id=uuid4())
+    existing_doc = Document(
+        ingestion_job_id=job_first.id,
+        scraping_result_id=job_first.scraping_result_id,
+        url="https://startup.example.com",
+        title="Startup",
+        clean_text=clean,
+        word_count=5,
+        chunk_count=1,
+        content_hash=existing_hash,
+    )
+
+    # Segundo job com o mesmo conteudo
+    job_second = IngestionJob(scraping_result_id=uuid4())
+    result_data = _make_result_data(raw_text)
+    job_repo = FakeJobRepo(job_second)
+    doc_repo = FakeDocRepo()
+    await doc_repo.save(existing_doc)  # pre-popula o repo com o doc existente
+    chunk_repo = FakeChunkRepo()
+    uow = FakeUoW(job_repo, doc_repo, chunk_repo)
+
+    use_case = ExecuteIngestionJob(
+        uow_factory=lambda: uow,
+        scraping_result_reader=FakeScrapingResultReader(result_data),
+        text_cleaner=TextCleaner(),
+        text_chunker=TextChunker(chunk_size=2000, chunk_overlap=10),
+    )
+
+    await use_case.execute(job_id=job_second.id)
+
+    # Nao criou Document novo — so o pre-existente
+    assert len(doc_repo.saved) == 1
+    # Nao criou chunks novos
+    assert len(chunk_repo.saved) == 0
+    # Job concluido com o id do documento pre-existente
+    saved_job = await job_repo.get_by_id(job_second.id)
+    assert saved_job.status is IngestionJobStatus.COMPLETED
+    assert saved_job.document_id == existing_doc.id

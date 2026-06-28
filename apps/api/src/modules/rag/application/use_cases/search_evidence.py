@@ -67,11 +67,13 @@ class SearchEvidence(Retriever):
             embedding_vector,
             limit=candidate_limit,
             source_type=search_input.source_type,
+            document_ids=search_input.document_ids,
         )
         lexical_results = await self._lexical_repository.search(
             query,
             limit=candidate_limit,
             source_type=search_input.source_type,
+            document_ids=search_input.document_ids,
         )
 
         fused = fuse_rankings(

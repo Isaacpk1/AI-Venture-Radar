@@ -36,6 +36,9 @@ def test_factory_enables_gemini_only_when_api_key_exists(monkeypatch) -> None:
         lambda: SimpleNamespace(
             gemini_api_key="secret",
             gemini_model="gemini-test",
+            scraping_startup_timeout_seconds=90.0,
+            scraping_reference_timeout_seconds=120.0,
+            firecrawl_api_key="",
         ),
     )
     # AgentsFactory tem sua propria importacao de get_settings: sem o
@@ -65,7 +68,13 @@ def test_factory_disables_agent_investigator_without_gemini_key(monkeypatch) -> 
     monkeypatch.setattr(
         factory_module,
         "get_settings",
-        lambda: SimpleNamespace(gemini_api_key="", gemini_model="gemini-test"),
+        lambda: SimpleNamespace(
+            gemini_api_key="",
+            gemini_model="gemini-test",
+            scraping_startup_timeout_seconds=90.0,
+            scraping_reference_timeout_seconds=120.0,
+            firecrawl_api_key="",
+        ),
     )
     monkeypatch.setattr(
         agents_factory_module,

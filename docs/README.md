@@ -15,6 +15,7 @@ histórico de versões).
 | [`geral/fluxo_total.md`](geral/fluxo_total.md) | Jornada ponta a ponta: URL → briefing, orquestração, descoberta, RAG |
 | [`geral/stack_e_onde_e_usado.md`](geral/stack_e_onde_e_usado.md) | Cada tecnologia, em que camada/módulo entra e por quê |
 | [`geral/estado_atual_e_roadmap_futuro.md`](geral/estado_atual_e_roadmap_futuro.md) | Versão por módulo, o que está pronto, limites e roadmap futuro |
+| [`geral/rastreabilidade_tap.md`](geral/rastreabilidade_tap.md) | Matriz TAP → implementação: cada requisito do case com status e evidência |
 
 ---
 

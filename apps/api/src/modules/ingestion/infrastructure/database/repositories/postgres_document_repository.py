@@ -2,6 +2,7 @@
 
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.src.modules.ingestion.domain.entities import Document
@@ -29,6 +30,15 @@ class PostgresDocumentRepository(DocumentRepository):
 
     async def get_by_id(self, document_id: UUID) -> Document | None:
         model = await self._session.get(DocumentModel, document_id)
+        if model is None:
+            return None
+        return DocumentMapper.to_entity(model)
+
+    async def find_by_content_hash(self, content_hash: str) -> Document | None:
+        result = await self._session.execute(
+            select(DocumentModel).where(DocumentModel.content_hash == content_hash)
+        )
+        model = result.scalars().first()
         if model is None:
             return None
         return DocumentMapper.to_entity(model)

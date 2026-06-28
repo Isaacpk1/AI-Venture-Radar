@@ -17,22 +17,21 @@ container real antes de escrever esta versao (ver
 docs/rag/roadmap_rag.md).
 """
 
-from sqlalchemy import String, bindparam, text
+from uuid import UUID
+
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from apps.api.src.database.relational.session import AsyncSessionFactory
 from apps.api.src.modules.rag.application.dto import LexicalSearchResult
 from apps.api.src.modules.rag.application.ports import LexicalSearchRepository
 
-_QUERY = text("""
+_BASE_SQL = """
     SELECT c.id, c.document_id, paradedb.score(c.id) AS rank
     FROM chunks c
     JOIN documents d ON d.id = c.document_id
     WHERE c.text @@@ :query
-      AND (:source_type IS NULL OR d.source_type = :source_type)
-    ORDER BY rank DESC
-    LIMIT :limit
-""").bindparams(bindparam("source_type", type_=String()))
+"""
 
 
 class PostgresLexicalSearchRepository(LexicalSearchRepository):
@@ -49,13 +48,35 @@ class PostgresLexicalSearchRepository(LexicalSearchRepository):
         *,
         limit: int,
         source_type: str | None = None,
+        document_ids: list[UUID] | None = None,
     ) -> list[LexicalSearchResult]:
+        if document_ids is not None and len(document_ids) == 0:
+            return []
+
+        params: dict = {"query": query, "limit": limit}
+        extra_clauses: list[str] = []
+
+        if source_type is not None:
+            extra_clauses.append("d.source_type = :source_type")
+            params["source_type"] = source_type
+
+        if document_ids is not None:
+            placeholders = ", ".join(f":did_{i}" for i in range(len(document_ids)))
+            extra_clauses.append(f"c.document_id IN ({placeholders})")
+            for i, did in enumerate(document_ids):
+                params[f"did_{i}"] = did
+
+        where_suffix = ""
+        if extra_clauses:
+            where_suffix = " AND " + " AND ".join(extra_clauses)
+
+        sql = text(
+            _BASE_SQL + where_suffix + "\n    ORDER BY rank DESC\n    LIMIT :limit"
+        )
+
         session = self._session_factory()
         try:
-            result = await session.execute(
-                _QUERY,
-                {"query": query, "limit": limit, "source_type": source_type},
-            )
+            result = await session.execute(sql, params)
             return [
                 LexicalSearchResult(
                     chunk_id=row.id,

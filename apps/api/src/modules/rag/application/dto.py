@@ -9,6 +9,7 @@ class SearchEvidenceInput:
     query: str
     limit: int = 5
     source_type: str | None = None
+    document_ids: list[UUID] | None = None
 
 
 @dataclass
@@ -63,3 +64,4 @@ class AnswerQuestionInput:
     query: str
     limit: int = 5
     source_type: str | None = None
+    document_ids: list[UUID] | None = None

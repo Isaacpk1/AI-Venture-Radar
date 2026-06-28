@@ -55,10 +55,10 @@ real via RUN_RAGAS_EVAL=1 fica para quando o usuario decidir rodar)
 Recent validation:
 
 ```txt
-644 testes coletados via --collect-only (reconferido em 2026-06-27 pos-Startups V4 completo);
+653 testes coletados via --collect-only (reconferido em 2026-06-28);
 com infra viva (Postgres/Redis/Qdrant), 559 passed, 1 skipped — o skip
 e o teste Ragas opt-in (RUN_RAGAS_EVAL=1).
-Frontend (Vitest): 32 passed (8 arquivos de teste, 2026-06-27).
+Frontend (Vitest): 36 passed (9 arquivos de teste, 2026-06-28).
 Integration tests are skipped explicitly when local Postgres/Redis/Qdrant
 are not reachable; with infra active, they run normally.
 
@@ -2044,24 +2044,24 @@ startup_discovery_runs  rodada de descoberta automatica de startups em hubs publ
 | agents | 106 (unit + integracao) | 2026-06-27 |
 | ingestion | 38 (unit + integracao) | 2026-06-27 |
 | embeddings | 69 (unit + integracao) | 2026-06-27 |
-| startups | 74 (unit + integracao) | 2026-06-27 |
-| rag | 21 (unit + integracao) | 2026-06-27 |
+| startups | 76 (unit + integracao) | 2026-06-28 |
+| rag | 28 (unit + integracao) | 2026-06-28 |
 | nvidia_knowledge | 15 unit | 2026-06-27 |
 | recommendations | 88 (unit + integracao) | 2026-06-27 |
 | briefing | 36 (unit + integracao) | 2026-06-27 |
 | orchestration | 41 (unit + integracao) | 2026-06-27 |
 | startup_discovery | 8 unit | 2026-06-27 |
 | shared | 10 unit (logging + observability) | 2026-06-27 |
-| **Total backend** | **644 testes coletados** | **2026-06-27** |
-| **Frontend (`apps/web`, Vitest)** | **36 testes** | **2026-06-27** |
+| **Total backend** | **653 testes coletados** | **2026-06-28** |
+| **Frontend (`apps/web`, Vitest)** | **36 testes** | **2026-06-28** |
 
 Nota: numeros desta tabela vem de `pytest --collect-only -q` por modulo
 (nao exige Postgres/Redis/Qdrant vivos, so confirma quantos testes existem
-no codigo). Reconferido direto por modulo em 2026-06-27 via --collect-only:
-soma das linhas backend confere com os 644 coletados.
+no codigo). Reconferido direto por modulo em 2026-06-28 via --collect-only:
+soma das linhas backend confere com os 653 coletados.
 Com infra viva (Postgres/Redis/Qdrant): **559 passed, 1 skipped** (o skip
 e o teste Ragas opt-in, `RUN_RAGAS_EVAL=1` nao definido).
-Frontend (`npx vitest run` em `apps/web/`): **32 passed** (reconferido 2026-06-27).
+Frontend (`npx vitest run` em `apps/web/`): **36 passed** (reconferido 2026-06-28).
 
 Comando para verificar:
 ```bash

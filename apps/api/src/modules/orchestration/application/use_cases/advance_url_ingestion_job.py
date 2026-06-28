@@ -62,19 +62,40 @@ TRUSTED_ENRICHMENT_HOSTS = {
     "www.linkedin.com",
     "wellfound.com",
     "www.wellfound.com",
+    # Bases de dados de startups / investimentos
+    "angel.co",
+    "pitchbook.com",
+    "tracxn.com",
+    "f6s.com",
 }
 BLOCKED_ENRICHMENT_HOSTS = {
+    # Redes sociais — conteudo fragmentado, sem informacao estruturada de empresa
     "facebook.com",
     "instagram.com",
     "linktr.ee",
     "tiktok.com",
     "threads.net",
     "twitter.com",
-    "grokipedia.com",
     "x.com",
+    # Agregadores de conteudo — nao autoritativos sobre a empresa
+    "reddit.com",
+    "quora.com",
+    "medium.com",
+    "substack.com",
+    "grokipedia.com",
     "wikipedia.org",
+    # Video / streaming
     "youtube.com",
     "youtu.be",
+    "vimeo.com",
+    # Emprego / avaliacoes — util para cultura, nao para perfil de empresa
+    "glassdoor.com",
+    "indeed.com",
+    "vagas.com.br",
+    "catho.com.br",
+    # SEO farms / diretórios de baixa qualidade
+    "yellowpages.com",
+    "yelp.com",
 }
 
 logger = get_logger(__name__)
@@ -138,8 +159,11 @@ def _score_external_candidate(
     if host == source_host or host.endswith(f".{source_host}"):
         return 50
 
-    if host in TRUSTED_ENRICHMENT_HOSTS:
-        if "linkedin.com" in host and "/company/" not in url.lower():
+    is_trusted = host in TRUSTED_ENRICHMENT_HOSTS or host.endswith(".linkedin.com")
+    if is_trusted:
+        # LinkedIn (qualquer subdominio regional, ex: br.linkedin.com):
+        # so paginas de empresa sao uteis; perfis individuais (/in/) nao.
+        if host.endswith("linkedin.com") and "/company/" not in url.lower():
             return -1
         return 90
 
@@ -427,13 +451,22 @@ class AdvanceUrlIngestionJob:
                     extra={"count": len(enrichment_job_ids)},
                 )
 
-            recommendation_count = await self._recommendations_port.generate(
-                job.startup_id
-            )
-            logger.info(
-                "recommendations generated",
-                extra={"recommendation_count": recommendation_count},
-            )
+            if not job.recommendations_done:
+                recommendation_count = await self._recommendations_port.generate(
+                    job.startup_id
+                )
+                job.record_recommendations(recommendation_count)
+                await self._save(job)
+                logger.info(
+                    "recommendations generated",
+                    extra={"recommendation_count": recommendation_count},
+                )
+            else:
+                recommendation_count = job.recommendation_count or 0
+                logger.info(
+                    "recommendations already done, skipping",
+                    extra={"recommendation_count": recommendation_count},
+                )
 
             briefing_id = await self._briefing_port.generate(job.startup_id)
             logger.info("briefing generated", extra={"briefing_id": str(briefing_id)})

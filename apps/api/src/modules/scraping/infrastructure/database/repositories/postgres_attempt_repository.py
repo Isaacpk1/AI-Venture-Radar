@@ -1,11 +1,13 @@
 """Implementação PostgreSQL do contrato ``ScrapingAttemptRepository``."""
 
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.src.modules.scraping.domain.entities import ScrapingAttempt
+from apps.api.src.modules.scraping.domain.enums import AttemptStatus, ScrapingMethod
 from apps.api.src.modules.scraping.domain.repositories import (
     ScrapingAttemptRepository,
 )
@@ -14,6 +16,9 @@ from apps.api.src.modules.scraping.infrastructure.database.mappers.scraping_atte
 )
 from apps.api.src.modules.scraping.infrastructure.database.models import (
     ScrapingAttemptModel,
+)
+from apps.api.src.modules.scraping.infrastructure.database.models.scraping_job_model import (
+    ScrapingJobModel,
 )
 
 
@@ -48,3 +53,29 @@ class PostgresScrapingAttemptRepository(ScrapingAttemptRepository):
             ScrapingAttemptMapper.to_entity(model)
             for model in result.all()
         ]
+
+    async def count_recent_failures_by_host_and_method(
+        self, host: str, method: ScrapingMethod, since: datetime
+    ) -> int:
+        """Conta falhas recentes de uma estrategia para um host especifico."""
+
+        # Extrai o host da URL via regexp do Postgres para evitar JOIN em tabela
+        # auxiliar: captura tudo entre '://' e o primeiro '/', '?', '#' ou ':'.
+        host_expr = func.regexp_replace(
+            ScrapingJobModel.url,
+            r"^https?://([^/?#:]+).*$",
+            r"\1",
+        )
+        stmt = (
+            select(func.count())
+            .select_from(ScrapingAttemptModel)
+            .join(ScrapingJobModel, ScrapingAttemptModel.job_id == ScrapingJobModel.id)
+            .where(
+                host_expr == host,
+                ScrapingAttemptModel.method == method.value,
+                ScrapingAttemptModel.status == AttemptStatus.FAILED.value,
+                ScrapingAttemptModel.started_at >= since,
+            )
+        )
+        count = await self.session.scalar(stmt)
+        return count or 0

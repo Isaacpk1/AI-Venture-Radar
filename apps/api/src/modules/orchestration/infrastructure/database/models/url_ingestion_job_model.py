@@ -53,6 +53,9 @@ class UrlIngestionJobModel(Base):
     evidence_attached: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+    recommendations_done: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     recommendation_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     briefing_id: Mapped[UUID | None] = mapped_column(
         PostgresUUID(as_uuid=True), nullable=True

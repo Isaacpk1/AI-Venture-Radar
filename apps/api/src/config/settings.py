@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
     startup_discovery_max_per_run: int = 20
+    scraping_startup_timeout_seconds: float = 90.0
+    scraping_reference_timeout_seconds: float = 120.0
 
 
 @lru_cache

@@ -54,6 +54,9 @@ from apps.api.src.modules.scraping.infrastructure.scrapers.playwright_scraper im
 from apps.api.src.modules.scraping.infrastructure.scrapers.trafilatura_scraper import (
     TrafilaturaScraper,
 )
+from apps.api.src.modules.scraping.infrastructure.scrapers.firecrawl_scraper import (
+    FirecrawlScraper,
+)
 from apps.api.src.modules.scraping.infrastructure.agent_adapters.agents_semantic_investigator import (
     AgentsSemanticInvestigator,
 )
@@ -109,6 +112,11 @@ class ScrapingFactory:
         trafilatura_scraper = TrafilaturaScraper(
             source_scraper=beautifulsoup_scraper,
         )
+        firecrawl_scraper = (
+            FirecrawlScraper(api_key=settings.firecrawl_api_key)
+            if settings.firecrawl_api_key
+            else None
+        )
         semantic_validator = (
             GeminiSemanticValidator(
                 api_key=settings.gemini_api_key,
@@ -130,14 +138,16 @@ class ScrapingFactory:
             else None
         )
 
+        strategies = [
+            beautifulsoup_scraper,
+            trafilatura_scraper,
+            playwright_scraper,
+        ]
+        if firecrawl_scraper is not None:
+            strategies.append(firecrawl_scraper)
+
         return ScrapingPipeline(
-            strategy_selector=ScrapingStrategySelector(
-                [
-                    beautifulsoup_scraper,
-                    trafilatura_scraper,
-                    playwright_scraper,
-                ]
-            ),
+            strategy_selector=ScrapingStrategySelector(strategies),
             validator=CompositeDeterministicValidator(
                 technical_validator=TechnicalValidator(),
                 textual_validator=TextualValidator(),
@@ -149,7 +159,10 @@ class ScrapingFactory:
                 FallbackPolicy(),
             ),
             attempt_repository=attempt_repository,
-            limits=PipelineLimits(),
+            limits=PipelineLimits(
+                total_timeout_seconds=get_settings().scraping_startup_timeout_seconds,
+                reference_total_timeout_seconds=get_settings().scraping_reference_timeout_seconds,
+            ),
             semantic_validator=semantic_validator,
             semantic_investigator=semantic_investigator,
         )

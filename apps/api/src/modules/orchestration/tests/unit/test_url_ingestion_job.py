@@ -1026,3 +1026,133 @@ async def test_list_url_ingestion_jobs_filters_and_paginates_history() -> None:
 
     assert page.total == 1
     assert page.items[0].id == matching.id
+
+
+# ---------------------------------------------------------------------------
+# DT-09: retry granular por sub-passo em ANALYZING
+# ---------------------------------------------------------------------------
+
+
+def test_record_recommendations_sets_done_flag() -> None:
+    """record_recommendations() persiste o count e marca recommendations_done."""
+    job = UrlIngestionJob(url="https://acme.example.com")
+    assert job.recommendations_done is False
+    assert job.recommendation_count is None
+
+    job.record_recommendations(3)
+
+    assert job.recommendations_done is True
+    assert job.recommendation_count == 3
+
+
+@pytest.mark.anyio
+async def test_analyzing_saves_recommendations_done_before_briefing() -> None:
+    """Apos recommendations.generate(), o job e salvo com recommendations_done=True."""
+    scraping_result_id = uuid4()
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(url="https://acme.example.com")
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=scraping_result_id, ingestion_job_id=uuid4())
+    job.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    job.start_analyzing()
+    await repository.save(job)
+
+    recs_port = FakeRecommendationsPort(count=2)
+    use_case = _make_advance_use_case(
+        repository=repository,
+        ingestion_port=FakeIngestionPort(
+            content=DocumentContentView(title="Acme AI", clean_text="conteudo")
+        ),
+        recommendations_port=recs_port,
+    )
+
+    await use_case.execute(job_id=job.id)
+
+    saved = repository.items[job.id]
+    assert saved.status is UrlIngestionJobStatus.COMPLETED
+    assert saved.recommendations_done is True
+    assert saved.recommendation_count == 2
+
+
+@pytest.mark.anyio
+async def test_analyzing_redelivery_skips_recommendations_when_done() -> None:
+    """Retry com recommendations_done=True nao chama recommendations.generate() de novo."""
+    scraping_result_id = uuid4()
+    existing_startup_id = uuid4()
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(url="https://acme.example.com")
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=scraping_result_id, ingestion_job_id=uuid4())
+    job.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    job.start_analyzing()
+    job.link_startup(existing_startup_id)
+    job.mark_evidence_attached()
+    job.record_recommendations(5)  # simulando: recomendacoes ja concluidas
+    await repository.save(job)
+
+    recs_port = FakeRecommendationsPort(count=99)  # nunca deve ser chamado
+    use_case = _make_advance_use_case(
+        repository=repository,
+        ingestion_port=FakeIngestionPort(
+            content=DocumentContentView(title="Acme AI", clean_text="conteudo")
+        ),
+        startups_port=FakeStartupsPort(startup_id=existing_startup_id),
+        recommendations_port=recs_port,
+    )
+
+    await use_case.execute(job_id=job.id)
+
+    # recommendations.generate() nao foi chamado
+    assert recs_port.calls == []
+    # o count que ja estava salvo e preservado
+    saved = repository.items[job.id]
+    assert saved.recommendation_count == 5
+    assert saved.status is UrlIngestionJobStatus.COMPLETED
+
+
+@pytest.mark.anyio
+async def test_analyzing_retry_after_briefing_failure_skips_recommendations() -> None:
+    """Cenario real de DT-09: briefing falha, retry pula recommendations.
+
+    1a entrega: recommendations OK (salvo com done=True), briefing falha -> job.fail()
+    2a entrega: recommendations nao e re-executado; briefing e re-executado
+    """
+    scraping_result_id = uuid4()
+    existing_startup_id = uuid4()
+    repository = FakeUrlIngestionJobRepository()
+
+    # Job no estado em que estaria apos 1a entrega com recommendations OK + briefing falhou:
+    # o use case chama job.fail() -> status = FAILED, mas as guardas (startup_id,
+    # evidence_attached, recommendations_done) ficam persistidas.
+    # Para testar o retry, precisamos repor o status para ANALYZING manualmente
+    # (o que o Dramatiq faria via redelivery nao existindo em testes unitarios).
+    job = UrlIngestionJob(url="https://acme.example.com")
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=scraping_result_id, ingestion_job_id=uuid4())
+    job.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    job.start_analyzing()
+    job.link_startup(existing_startup_id)
+    job.mark_evidence_attached()
+    job.record_recommendations(3)
+    # Briefing falhou — status ANALYZING ainda (nao foi fail() no estado salvo)
+    await repository.save(job)
+
+    recs_port = FakeRecommendationsPort(count=99)
+    briefing_port = FakeBriefingPort()
+    use_case = _make_advance_use_case(
+        repository=repository,
+        ingestion_port=FakeIngestionPort(
+            content=DocumentContentView(title="Acme AI", clean_text="conteudo")
+        ),
+        startups_port=FakeStartupsPort(startup_id=existing_startup_id),
+        recommendations_port=recs_port,
+        briefing_port=briefing_port,
+    )
+
+    await use_case.execute(job_id=job.id)
+
+    # recommendations nunca chamado
+    assert recs_port.calls == []
+    # briefing chamado uma vez
+    assert len(briefing_port.calls) == 1
+    assert repository.items[job.id].status is UrlIngestionJobStatus.COMPLETED

@@ -1,6 +1,6 @@
 # Estado Atual do Projeto e Roadmap Futuro
 
-Atualizado em 27/06/2026. Este documento descreve onde o NVIDIA Startup AI Radar
+Atualizado em 28/06/2026. Este documento descreve onde o NVIDIA Startup AI Radar
 está hoje e o que ainda falta. Ponto importante: **não existe uma versão global
 única do produto** — cada módulo evoluiu numa trilha própria, então o sistema tem
 módulos em V12, V8, V5, V4, V2 e V1 ao mesmo tempo.
@@ -20,7 +20,7 @@ módulos em V12, V8, V5, V4, V2 e V1 ao mesmo tempo.
 | RAG | V4 + V5 parcial | Entregue/parcial | V4 busca híbrida + reranking; V5 avaliação Ragas opt-in |
 | NVIDIA Knowledge | V2 | Entregue | Catálogo + registry de fontes oficiais (20/20 processadas, 17/20 com conteúdo) |
 | Recommendations | V4/V5 | Entregue | Score composto, confiança nova, sinais, nível, faltando, RAG grounding, stats |
-| Briefing | V4 | Entregue | Briefing analítico, tese de fit, matriz, fortes vs exploratórias, perguntas, PDF |
+| Briefing | V5 | Entregue | Briefing analítico, tese de fit, matriz, fortes vs exploratórias, perguntas, PDF + golden set (p@3=0.78) |
 | Orchestration | V2.2 | Entregue | URL até briefing, enriquecimento por domínio, busca Tavily opcional |
 | Startup Discovery | V1 | Entregue | Descoberta em hubs públicos → url_ingestion_jobs |
 | Frontend | V5 | Entregue | Jornada, portfólio, dashboard, chat, PDF, lote, review simples |
@@ -47,8 +47,8 @@ Discovery V1.
 ### Estado dos testes
 
 ```txt
-Backend:  ~617 testes coletados; com infra viva, 559 passed, 1 skipped (Ragas opt-in)
-Frontend: 32 passed (Vitest)
+Backend:  653 testes coletados; com infra viva, 559 passed, 1 skipped (Ragas opt-in)
+Frontend: 36 passed (Vitest, 9 arquivos)
 ```
 
 Comandos:
@@ -62,7 +62,7 @@ npm run test -- --run   (em apps/web/)
 
 ## 3. Banco e migrations
 
-Head atual: `b4c8e2f1a9d7` (coluna `ai_profile` JSONB em startups).
+Head atual: `d2e8f1a5c9b3` (field_confidence/field_evidence_ids em startups — Startups V4 completo).
 
 Tabelas principais:
 
@@ -85,10 +85,10 @@ auth real (decidido fora de escopo — projeto é demo)
 CI/CD e deploy de produção
 backup operacional de Qdrant/Postgres
 observabilidade com alertas/runbooks/retenção
-golden set de Recommendations/Briefing
 versionamento histórico de recomendações/briefings
-expansão ampla de Startup Discovery (mais hubs)
-Firecrawl real (client ainda não implementado)
+expansão ampla de Startup Discovery (mais hubs — V1 tem 3/14)
+Firecrawl real (FIRECRAWL_API_KEY em Settings, mas nenhum scraper implementado)
+validação do Tavily real e calibração do ranking de enriquecimento
 ```
 
 ---
@@ -99,23 +99,22 @@ Firecrawl real (client ainda não implementado)
 
 ```txt
 1. Validar Tavily real e calibrar ranking/allowlist do enriquecimento.
-2. Criar golden set de Recommendations/Briefing (V5).
-3. Medir precision@3 e taxa de falsos positivos das recomendações.
-4. Expandir Startup Discovery para mais hubs sem virar crawler caro.
-5. Só depois pensar em hardening de produção (auth, CI/CD, deploy, backup).
+2. Expandir Startup Discovery para mais hubs sem virar crawler caro.
+3. Implementar Firecrawl como 4º fallback de scraping (API key já em Settings).
+4. Só depois pensar em hardening de produção (auth, CI/CD, deploy, backup).
 ```
 
 ### Versões futuras por módulo (ainda não entregues)
 
 ```txt
-Scraping            Firecrawl real como fallback pago
+Scraping            Firecrawl real como fallback pago (API key configurada, client não existe)
 Ingestion           V2 limpeza textual forte, V3 dedup/versionamento, V5 reprocessamento/auditoria
-RAG                 V5 completo (medir context_recall pós-BM25 via Ragas)
+RAG                 V5 completo (dataset maior + regressão automática de prompt)
 NVIDIA Knowledge    V3 metadados técnicos, V4 busca por caso de uso
 Recommendations     V6 matriz de decisão por tecnologia, V7 feedback humano
-Briefing            V5 ranking de oportunidades, V6
+Briefing            V6 robustez operacional (versionamento, auditoria, reprocessamento por etapa)
 Orchestration       V3 retomada de jobs falhados (retry por etapa), V4 notificações
-Startup Discovery   V2 (mais hubs, agendamento)
+Startup Discovery   V2 (mais hubs — 11 dos 14 do backlog sem extrator)
 Frontend            auth real, tipos gerados de openapi.json
 Observabilidade     métricas/alertas/retenção de produção
 ```

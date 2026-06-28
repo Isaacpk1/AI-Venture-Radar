@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,6 +40,14 @@ class DocumentModel(Base):
         default="startup_evidence",
         server_default="startup_evidence",
         index=True,
+    )
+    # SHA-256 hex do clean_text — nullable para documentos criados antes desta migracao.
+    # Novos documentos sempre recebem o hash; a busca por hash so casa com valores nao-nulos.
+    content_hash: Mapped[str | None] = mapped_column(
+        String(length=64),
+        nullable=True,
+        index=True,
+        unique=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False

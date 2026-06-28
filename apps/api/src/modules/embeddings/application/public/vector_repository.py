@@ -31,6 +31,7 @@ class VectorRepository(ABC):
         *,
         limit: int = 5,
         source_type: str | None = None,
+        document_ids: list[UUID] | None = None,
     ) -> list[ChunkSearchResult]:
         """Busca os chunks mais proximos do vetor de consulta informado."""
 

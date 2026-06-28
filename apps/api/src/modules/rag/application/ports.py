@@ -6,6 +6,7 @@ diretamente.
 """
 
 from abc import ABC, abstractmethod
+from uuid import UUID
 
 from apps.api.src.modules.rag.application.dto import (
     EvidenceChunkView,
@@ -23,6 +24,7 @@ class LexicalSearchRepository(ABC):
         *,
         limit: int,
         source_type: str | None = None,
+        document_ids: list[UUID] | None = None,
     ) -> list[LexicalSearchResult]:
         """Busca chunks por relevancia lexical a partir da query."""
 

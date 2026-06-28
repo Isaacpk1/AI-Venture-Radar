@@ -96,6 +96,7 @@ class UrlIngestionJob:
     parent_job_id: UUID | None = None
     enrichment_round: int = 0
     evidence_attached: bool = False
+    recommendations_done: bool = False
     recommendation_count: int | None = None
     briefing_id: UUID | None = None
     error_message: str | None = None
@@ -144,6 +145,16 @@ class UrlIngestionJob:
 
     def mark_evidence_attached(self) -> None:
         self.evidence_attached = True
+
+    def record_recommendations(self, recommendation_count: int) -> None:
+        """Persiste o resultado das recomendacoes antes do briefing.
+
+        Chamado logo apos ``recommendations_port.generate()`` para que um
+        crash ou falha do briefing nao force o retry a regerar recomendacoes
+        — etapa cara quando o RAG/LLM esta envolvido.
+        """
+        self.recommendation_count = recommendation_count
+        self.recommendations_done = True
 
     def record_analysis_result(
         self, *, recommendation_count: int, briefing_id: UUID

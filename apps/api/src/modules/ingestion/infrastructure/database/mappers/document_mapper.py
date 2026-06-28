@@ -20,6 +20,7 @@ class DocumentMapper:
             clean_text=entity.clean_text,
             word_count=entity.word_count,
             chunk_count=entity.chunk_count,
+            content_hash=entity.content_hash,
             source_type=entity.source_type.value,
             created_at=entity.created_at,
         )
@@ -35,6 +36,7 @@ class DocumentMapper:
             clean_text=model.clean_text,
             word_count=model.word_count,
             chunk_count=model.chunk_count,
+            content_hash=model.content_hash or "",
             source_type=DocumentSourceType(model.source_type),
             created_at=model.created_at,
         )
@@ -48,4 +50,5 @@ class DocumentMapper:
         model.clean_text = entity.clean_text
         model.word_count = entity.word_count
         model.chunk_count = entity.chunk_count
+        model.content_hash = entity.content_hash
         model.source_type = entity.source_type.value

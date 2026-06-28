@@ -44,6 +44,7 @@ class AnswerQuestion(RagQuestionAnswerer):
                 query=answer_input.query,
                 limit=answer_input.limit,
                 source_type=answer_input.source_type,
+                document_ids=answer_input.document_ids,
             )
         )
         if not search_view.results:

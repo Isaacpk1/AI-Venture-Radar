@@ -104,3 +104,38 @@ def test_does_not_block_long_page_that_merely_references_captcha_lib() -> None:
     )
 
     assert "captcha" not in result.problems
+
+
+def test_detects_recaptcha_form_field_even_on_long_page() -> None:
+    """Campo g-recaptcha-response no DOM confirma desafio ativo mesmo com texto longo.
+
+    Paginas de verificacao de Cloudflare/reCAPTCHA podem ter texto suficiente
+    para passar na heuristica de tamanho, mas o campo oculto delata o desafio.
+    """
+
+    long_text = "Texto de conteudo suficiente para nao acionar a heuristica de tamanho. " * 10
+    html = (
+        f"<html><body>{long_text}"
+        "<form><input type='hidden' name='g-recaptcha-response' value=''>"
+        "</form></body></html>"
+    )
+    result = TechnicalValidator().validate(
+        make_output(raw_html=html, raw_text=long_text)
+    )
+
+    assert "captcha" in result.problems
+
+
+def test_detects_hcaptcha_form_field() -> None:
+    """Campo h-captcha-response confirma desafio hCaptcha."""
+
+    html = (
+        "<html><body><p>Verificacao de seguranca.</p>"
+        "<form><input type='hidden' name='h-captcha-response' value=''>"
+        "</form></body></html>"
+    )
+    result = TechnicalValidator().validate(
+        make_output(raw_html=html, raw_text="Verificacao de seguranca.")
+    )
+
+    assert "captcha" in result.problems

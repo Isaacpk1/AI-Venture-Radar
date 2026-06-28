@@ -15,6 +15,17 @@ from .enums import ValidationDecision
 # nao arriscar dado muito desatualizado se o site mudar.
 SCRAPING_RESULT_CACHE_TTL = timedelta(days=3)
 
+# Circuit breaker por dominio: apos N falhas em uma janela de T horas com
+# a mesma estrategia no mesmo host, aquela estrategia e ignorada para aquele
+# host — evita re-tentar BS4 em dominios que sempre precisam de Playwright.
+CIRCUIT_BREAKER_FAILURE_THRESHOLD = 3
+CIRCUIT_BREAKER_WINDOW_HOURS = 24
+
+
+def is_circuit_open(failure_count: int) -> bool:
+    """Retorna True quando o host+metodo acumulou falhas suficientes para cortar."""
+    return failure_count >= CIRCUIT_BREAKER_FAILURE_THRESHOLD
+
 
 @dataclass(frozen=True)
 class ValidationSummary:

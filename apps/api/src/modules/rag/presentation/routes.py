@@ -39,6 +39,7 @@ async def search_evidence(body: SearchEvidenceRequest) -> SearchEvidenceResponse
                 query=body.query,
                 limit=body.limit,
                 source_type=body.source_type,
+                document_ids=body.document_ids,
             )
         )
     except EmptyRagQueryError as error:
@@ -63,6 +64,7 @@ async def answer_question(body: AnswerQuestionRequest) -> RagAnswerResponse:
                 query=body.query,
                 limit=body.limit,
                 source_type=body.source_type,
+                document_ids=body.document_ids,
             )
         )
     except EmptyRagQueryError as error:

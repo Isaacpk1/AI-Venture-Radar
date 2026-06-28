@@ -8,7 +8,7 @@ from apps.api.src.modules.ingestion.application.text_chunker import TextChunker
 from apps.api.src.modules.ingestion.application.unit_of_work import (
     IngestionUnitOfWorkFactory,
 )
-from apps.api.src.modules.ingestion.domain.entities import Chunk, Document
+from apps.api.src.modules.ingestion.domain.entities import Chunk, Document, document_content_hash
 from apps.api.src.modules.ingestion.domain.exceptions import (
     IngestionJobNotFoundError,
     IngestionSourceNotFoundError,
@@ -56,35 +56,47 @@ class ExecuteIngestionJob:
                     )
 
                 clean_text = self._text_cleaner.clean(result_data.raw_text)
-                chunks_text = self._text_chunker.chunk(clean_text)
+                content_hash = document_content_hash(clean_text)
 
-                doc = Document(
-                    ingestion_job_id=job.id,
-                    scraping_result_id=job.scraping_result_id,
-                    url=result_data.url,
-                    title=result_data.title,
-                    clean_text=clean_text,
-                    word_count=len(clean_text.split()) if clean_text else 0,
-                    chunk_count=len(chunks_text),
-                    source_type=job.source_type,
+                # Dedup por conteudo: se o mesmo texto ja foi processado por outro
+                # job (re-scrape pos-TTL com conteudo identico), reaproveita o
+                # Document existente sem criar chunks nem chamar embedding de novo.
+                existing_doc = await uow.document_repository.find_by_content_hash(
+                    content_hash
                 )
+                if existing_doc is not None:
+                    job.complete(existing_doc.id)
+                else:
+                    chunks_text = self._text_chunker.chunk(clean_text)
 
-                chunks = [
-                    Chunk(
-                        document_id=doc.id,
-                        chunk_index=i,
-                        text=text,
-                        word_count=len(text.split()),
-                        char_count=len(text),
+                    doc = Document(
+                        ingestion_job_id=job.id,
+                        scraping_result_id=job.scraping_result_id,
+                        url=result_data.url,
+                        title=result_data.title,
+                        clean_text=clean_text,
+                        word_count=len(clean_text.split()) if clean_text else 0,
+                        chunk_count=len(chunks_text),
+                        content_hash=content_hash,
+                        source_type=job.source_type,
                     )
-                    for i, text in enumerate(chunks_text)
-                ]
 
-                await uow.document_repository.save(doc)
-                for chunk in chunks:
-                    await uow.chunk_repository.save(chunk)
+                    chunks = [
+                        Chunk(
+                            document_id=doc.id,
+                            chunk_index=i,
+                            text=text,
+                            word_count=len(text.split()),
+                            char_count=len(text),
+                        )
+                        for i, text in enumerate(chunks_text)
+                    ]
 
-                job.complete(doc.id)
+                    await uow.document_repository.save(doc)
+                    for chunk in chunks:
+                        await uow.chunk_repository.save(chunk)
+
+                    job.complete(doc.id)
 
             except Exception as exc:
                 job.fail(f"{type(exc).__name__}: {exc}")

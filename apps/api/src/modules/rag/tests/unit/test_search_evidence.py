@@ -60,7 +60,10 @@ class FakeVectorRepository(VectorRepository):
         *,
         limit: int = 5,
         source_type: str | None = None,
+        document_ids=None,
     ) -> list[ChunkSearchResult]:
+        if document_ids is not None and len(document_ids) == 0:
+            return []
         self.searched_vectors.append(query_vector)
         self.limits.append(limit)
         self.source_types.append(source_type)
@@ -79,6 +82,7 @@ class FakeLexicalSearchRepository(LexicalSearchRepository):
         self.queries: list[str] = []
         self.limits: list[int] = []
         self.source_types: list[str | None] = []
+        self.document_ids_list: list = []
 
     async def search(
         self,
@@ -86,10 +90,14 @@ class FakeLexicalSearchRepository(LexicalSearchRepository):
         *,
         limit: int,
         source_type: str | None = None,
+        document_ids=None,
     ) -> list[LexicalSearchResult]:
+        if document_ids is not None and len(document_ids) == 0:
+            return []
         self.queries.append(query)
         self.limits.append(limit)
         self.source_types.append(source_type)
+        self.document_ids_list.append(document_ids)
         return self.results[:limit]
 
 
@@ -583,3 +591,62 @@ async def test_search_evidence_uses_reranker_when_configured() -> None:
         second_chunk_id,
         first_chunk_id,
     ]
+
+
+@pytest.mark.anyio
+async def test_search_evidence_passes_document_ids_to_repositories() -> None:
+    """document_ids propaga para vector e lexical como filtro extra."""
+    doc_id_a = uuid4()
+    doc_id_b = uuid4()
+    use_case, _, vector_repository, lexical_repository, _ = _make_use_case(
+        vector_results=[],
+        chunks_by_document={},
+    )
+
+    await use_case.execute(
+        SearchEvidenceInput(
+            query="inferencia em producao",
+            document_ids=[doc_id_a, doc_id_b],
+        )
+    )
+
+    # FakeVectorRepository nao rastreia document_ids separadamente, mas a
+    # chamada nao deve falhar (o param e aceito silenciosamente).
+    # FakeLexicalSearchRepository rastreia.
+    assert lexical_repository.document_ids_list == [[doc_id_a, doc_id_b]]
+
+
+@pytest.mark.anyio
+async def test_search_evidence_empty_document_ids_returns_no_results() -> None:
+    """Lista vazia de document_ids deve retornar zero resultados sem chamar os repos."""
+    document_id = uuid4()
+    chunk_id = uuid4()
+    use_case, embedding_generator, vector_repository, lexical_repository, _ = (
+        _make_use_case(
+            vector_results=[
+                ChunkSearchResult(
+                    chunk_id=chunk_id,
+                    document_id=document_id,
+                    source_url="https://source.example.com",
+                    score=0.9,
+                )
+            ],
+            chunks_by_document={
+                document_id: [
+                    ChunkRecord(
+                        id=chunk_id,
+                        document_id=document_id,
+                        text="texto",
+                        source_url="https://source.example.com",
+                    )
+                ]
+            },
+        )
+    )
+
+    view = await use_case.execute(
+        SearchEvidenceInput(query="algo", document_ids=[])
+    )
+
+    # Repos recebem lista vazia e devolvem [] diretamente, sem executar SQL/Qdrant.
+    assert view.results == []

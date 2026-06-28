@@ -10,6 +10,7 @@ from datetime import datetime
 from uuid import UUID
 
 from .entities import ScrapingAttempt, ScrapingJob, ScrapingResult
+from .enums import ScrapingMethod
 
 
 class ScrapingJobRepository(ABC):
@@ -34,6 +35,12 @@ class ScrapingAttemptRepository(ABC):
     @abstractmethod
     async def list_by_job_id(self, job_id: UUID) -> list[ScrapingAttempt]:
         """Retorna todas as tentativas pertencentes a um job."""
+
+    @abstractmethod
+    async def count_recent_failures_by_host_and_method(
+        self, host: str, method: ScrapingMethod, since: datetime
+    ) -> int:
+        """Conta tentativas com status FAILED para o host e metodo na janela dada."""
 
 
 class ScrapingResultRepository(ABC):

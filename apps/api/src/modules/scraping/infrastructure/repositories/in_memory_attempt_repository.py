@@ -1,9 +1,11 @@
 """Repositório temporário de tentativas armazenadas em memória."""
 
 from copy import deepcopy
+from datetime import datetime
 from uuid import UUID
 
 from apps.api.src.modules.scraping.domain.entities import ScrapingAttempt
+from apps.api.src.modules.scraping.domain.enums import ScrapingMethod
 from apps.api.src.modules.scraping.domain.repositories import (
     ScrapingAttemptRepository,
 )
@@ -35,3 +37,11 @@ class InMemoryScrapingAttemptRepository(ScrapingAttemptRepository):
         attempts.sort(key=lambda attempt: attempt.started_at)
 
         return deepcopy(attempts)
+
+    async def count_recent_failures_by_host_and_method(
+        self, host: str, method: ScrapingMethod, since: datetime
+    ) -> int:
+        # A implementacao em memoria nao tem acesso a URL dos jobs (armazenada
+        # em ScrapingJob, nao em ScrapingAttempt). Retorna 0 — circuito sempre
+        # fechado em testes que usam este repositorio.
+        return 0

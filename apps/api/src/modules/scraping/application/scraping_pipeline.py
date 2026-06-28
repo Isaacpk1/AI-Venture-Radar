@@ -1,8 +1,14 @@
 """Orquestração principal da coleta e validação de conteúdo."""
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
+from urllib.parse import urlparse
 from uuid import UUID
+
+from apps.api.src.shared.logging import get_logger
+
+_logger = get_logger("scraping.pipeline")
 
 from apps.api.src.modules.scraping.domain.entities import ScrapingAttempt, ScrapingResult
 from apps.api.src.modules.scraping.domain.enums import (
@@ -19,8 +25,10 @@ from apps.api.src.modules.scraping.domain.exceptions import (
     ScrapingFailedError,
 )
 from apps.api.src.modules.scraping.domain.policies import (
+    CIRCUIT_BREAKER_WINDOW_HOURS,
     LLMReviewPolicy,
     ValidationDecisionPolicy,
+    is_circuit_open,
 )
 from apps.api.src.modules.scraping.domain.repositories import ScrapingAttemptRepository
 
@@ -85,15 +93,15 @@ class ScrapingPipeline:
         informa a falha ao caso de uso por meio de ``ScrapingFailedError``.
         """
 
+        timeout = self.limits.timeout_for(source_type)
         try:
-            async with asyncio.timeout(self.limits.total_timeout_seconds):
+            async with asyncio.timeout(timeout):
                 return await self._execute_with_limits(
                     job_id, url, source_type=source_type
                 )
         except TimeoutError as error:
             raise GlobalScrapingLimitExceededError(
-                "O job excedeu o timeout total de "
-                f"{self.limits.total_timeout_seconds}s."
+                f"O job excedeu o timeout total de {timeout}s."
             ) from error
 
     async def _execute_with_limits(
@@ -111,6 +119,8 @@ class ScrapingPipeline:
         # teto global e nunca tenta além da quantidade permitida.
         strategies = selected_strategies[: self.limits.max_strategies]
         strategies_were_limited = len(selected_strategies) > len(strategies)
+
+        strategies = await self._apply_circuit_breaker(url, strategies)
 
         # ``enumerate`` fornece a posição atual para descobrirmos se existe
         # outra estratégia disponível depois da tentativa atual.
@@ -230,12 +240,38 @@ class ScrapingPipeline:
                             # Este caso nao se encaixa em ACCEPT/FALLBACK/REJECT,
                             # entao a tentativa e finalizada aqui mesmo, sem
                             # passar por ``finish_validation``.
+                            _logger.info(
+                                "scraping_attempt_scored",
+                                extra={
+                                    "url": url,
+                                    "method": scraper.method.value,
+                                    "quality_score": validation.quality_score,
+                                    "technical_score": validation.technical_score,
+                                    "text_score": validation.text_score,
+                                    "evidence_score": validation.evidence_score,
+                                    "decision": "needs_more_sources",
+                                    "source_type": source_type,
+                                },
+                            )
                             attempt.finish_needs_more_sources(investigation.reason)
                             await self.attempt_repository.save(attempt)
                             raise MoreSourcesRequiredError(investigation.reason)
                         # else: decision permanece REJECT; o motivo do agente
                         # ja foi guardado em agent_reason_value.
 
+                _logger.info(
+                    "scraping_attempt_scored",
+                    extra={
+                        "url": url,
+                        "method": scraper.method.value,
+                        "quality_score": validation.quality_score,
+                        "technical_score": validation.technical_score,
+                        "text_score": validation.text_score,
+                        "evidence_score": validation.evidence_score,
+                        "decision": decision.value,
+                        "source_type": source_type,
+                    },
+                )
                 attempt.finish_validation(
                     decision=decision,
                     technical_score=validation.technical_score,
@@ -325,3 +361,37 @@ class ScrapingPipeline:
             )
 
         raise ScrapingFailedError("Nenhuma estratégia produziu conteúdo aprovado.")
+
+    async def _apply_circuit_breaker(
+        self, url: str, strategies: list
+    ) -> list:
+        """Filtra estratégias cujo circuito está aberto para este host.
+
+        Consulta o histórico de tentativas para pular estratégias que falharam
+        N vezes seguidas nas últimas T horas. Se TODOS os circuitos estiverem
+        abertos (caso improvável), retorna a lista original para não bloquear
+        completamente o job — o site pode ter voltado.
+        """
+        host = urlparse(url).netloc
+        since = datetime.now(UTC) - timedelta(hours=CIRCUIT_BREAKER_WINDOW_HOURS)
+
+        active: list = []
+        for scraper in strategies:
+            failures = await self.attempt_repository.count_recent_failures_by_host_and_method(
+                host, scraper.method, since
+            )
+            if is_circuit_open(failures):
+                _logger.info(
+                    "scraping_circuit_breaker_tripped",
+                    extra={
+                        "host": host,
+                        "method": scraper.method.value,
+                        "failure_count": failures,
+                    },
+                )
+            else:
+                active.append(scraper)
+
+        # Fallback de segurança: se todos os circuitos estiverem abertos,
+        # usa a lista completa — evita bloquear o job 100%.
+        return active if active else strategies

@@ -88,6 +88,7 @@ class FakeVectorRepository(VectorRepository):
         *,
         limit: int = 5,
         source_type: str | None = None,
+        document_ids=None,
     ) -> list[ChunkSearchResult]:
         return []
 

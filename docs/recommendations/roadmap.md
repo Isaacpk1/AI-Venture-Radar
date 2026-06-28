@@ -1,6 +1,6 @@
 ﻿# Roadmap do Modulo Recommendations
 
-Atualizado em 27/06/2026.
+Atualizado em 28/06/2026.
 
 O modulo `recommendations` cruza perfil de startup, evidencias e conhecimento NVIDIA para gerar recomendacoes explicaveis.
 
@@ -14,7 +14,7 @@ O modulo `recommendations` cruza perfil de startup, evidencias e conhecimento NV
 | Recommendations V2 | Implementado | RAG grounding com citacoes NVIDIA |
 | Recommendations V3 | Implementado | Confidence, complexity e stats para dashboard |
 | Recommendations V4 | Implementado | Score composto, nova confianca, sinais, nivel/faltando e prefiltro semantico |
-| Recommendations V5 | Futuro | Golden set, metricas, feedback humano e versionamento |
+| Recommendations V5 | Parcial (golden set entregue como Briefing V5) | Golden set entregue (test_golden_set.py, p@3=0.78); faltam: feedback humano persistido e versionamento de geracoes |
 
 ---
 
@@ -96,18 +96,26 @@ c5d9a3e7b2f1_add_nivel_faltando_to_recommendations.py
 
 ---
 
-## V5 - Futuro
+## V5 - Parcial
 
-Campos e fluxos que ficam para avaliacao e revisao:
+O golden set foi entregue como parte do Briefing V5 (27/06/2026):
 
 ```txt
-golden set de startups conhecidas
-precision@3 e taxa de falso positivo
-aprovar/rejeitar recomendacoes
-registrar comentarios
-versionar geracoes
+test_golden_set.py em recommendations/tests/unit/
+6 arquetipos de referencia (LLM inference, API-only SaaS, SaaS sem IA,
+  computer vision, tabular analytics, enterprise MLOps)
+media p@3 = 0.78 (piso 0.50); 10/10 testes passando
+helpers _precision_at_k() / _false_positive_slugs() / _slug_rank() para regressao
+```
+
+Ainda futuros:
+
+```txt
+aprovar/rejeitar recomendacoes com historico persistido
+registrar comentarios e revisor por versao
+versionar geracoes (hoje so substitui o anterior)
 separar justificativa tecnica de justificativa de negocio
-riscos e tradeoffs estruturados
+riscos e tradeoffs estruturados por recomendacao
 ```
 
 ---

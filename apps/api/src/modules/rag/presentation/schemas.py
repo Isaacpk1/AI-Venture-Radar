@@ -16,12 +16,14 @@ class SearchEvidenceRequest(BaseModel):
     query: str
     limit: int = Field(default=5, ge=1, le=20)
     source_type: str | None = None
+    document_ids: list[UUID] | None = None
 
 
 class AnswerQuestionRequest(BaseModel):
     query: str
     limit: int = Field(default=5, ge=1, le=20)
     source_type: str | None = None
+    document_ids: list[UUID] | None = None
 
 
 class EvidenceChunkResponse(BaseModel):

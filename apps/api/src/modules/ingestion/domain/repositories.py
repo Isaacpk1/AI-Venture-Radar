@@ -33,6 +33,10 @@ class DocumentRepository(ABC):
     async def get_by_id(self, document_id: UUID) -> Document | None:
         """Retorna o documento ou ``None``."""
 
+    @abstractmethod
+    async def find_by_content_hash(self, content_hash: str) -> Document | None:
+        """Retorna um documento com o hash de conteudo dado, ou ``None``."""
+
 
 class ChunkRepository(ABC):
 
