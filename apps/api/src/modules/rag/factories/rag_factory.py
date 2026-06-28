@@ -9,6 +9,7 @@ from apps.api.src.modules.rag.application.ports import (
     EmbeddingGenerator,
     LexicalSearchRepository,
     Reranker,
+    SupplementalEvidenceProvider,
 )
 from apps.api.src.modules.rag.application.public.answer_generator import (
     RagAnswerGenerator,
@@ -30,6 +31,9 @@ from apps.api.src.modules.rag.infrastructure.embeddings_adapters.embeddings_quer
 )
 from apps.api.src.modules.rag.infrastructure.llm.langchain_gemini_answer_generator import (
     LangChainGeminiRagAnswerGenerator,
+)
+from apps.api.src.modules.rag.infrastructure.nvidia_knowledge_adapters.static_catalog_evidence_provider import (
+    StaticNvidiaKnowledgeEvidenceProvider,
 )
 from apps.api.src.modules.rag.infrastructure.reranking.cohere_reranker import (
     CohereReranker,
@@ -67,6 +71,12 @@ class RagFactory:
         )
 
     @staticmethod
+    def create_supplemental_evidence_provider() -> SupplementalEvidenceProvider:
+        """Evidencia curada complementar para NVIDIA Knowledge."""
+
+        return StaticNvidiaKnowledgeEvidenceProvider()
+
+    @staticmethod
     def create_search_evidence() -> SearchEvidence:
         return SearchEvidence(
             embedding_generator=RagFactory.create_embedding_generator(),
@@ -74,6 +84,7 @@ class RagFactory:
             lexical_repository=RagFactory.create_lexical_search_repository(),
             ingested_document_reader=IngestionFactory.create_ingested_document_reader(),
             reranker=RagFactory.create_reranker(),
+            supplemental_evidence_provider=RagFactory.create_supplemental_evidence_provider(),
         )
 
     @staticmethod

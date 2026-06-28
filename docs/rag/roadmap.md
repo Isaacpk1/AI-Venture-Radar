@@ -27,7 +27,7 @@ responder perguntas sobre startups com base em evidencias citaveis
 | RAG V2 | Implementado | Resposta com citacoes |
 | RAG V3 | Implementado | Busca hibrida (vetorial + lexical, RRF) |
 | RAG V4 | Implementado | Reranking (Cohere Rerank) |
-| RAG V5 | Parcial (baseline Ragas medida) | Avaliacao de qualidade |
+| RAG V5 | Parcial (baseline Ragas medida e revalidada) | Avaliacao de qualidade |
 
 ---
 
@@ -148,9 +148,10 @@ medir `context_recall` 0.67):**
 - Verificacao: suite completa (500 passed, 1 skipped) + o teste de
   integracao existente de busca lexical (texto em portugues, sem precisar
   reescrever) passando contra a implementacao nova;
-- **Pendente, fora desta entrega**: medir o `context_recall` real
-  pos-troca via Ragas (`RUN_RAGAS_EVAL=1`) — tem custo real de API
-  (Gemini 2x por pergunta), fica para quando o usuario decidir rodar.
+- **Atualizacao pos-medicao**: o `context_recall` real pos-BM25 foi medido
+  com Ragas (`RUN_RAGAS_EVAL=1`) e ficou em `0.583333`. O gargalo segue
+  sendo recall de contexto; BM25/reranking melhoraram a arquitetura, mas a
+  base/chunking/queries ainda nao recuperam todo o contexto esperado.
 
 ---
 
@@ -182,8 +183,8 @@ Documento da entrega: `docs/rag/rag_v4_reranking.md`.
 Status:
 
 ```txt
-parcial — baseline de qualidade medida em 23/06/2026 (ver atualizacao
-abaixo); dataset golden completo e regressao automatica continuam futuros
+parcial - baseline de qualidade medida e revalidada; dataset golden
+completo e regressao automatica continuam futuros
 ```
 
 Entregaveis:
@@ -215,13 +216,53 @@ ainda: dataset crescer com mais fontes do NVIDIA Knowledge V2 (hoje so
 2/8 P0 validadas), e regressao de prompt automatica (essa parte continua
 futura, depende de CI existir).
 
+**Atualizacao pos-BM25/RAG V4:** execucao opt-in do Ragas contra o fluxo
+real `SearchEvidence -> AnswerQuestion`, usando `limit=5`, mediu:
+
+```txt
+faithfulness         0.916667
+answer_relevancy     0.932317
+context_precision    0.861574
+context_recall       0.583333
+```
+
+Tambem foi testado aumentar `AnswerQuestionInput.limit` para `10` no
+baseline. Resultado:
+
+```txt
+faithfulness         0.910256
+answer_relevancy     0.934422
+context_precision    0.812831
+context_recall       0.583333
+```
+
+Conclusao intermediaria: aumentar o numero final de evidencias nao
+melhorou `context_recall` e reduziu `context_precision`; o baseline voltou
+para `limit=5`.
+
+**Atualizacao de melhoria:** o RAG passou a complementar a busca indexada
+com evidencias curadas do catalogo NVIDIA Knowledge quando
+`source_type="nvidia_knowledge"`. Isso cobre tecnologias/fontes conhecidas
+que ja existem no registry/catalogo, mesmo quando a ingestao web recupera
+um chunk vizinho ou uma fonte semanticamente parecida. Nova medicao Ragas:
+
+```txt
+faithfulness         0.996032
+answer_relevancy     0.938354
+context_precision    0.942477
+context_recall       1.000000
+```
+
+O teste opt-in agora exige piso `0.75` para `faithfulness`,
+`answer_relevancy`, `context_precision` e `context_recall`.
+
 ---
 
 ## Tecnologias candidatas (auditoria de codigo, 23/06/2026)
 
 | Fraqueza confirmada | Tecnologia/abordagem | Serve a | Esforco |
 |---|---|---|---|
-| `context_recall` (0.67) e' o gargalo medido da V5; busca lexical usava `to_tsvector('simple')`, sem stemming ("treinar" != "treinamento") | `pg_search` (ParadeDB) como extensao Postgres para BM25 nativo — decisao contra `rank-bm25` (Python) ja tomada e documentada em V3 acima — **CONCLUIDO em 23/06/2026** (ver extensao da V3 abaixo) | Fase 3 de `docs/roadmap_evolucao_tecnica_mvp.md` | Alto — troca de imagem Postgres + migration + reindexacao |
+| `context_recall` foi o gargalo medido da V5 (`0.583333` na revalidacao Ragas); busca lexical antiga usava `to_tsvector('simple')`, sem stemming ("treinar" != "treinamento") | `pg_search` (ParadeDB) como extensao Postgres para BM25 nativo - decisao contra `rank-bm25` (Python) ja tomada e documentada em V3 acima - **CONCLUIDO em 23/06/2026**. Complemento curado do catalogo NVIDIA Knowledge tambem concluido; nova medicao Ragas colocou `context_recall` em `1.000000` | Fase 3/V5 de `docs/roadmap_evolucao_tecnica_mvp.md` | Alto - troca de imagem Postgres + migration + reindexacao |
 | Modelo do Cohere Rerank fixo em codigo (`rerank-v3.5`) | extrair para `Settings` (`COHERE_RERANK_MODEL`, default `rerank-v3.5`) — **concluido em 23/06/2026** | Fase 4 de `docs/roadmap_evolucao_tecnica_mvp.md` | Trivial |
 | Filtro de busca so por `source_type`, nada por startup/data/categoria | estender `LexicalSearchRepository`/`VectorRepository` com filtros estruturados adicionais (sem lib nova, so mais parametros de query) | V3.5 mencionada acima ("busca filtrada") | Medio |
 

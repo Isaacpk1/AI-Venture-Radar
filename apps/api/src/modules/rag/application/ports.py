@@ -51,3 +51,17 @@ class EmbeddingGenerator(ABC):
     @abstractmethod
     async def generate(self, text: str) -> tuple[float, ...]:
         """Gera o vetor de embedding correspondente ao texto da query."""
+
+
+class SupplementalEvidenceProvider(ABC):
+    """Fornece evidencias curadas complementares ao indice de chunks."""
+
+    @abstractmethod
+    async def find(
+        self,
+        query: str,
+        *,
+        source_type: str | None = None,
+        limit: int,
+    ) -> list[EvidenceChunkView]:
+        """Busca evidencias suplementares para a consulta."""

@@ -1,7 +1,5 @@
 """Gerador de respostas RAG via LangChain + Gemini."""
 
-from uuid import UUID
-
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -18,12 +16,18 @@ from apps.api.src.modules.rag.application.public.answer_generator import (
 )
 from apps.api.src.modules.rag.domain.exceptions import RagAnswerGenerationError
 
+MAX_RAG_CITATIONS = 10
+MAX_RAG_CITATION_QUOTE_CHARACTERS = 1000
+
 
 class GeminiRagCitationResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     chunk_id: str = Field(min_length=1)
-    quote: str = Field(min_length=1, max_length=1000)
+    # O limite publico e aplicado em _to_view. Alguns modelos retornam
+    # trechos longos demais mesmo com prompt curto; isso nao deve invalidar
+    # a resposta inteira.
+    quote: str = Field(min_length=1)
 
 
 class GeminiRagAnswerResponse(BaseModel):
@@ -35,9 +39,11 @@ class GeminiRagAnswerResponse(BaseModel):
     # inventar uma citacao so para satisfazer o schema. O caso de uso
     # (_to_view) trata lista vazia como erro de dominio explicito, nao
     # como falha de parsing do LLM.
-    citations: list[GeminiRagCitationResponse] = Field(
-        default_factory=list, max_length=10
-    )
+    #
+    # Nao limite aqui: modelos podem devolver citacoes extras mesmo quando
+    # instruidos a serem breves. O limite publico e aplicado em _to_view para
+    # evitar que uma resposta util falhe ainda no parsing estruturado.
+    citations: list[GeminiRagCitationResponse] = Field(default_factory=list)
 
 
 class LangChainGeminiRagAnswerGenerator(RagAnswerGenerator):
@@ -146,18 +152,24 @@ class LangChainGeminiRagAnswerGenerator(RagAnswerGenerator):
         }
         citations: list[RagCitationView] = []
 
-        for citation in parsed.citations:
+        for citation in parsed.citations[:MAX_RAG_CITATIONS]:
             evidence = evidences_by_id.get(citation.chunk_id)
+            if evidence is None and citation.chunk_id.isdigit():
+                evidence_index = int(citation.chunk_id) - 1
+                if 0 <= evidence_index < len(answer_input.evidences):
+                    evidence = answer_input.evidences[evidence_index]
             if evidence is None:
                 raise RagAnswerGenerationError(
                     f"Resposta citou chunk inexistente: {citation.chunk_id}."
                 )
             citations.append(
                 RagCitationView(
-                    chunk_id=UUID(citation.chunk_id),
+                    chunk_id=evidence.chunk_id,
                     document_id=evidence.document_id,
                     source_url=evidence.source_url,
-                    quote=citation.quote.strip(),
+                    quote=citation.quote.strip()[
+                        :MAX_RAG_CITATION_QUOTE_CHARACTERS
+                    ],
                 )
             )
 

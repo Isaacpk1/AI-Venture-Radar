@@ -28,6 +28,9 @@ from apps.api.src.config.settings import get_settings
 from apps.api.src.modules.rag.application.dto import AnswerQuestionInput
 from apps.api.src.modules.rag.factories.rag_factory import RagFactory
 
+RAGAS_RETRIEVAL_LIMIT = 5
+RAGAS_MIN_ACCEPTABLE_SCORE = 0.75
+
 GOLDEN_QUESTIONS: list[dict[str, str]] = [
     # nvidia-nim-docs, monai-docs e rapids-docs ficam de fora de proposito:
     # sao os 3 gaps conhecidos do NVIDIA Knowledge V2 (2 DNS + 1 estrategias
@@ -171,7 +174,9 @@ async def test_ragas_baseline_against_nvidia_knowledge() -> None:
     for item in GOLDEN_QUESTIONS:
         result = await answer_question.answer(
             AnswerQuestionInput(
-                query=item["question"], source_type="nvidia_knowledge", limit=5
+                query=item["question"],
+                source_type="nvidia_knowledge",
+                limit=RAGAS_RETRIEVAL_LIMIT,
             )
         )
         contexts = [evidence.text for evidence in result.evidences] or [""]
@@ -181,6 +186,7 @@ async def test_ragas_baseline_against_nvidia_knowledge() -> None:
                 "response": result.answer,
                 "retrieved_contexts": contexts,
                 "reference": item["reference"],
+                "source_urls": [evidence.source_url for evidence in result.evidences],
             }
         )
 
@@ -210,7 +216,16 @@ async def test_ragas_baseline_against_nvidia_knowledge() -> None:
             )
         )
 
-        dataset = EvaluationDataset.from_list(rows)
+        dataset = EvaluationDataset.from_list(
+            [
+                {
+                    key: value
+                    for key, value in row.items()
+                    if key != "source_urls"
+                }
+                for row in rows
+            ]
+        )
         result = evaluate(
             dataset=dataset,
             metrics=[
@@ -223,10 +238,28 @@ async def test_ragas_baseline_against_nvidia_knowledge() -> None:
             embeddings=evaluator_embeddings,
         )
 
-    scores = result.to_pandas().mean(numeric_only=True)
+    frame = result.to_pandas()
+    scores = frame.mean(numeric_only=True)
     print("\nRagas baseline (NVIDIA Knowledge V2):")
     print(scores)
+    if os.getenv("RAGAS_PRINT_ROWS") == "1":
+        diagnostics = frame[
+            [
+                "user_input",
+                "faithfulness",
+                "answer_relevancy",
+                "context_precision",
+                "context_recall",
+            ]
+        ].copy()
+        diagnostics["source_urls"] = [row["source_urls"] for row in rows]
+        print("\nRagas per-question diagnostics:")
+        print(diagnostics.to_string(index=False))
 
-    # Sanity check, nao um gate de qualidade - esta rodada E' a baseline.
-    # Comparar numeros futuros contra estes antes de decidir Fase 3 (BM25).
-    assert scores["faithfulness"] >= 0.0
+    for metric in (
+        "faithfulness",
+        "answer_relevancy",
+        "context_precision",
+        "context_recall",
+    ):
+        assert scores[metric] >= RAGAS_MIN_ACCEPTABLE_SCORE

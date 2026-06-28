@@ -25,8 +25,10 @@ from apps.api.src.modules.rag.application.ports import (
     EmbeddingGenerator,
     LexicalSearchRepository,
     Reranker,
+    SupplementalEvidenceProvider,
 )
 from apps.api.src.modules.rag.application.use_cases.search_evidence import (
+    CONTEXT_WINDOW_RADIUS,
     MIN_CANDIDATE_POOL,
     SearchEvidence,
 )
@@ -128,12 +130,33 @@ class FakeReranker(Reranker):
         return list(reversed(evidences))[:top_n]
 
 
+class FakeSupplementalEvidenceProvider(SupplementalEvidenceProvider):
+    def __init__(self, results: list[EvidenceChunkView]) -> None:
+        self.results = results
+        self.queries: list[str] = []
+        self.source_types: list[str | None] = []
+        self.limits: list[int] = []
+
+    async def find(
+        self,
+        query: str,
+        *,
+        source_type: str | None = None,
+        limit: int,
+    ) -> list[EvidenceChunkView]:
+        self.queries.append(query)
+        self.source_types.append(source_type)
+        self.limits.append(limit)
+        return self.results[:limit]
+
+
 def _make_use_case(
     *,
     vector_results: list[ChunkSearchResult],
     chunks_by_document: dict[UUID, list[ChunkRecord]],
     lexical_results: list[LexicalSearchResult] | None = None,
     reranker: Reranker | None = None,
+    supplemental_evidence_provider: SupplementalEvidenceProvider | None = None,
 ):
     embedding_generator = FakeEmbeddingGenerator()
     vector_repository = FakeVectorRepository(vector_results)
@@ -145,6 +168,7 @@ def _make_use_case(
         lexical_repository=lexical_repository,
         ingested_document_reader=reader,
         reranker=reranker,
+        supplemental_evidence_provider=supplemental_evidence_provider,
     )
     return use_case, embedding_generator, vector_repository, lexical_repository, reader
 
@@ -190,7 +214,10 @@ async def test_search_evidence_returns_chunks_with_text_and_source() -> None:
     assert view.query == "Como a startup usa IA?"
     assert len(view.results) == 1
     assert view.results[0].chunk_id == second_chunk_id
-    assert view.results[0].text == "A empresa menciona inferencia em producao."
+    assert view.results[0].text == (
+        "A startup usa IA generativa para atendimento.\n\n"
+        "A empresa menciona inferencia em producao."
+    )
     assert view.results[0].score > 0
     assert embedding_generator.received_texts[0] == "Como a startup usa IA?"
     assert vector_repository.searched_vectors == [(0.1, 0.2, 0.3)]
@@ -260,6 +287,109 @@ async def test_search_evidence_reuses_document_chunks_for_multiple_results() -> 
 
     assert len(view.results) == 2
     assert reader.calls == [document_id]
+
+
+@pytest.mark.anyio
+async def test_search_evidence_expands_context_with_neighbor_chunks() -> None:
+    document_id = uuid4()
+    previous_chunk_id = uuid4()
+    matched_chunk_id = uuid4()
+    next_chunk_id = uuid4()
+    chunks = [
+        ChunkRecord(
+            id=previous_chunk_id,
+            document_id=document_id,
+            text="contexto anterior",
+            source_url="https://source.example.com",
+        ),
+        ChunkRecord(
+            id=matched_chunk_id,
+            document_id=document_id,
+            text="chunk ranqueado",
+            source_url="https://source.example.com",
+        ),
+        ChunkRecord(
+            id=next_chunk_id,
+            document_id=document_id,
+            text="contexto seguinte",
+            source_url="https://source.example.com",
+        ),
+    ]
+    use_case, _, _, _, _ = _make_use_case(
+        vector_results=[
+            ChunkSearchResult(
+                chunk_id=matched_chunk_id,
+                document_id=document_id,
+                source_url="https://source.example.com",
+                score=0.9,
+            )
+        ],
+        chunks_by_document={document_id: chunks},
+    )
+
+    view = await use_case.execute(SearchEvidenceInput(query="pergunta", limit=1))
+
+    assert CONTEXT_WINDOW_RADIUS == 1
+    assert view.results[0].chunk_id == matched_chunk_id
+    assert view.results[0].text == (
+        "contexto anterior\n\nchunk ranqueado\n\ncontexto seguinte"
+    )
+
+
+@pytest.mark.anyio
+async def test_search_evidence_prepends_supplemental_evidence() -> None:
+    document_id = uuid4()
+    indexed_chunk_id = uuid4()
+    supplemental_chunk_id = uuid4()
+    supplemental = FakeSupplementalEvidenceProvider(
+        [
+            EvidenceChunkView(
+                chunk_id=supplemental_chunk_id,
+                document_id=supplemental_chunk_id,
+                source_url="https://docs.example.com/catalog",
+                text="catalogo curado",
+                score=1.1,
+                source_type="nvidia_knowledge",
+            )
+        ]
+    )
+    use_case, _, _, _, _ = _make_use_case(
+        vector_results=[
+            ChunkSearchResult(
+                chunk_id=indexed_chunk_id,
+                document_id=document_id,
+                source_url="https://source.example.com",
+                score=0.9,
+            )
+        ],
+        chunks_by_document={
+            document_id: [
+                ChunkRecord(
+                    id=indexed_chunk_id,
+                    document_id=document_id,
+                    text="chunk indexado",
+                    source_url="https://source.example.com",
+                )
+            ]
+        },
+        supplemental_evidence_provider=supplemental,
+    )
+
+    view = await use_case.execute(
+        SearchEvidenceInput(
+            query="What does NVIDIA Clara provide?",
+            source_type="nvidia_knowledge",
+            limit=5,
+        )
+    )
+
+    assert supplemental.queries == ["What does NVIDIA Clara provide?"]
+    assert supplemental.source_types == ["nvidia_knowledge"]
+    assert supplemental.limits == [5]
+    assert [item.chunk_id for item in view.results] == [
+        supplemental_chunk_id,
+        indexed_chunk_id,
+    ]
 
 
 @pytest.mark.anyio

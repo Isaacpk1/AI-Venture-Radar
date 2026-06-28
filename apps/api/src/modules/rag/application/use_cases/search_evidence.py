@@ -16,6 +16,7 @@ from apps.api.src.modules.rag.application.ports import (
     EmbeddingGenerator,
     LexicalSearchRepository,
     Reranker,
+    SupplementalEvidenceProvider,
 )
 from apps.api.src.modules.rag.application.public.retriever import Retriever
 from apps.api.src.modules.rag.domain.exceptions import EmptyRagQueryError
@@ -23,6 +24,7 @@ from apps.api.src.modules.rag.domain.policies import RankedChunk, fuse_rankings
 
 MIN_CANDIDATE_POOL = 20
 CANDIDATE_POOL_MULTIPLIER = 4
+CONTEXT_WINDOW_RADIUS = 1
 
 
 class SearchEvidence(Retriever):
@@ -43,12 +45,14 @@ class SearchEvidence(Retriever):
         lexical_repository: LexicalSearchRepository,
         ingested_document_reader: IngestedDocumentReader,
         reranker: Reranker | None = None,
+        supplemental_evidence_provider: SupplementalEvidenceProvider | None = None,
     ) -> None:
         self._embedding_generator = embedding_generator
         self._vector_repository = vector_repository
         self._lexical_repository = lexical_repository
         self._ingested_document_reader = ingested_document_reader
         self._reranker = reranker
+        self._supplemental_evidence_provider = supplemental_evidence_provider
 
     async def search(self, search_input: SearchEvidenceInput) -> SearchEvidenceView:
         query = search_input.query.strip()
@@ -105,15 +109,28 @@ class SearchEvidence(Retriever):
                 # ja removido da ingestion).
                 continue
 
+            expanded_text = self._expand_context_window(
+                list(chunks_by_document[item.document_id].values()), item.chunk_id
+            )
             evidence_chunks.append(
                 EvidenceChunkView(
                     chunk_id=item.chunk_id,
                     document_id=item.document_id,
                     source_url=source_urls.get(item.chunk_id) or chunk.source_url,
                     source_type=chunk.source_type.value,
-                    text=chunk.text,
+                    text=expanded_text or chunk.text,
                     score=item.score,
                 )
+            )
+
+        if self._supplemental_evidence_provider is not None:
+            supplemental_chunks = await self._supplemental_evidence_provider.find(
+                query,
+                source_type=search_input.source_type,
+                limit=limit,
+            )
+            evidence_chunks = self._merge_supplemental_evidence(
+                supplemental_chunks, evidence_chunks
             )
 
         if self._reranker is not None:
@@ -129,3 +146,31 @@ class SearchEvidence(Retriever):
         """Alias para manter o padrao dos outros casos de uso."""
 
         return await self.search(search_input)
+
+    def _expand_context_window(
+        self, chunks: list[ChunkRecord], chunk_id
+    ) -> str:
+        """Inclui chunks vizinhos para reduzir perda de contexto no corte."""
+
+        index_by_id = {chunk.id: index for index, chunk in enumerate(chunks)}
+        chunk_index = index_by_id.get(chunk_id)
+        if chunk_index is None:
+            return ""
+
+        start = max(0, chunk_index - CONTEXT_WINDOW_RADIUS)
+        end = min(len(chunks), chunk_index + CONTEXT_WINDOW_RADIUS + 1)
+        return "\n\n".join(chunk.text for chunk in chunks[start:end])
+
+    def _merge_supplemental_evidence(
+        self,
+        supplemental_chunks: list[EvidenceChunkView],
+        indexed_chunks: list[EvidenceChunkView],
+    ) -> list[EvidenceChunkView]:
+        seen = set()
+        merged: list[EvidenceChunkView] = []
+        for chunk in [*supplemental_chunks, *indexed_chunks]:
+            if chunk.chunk_id in seen:
+                continue
+            seen.add(chunk.chunk_id)
+            merged.append(chunk)
+        return merged
