@@ -13,7 +13,7 @@ import {
   reviewBriefing,
   reviewRecommendation,
 } from "@/lib/api/radar-client";
-import type { Briefing, Recommendation, ReviewInput, Startup, StartupEvidence } from "@/lib/api/radar-types";
+import type { Briefing, Recommendation, ReviewInput, Startup, StartupAIProfile, StartupEvidence } from "@/lib/api/radar-types";
 
 function Field({ label, value }: { label: string; value: string | null }) {
   const displayValue = !value || value === "unknown" ? "Nao informado" : value;
@@ -108,6 +108,56 @@ function ReviewControls({
   );
 }
 
+function AIProfileSection({ profile }: { profile: StartupAIProfile }) {
+  const knownFields = [
+    { label: "Workload de IA", value: profile.ai_workload_type },
+    { label: "Tipo de modelo", value: profile.model_type },
+    { label: "Modalidade de dados", value: profile.data_modality },
+    { label: "Estágio de deploy", value: profile.deployment_stage },
+    { label: "Infraestrutura", value: profile.infra_environment },
+    { label: "Necessidade de GPU", value: profile.gpu_need },
+    { label: "Latência", value: profile.latency_requirement },
+  ].filter(({ value }) => value && value !== "unknown");
+
+  if (knownFields.length === 0 && !profile.business_goal && profile.current_tools.length === 0) return null;
+
+  return (
+    <div className="mt-6 border-t border-[var(--surface-border)] pt-6">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">Perfil de IA</h3>
+      <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {knownFields.map(({ label, value }) => (
+          <div key={label}>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">{label}</dt>
+            <dd className="mt-1 text-sm">{value}</dd>
+          </div>
+        ))}
+        {profile.scale_signal && (
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Sinal de escala</dt>
+            <dd className="mt-1 text-sm">{profile.scale_signal}</dd>
+          </div>
+        )}
+        {profile.business_goal && (
+          <div className="sm:col-span-2">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Objetivo de negócio</dt>
+            <dd className="mt-1 text-sm">{profile.business_goal}</dd>
+          </div>
+        )}
+      </dl>
+      {profile.current_tools.length > 0 && (
+        <div className="mt-4">
+          <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Stack atual</dt>
+          <dd className="mt-2 flex flex-wrap gap-2">
+            {profile.current_tools.map((tool) => (
+              <span className="rounded-full bg-[#20334d] px-2 py-1 text-xs text-[var(--muted)]" key={tool}>{tool}</span>
+            ))}
+          </dd>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RecommendationCard({ recommendation, evidences, startupId }: { recommendation: Recommendation; evidences: StartupEvidence[]; startupId: string }) {
   const [expanded, setExpanded] = useState(false);
   const queryClient = useQueryClient();
@@ -157,6 +207,12 @@ function RecommendationCard({ recommendation, evidences, startupId }: { recommen
         <div className="mt-2 rounded-md bg-neutral-900/60 px-3 py-2 text-xs text-[var(--muted)] border border-neutral-700">
           <span className="font-semibold text-neutral-300">Para elevar: </span>
           {recommendation.faltando.join(" · ")}
+        </div>
+      )}
+      {recommendation.signal_origins && recommendation.signal_origins.length > 0 && (
+        <div className="mt-2 text-xs text-[var(--muted)]">
+          <span className="font-semibold">Sinais: </span>
+          {recommendation.signal_origins.join(" · ")}
         </div>
       )}
       {recommendation.matched_keywords.length > 0 && (
@@ -259,6 +315,7 @@ export function StartupDetails({ startupId }: { startupId: string }) {
           <Field label="Funding" value={startup.funding_stage} /><Field label="Fundadores" value={startup.founders.join(", ") || null} />
           <Field label="Clientes" value={startup.customers.join(", ") || null} />
         </dl>
+        {startup.ai_profile && <AIProfileSection profile={startup.ai_profile} />}
         {startup.website_url && <a className="mt-6 inline-block text-sm text-[var(--accent)] underline" href={startup.website_url} rel="noreferrer" target="_blank">Abrir fonte principal</a>}
       </section>
 
@@ -266,8 +323,36 @@ export function StartupDetails({ startupId }: { startupId: string }) {
         <div className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface)] p-6"><h2 className="text-xl font-semibold">Evidencias</h2>
           <div className="mt-5 space-y-4">{evidences.length ? evidences.map((evidence) => <article className="rounded-md border border-[var(--surface-border)] p-4" key={evidence.id}><a className="font-medium text-[var(--accent)] underline" href={evidence.source_url} rel="noreferrer" target="_blank">{evidence.title || evidence.source_url}</a><p className="mt-2 text-sm text-[var(--muted)]">{evidence.notes || "Evidencia coletada e aprovada pelo pipeline."}</p></article>) : <p className="text-[var(--muted)]">Nenhuma evidencia disponivel.</p>}</div>
         </div>
-        <div className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface)] p-6"><h2 className="text-xl font-semibold">Recomendacoes NVIDIA</h2>
-          <div className="mt-5 space-y-4">{recommendations.length ? recommendations.map((recommendation) => <RecommendationCard evidences={evidences} key={recommendation.id} recommendation={recommendation} startupId={startupId} />) : <p className="text-[var(--muted)]">Nenhuma recomendacao foi gerada.</p>}</div>
+        <div className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface)] p-6">
+          <h2 className="text-xl font-semibold">Recomendacoes NVIDIA</h2>
+          {recommendations.length === 0 ? (
+            <p className="mt-5 text-[var(--muted)]">Nenhuma recomendacao foi gerada.</p>
+          ) : (() => {
+            const strong = recommendations.filter((r) => r.nivel === "forte");
+            const exploratory = recommendations.filter((r) => r.nivel !== "forte");
+            return (
+              <div className="mt-5 space-y-8">
+                <div>
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">Recomendacoes Fortes</h3>
+                  {strong.length > 0 ? (
+                    <div className="space-y-4">
+                      {strong.map((r) => <RecommendationCard evidences={evidences} key={r.id} recommendation={r} startupId={startupId} />)}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-[var(--muted)]">Nenhuma recomendacao forte com as evidencias atuais.</p>
+                  )}
+                </div>
+                {exploratory.length > 0 && (
+                  <div>
+                    <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">Hipoteses Exploratorias</h3>
+                    <div className="space-y-4">
+                      {exploratory.map((r) => <RecommendationCard evidences={evidences} key={r.id} recommendation={r} startupId={startupId} />)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </section>
 

@@ -20,8 +20,8 @@ Startups V2 + V3 + V4 (slice inicial: campos estruturados + classificacao de mat
 RAG V4 (busca hibrida + reranking)
 NVIDIA Knowledge V1
 NVIDIA Knowledge V2 foundation + source registry + P0+P1+P2 complete (20/20 sources processed, 17/20 with retrievable content)
-Recommendations V1 + V2 (RAG grounding via NVIDIA Knowledge, com fallback deterministico) + V3 (confidence por qualidade de evidencia + complexity por tecnologia + priority ordinal por posicao; migration d7e3f1a2b9c4) + V4 (signal_origins + missing_signals; migration a3c7f9e2b4d8) + V5 (score composto 5 dimensoes + nova confianca 5 fatores + StartupAIContext + NvidiaSemanticCandidateSelector; passo 4 Briefing V4: retrieval semantico pre-filtra candidatos via nvidia_knowledge antes do keyword matching)
-Briefing V1 (+ extensao de RAG grounding + extensao de exportacao em PDF)
+Recommendations V1 + V2 (RAG grounding via NVIDIA Knowledge, com fallback deterministico) + V3 (confidence por qualidade de evidencia + complexity por tecnologia + priority ordinal por posicao; migration d7e3f1a2b9c4) + V4 (signal_origins + missing_signals; migration a3c7f9e2b4d8) + V5 (score composto 5 dimensoes + nova confianca 5 fatores + StartupAIContext + NvidiaSemanticCandidateSelector; passo 4 Briefing V4: retrieval semantico pre-filtra candidatos via nvidia_knowledge antes do keyword matching) + nivel/faltando por recomendacao (migration c5d9a3e7b2f1)
+Briefing V1 (+ extensao de RAG grounding) + V3 (exportacao em PDF) + V4 (briefing analitico: tese de fit, nivel de confianca geral, o que foi/nao foi encontrado, matriz de recomendacoes, fortes vs exploratorias, perguntas de qualificacao)
 Orchestration V1 + V2 completa (URL bruta -> scraping -> ingestion -> embeddings -> startup -> evidencia -> extract -> classify -> recommendations -> briefing, sem operacao manual entre etapas) + orchestration_worker automatico (+ extensao de historico paginado de jobs + limpeza de vetores orfaos no Qdrant quando URL e' re-raspada)
 Frontend V1 + V2 + V3 completa (jornada URL->job->resultado, portfolio paginado, historico global de jobs, badge de fit, evidencia clicavel por recomendacao, chatbot sobre NVIDIA Knowledge, export de briefing em PDF)
 Frontend V4 (dashboard /dashboard: graficos SVG de distribuicao por maturidade + top tecnologias NVIDIA, comparacao lado a lado de ate 3 startups, fila de analise em lote com resultados linkados; GET /startups/stats + GET /recommendations/stats novos no backend)
@@ -55,7 +55,7 @@ real via RUN_RAGAS_EVAL=1 fica para quando o usuario decidir rodar)
 Recent validation:
 
 ```txt
-598 testes coletados via --collect-only (reconferido em 2026-06-27);
+632 testes coletados via --collect-only (reconferido em 2026-06-27 pos-Briefing V4);
 com infra viva (Postgres/Redis/Qdrant), 559 passed, 1 skipped — o skip
 e o teste Ragas opt-in (RUN_RAGAS_EVAL=1).
 Frontend (Vitest): 32 passed (8 arquivos de teste, 2026-06-27).
@@ -1393,10 +1393,11 @@ O que a V3 entregou (25/06/2026 — scoring mais granular para o caso/demo):
 | V1 | Entregue | Template executivo em Markdown: resumo, evidencias, recomendacoes, riscos e proximas acoes |
 | V2 | Futuro (agente entregue em Agents V12) | Briefing gerado por agente |
 | V3 | Entregue (24/06/2026) | Exportacao em PDF preservando citacoes |
-| V4 | Futuro | Revisao humana |
-| V5 | Futuro | Ranking de oportunidades |
+| V4 | Entregue (27/06/2026) | Briefing analitico: tese de fit, nivel de confianca geral, o que foi/nao foi encontrado, matriz de recomendacoes, fortes vs exploratorias, perguntas de qualificacao |
+| V5 | Futuro | Golden set + metricas (precision@3, taxa de falsos positivos) + ranking de oportunidades |
+| V6 | Futuro | Robustez operacional: versionamento, auditoria, reprocessamento por etapa |
 
-**Versao atual: V3**
+**Versao atual: V4**
 
 O que a V1 entregou:
 - `Briefing` (`domain/entities.py`) — `startup_id`, `content` (Markdown), `generated_at`
@@ -1475,6 +1476,38 @@ iniciada. Validado reproduzindo a condicao exata do bug
 (`asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())`
 + chamada real ao renderer): PDF gerado normalmente. Ver
 `docs/briefing/briefing_v3_export_pdf.md` secao 6.1.
+
+O que a V4 entregou (27/06/2026 — briefing analitico, fecha os passos 1-5 do
+plano em `docs/briefing/roadmap.md`):
+- `StartupAIProfileItem` (dataclass frozen em `domain/policies.py`) — subconjunto
+  do `StartupAIProfileView` de `startups`, sem importar enums do modulo externo;
+  campos: `ai_workload_type`, `model_type`, `data_modality`, `deployment_stage`,
+  `infra_environment`, `gpu_need`, `latency_requirement`, `scale_signal`,
+  `current_tools`, `business_goal`, `field_confidence`, `field_evidence_ids`
+- `RecommendationItem` (em `domain/policies.py`) ganha `nivel: str = "exploratoria"`,
+  `faltando: tuple[str, ...]`, `signal_origins` e `missing_signals` — consolidado
+  a partir dos campos novos de `Recommendation` (V4/V5 de `recommendations`)
+- `_recommendation_strength()`, `_best_recommendation_summary()`,
+  `_overall_confidence()`, `_qualification_questions()`, `_profile_found_items()`,
+  `_profile_missing_items()` — helpers puros (sem I/O) que alimentam a nova estrutura
+- `build_briefing_markdown()` substituiu as 5 secoes V1 por 12 secoes analiticas:
+  Resumo Executivo, Tese de Fit NVIDIA, Nivel de Confianca Geral, O Que Foi
+  Encontrado, O Que Nao Foi Encontrado, Evidencias Principais, Matriz de
+  Recomendacoes (tabela), Recomendacoes Fortes, Hipoteses Exploratorias, Contexto
+  NVIDIA, Riscos, Perguntas de Qualificacao, Proximas Acoes. Funcao continua pura —
+  sem I/O; `GenerateBriefing` monta todos os dados antes de chamar a policy
+- `GenerateBriefing` passa `ai_profile: StartupAIProfileItem | None` para a policy,
+  montado a partir de `StartupAIProfileView` retornado pelo contrato publico de
+  `startups` (sem importar o enum do modulo, so o valor string)
+- Contraparte em `recommendations` (ja coberta em Recommendations V5): campos `nivel`
+  e `faltando` persistidos via migration `c5d9a3e7b2f1`; `RecommendationView` e
+  `RecommendationResponse` expõem ambos; frontend `radar-types.ts` atualizado com
+  `nivel: "forte" | "moderada" | "exploratoria"` e `faltando: string[]`
+- `RecommendationCard` (`startup-details.tsx`) renderiza badge de nivel
+  (Forte/Moderada/Exploratoria, cor verde/amarelo/vermelho) e chips de `faltando`
+- Testes: 36 unit + integracao (briefing); 78 unit + integracao (recommendations)
+- Documento: `docs/briefing/briefing_v4_briefing_analitico.md`; roadmap completo em
+  `docs/briefing/roadmap.md`
 
 ---
 
@@ -1871,8 +1904,9 @@ O que a V5 entregou (26/06/2026 — revisao humana de recommendations e briefing
 | `f4b2a9c8d6e1` | 2026-06-26 | Adiciona `parent_job_id` e `enrichment_round` em `url_ingestion_jobs` (Orchestration V2 enrichment) |
 | `a3c7f9e2b4d8` | 2026-06-27 | Adiciona `signal_origins` e `missing_signals` em `recommendations` (Briefing V4, passo 1) |
 | `b4c8e2f1a9d7` | 2026-06-27 | Adiciona coluna `ai_profile` JSONB em `startups` (Briefing V4, passo 2) |
+| `c5d9a3e7b2f1` | 2026-06-27 | Adiciona `nivel` e `faltando` em `recommendations` (Briefing V4, passo 5 — matriz de decisao por nivel) |
 
-**Head atual: `b4c8e2f1a9d7`**
+**Head atual: `c5d9a3e7b2f1`**
 
 ### Tabelas existentes
 
@@ -1913,18 +1947,18 @@ startup_discovery_runs  rodada de descoberta automatica de startups em hubs publ
 | startups | 72 (unit + integracao) | 2026-06-27 |
 | rag | 21 (unit + integracao) | 2026-06-27 |
 | nvidia_knowledge | 15 unit | 2026-06-27 |
-| recommendations | 65 (unit + integracao) | 2026-06-27 |
-| briefing | 33 (unit + integracao) | 2026-06-27 |
+| recommendations | 78 (unit + integracao) | 2026-06-27 |
+| briefing | 36 (unit + integracao) | 2026-06-27 |
 | orchestration | 41 (unit + integracao) | 2026-06-27 |
 | startup_discovery | 8 unit | 2026-06-27 |
 | shared | 10 unit (logging + observability) | 2026-06-27 |
-| **Total backend** | **617 testes coletados** | **2026-06-27** |
+| **Total backend** | **632 testes coletados** | **2026-06-27** |
 | **Frontend (`apps/web`, Vitest)** | **32 testes** | **2026-06-27** |
 
 Nota: numeros desta tabela vem de `pytest --collect-only -q` por modulo
 (nao exige Postgres/Redis/Qdrant vivos, so confirma quantos testes existem
 no codigo). Reconferido direto por modulo em 2026-06-27 via --collect-only:
-soma das linhas backend confere com os 606 coletados.
+soma das linhas backend confere com os 632 coletados.
 Com infra viva (Postgres/Redis/Qdrant): **559 passed, 1 skipped** (o skip
 e o teste Ragas opt-in, `RUN_RAGAS_EVAL=1` nao definido).
 Frontend (`npx vitest run` em `apps/web/`): **32 passed** (reconferido 2026-06-27).
@@ -2123,7 +2157,7 @@ pytest -k "test_acceptance_policy_rejects_captcha" -v
 # Run DB migrations
 alembic upgrade head
 
-# Current migration head: b4c8e2f1a9d7 (ai_profile JSONB on startups, Briefing V4 step 2)
+# Current migration head: c5d9a3e7b2f1 (nivel/faltando on recommendations, Briefing V4 step 5)
 ```
 
 ---
@@ -2217,8 +2251,9 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Recommendations V2 (current) | `docs/recommendations/recommendations_v2_rag_grounding.md` |
 | Recommendations roadmap | `docs/recommendations/roadmap_recommendations.md` |
 | Briefing V1 | `docs/briefing/briefing_v1_template_executivo.md` |
-| Briefing V3 export PDF (current) | `docs/briefing/briefing_v3_export_pdf.md` |
-| Briefing roadmap | `docs/briefing/roadmap_briefing.md` |
+| Briefing V3 export PDF | `docs/briefing/briefing_v3_export_pdf.md` |
+| Briefing V4 briefing analitico (current) | `docs/briefing/briefing_v4_briefing_analitico.md` |
+| Briefing roadmap | `docs/briefing/roadmap.md` |
 | Orchestration V1 (current) | `docs/orchestration/orchestration_v1_analysis_jobs.md` |
 | Orchestration V2 URL ingestion jobs | `docs/orchestration/orchestration_v2_url_ingestion_jobs.md` |
 | Orchestration V2 worker automatico | `docs/orchestration/orchestration_v2_worker_automatico.md` |

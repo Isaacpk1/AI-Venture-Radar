@@ -37,6 +37,19 @@ export type ListUrlIngestionJobsParams = {
   source_type?: string;
 };
 
+export type StartupAIProfile = {
+  ai_workload_type: string;
+  model_type: string;
+  data_modality: string;
+  deployment_stage: string;
+  infra_environment: string;
+  gpu_need: string;
+  latency_requirement: string;
+  scale_signal: string | null;
+  current_tools: string[];
+  business_goal: string | null;
+};
+
 export type Startup = {
   id: string;
   name: string;
@@ -51,6 +64,7 @@ export type Startup = {
   funding_stage: string | null;
   funding_amount_usd: number | null;
   customers: string[];
+  ai_profile: StartupAIProfile | null;
   created_at: string;
   updated_at: string;
 };

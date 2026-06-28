@@ -20,7 +20,7 @@ describe("StartupPortfolio", () => {
 
   it("exibe cards e o total do portfolio", async () => {
     mockedListStartups.mockResolvedValue({
-      items: [{ id: "startup-1", name: "Acme AI", website_url: null, description: "IA para atendimento", sector: "SaaS", country: "BR", ai_maturity_level: "ai_native", classification_reason: null, classified_at: null, founders: [], funding_stage: null, funding_amount_usd: null, customers: [], created_at: "2026-01-01", updated_at: "2026-01-01" }],
+      items: [{ id: "startup-1", name: "Acme AI", website_url: null, description: "IA para atendimento", sector: "SaaS", country: "BR", ai_maturity_level: "ai_native", classification_reason: null, classified_at: null, founders: [], funding_stage: null, funding_amount_usd: null, customers: [], ai_profile: null, created_at: "2026-01-01", updated_at: "2026-01-01" }],
       total: 1, page: 1, page_size: 20,
     });
 
