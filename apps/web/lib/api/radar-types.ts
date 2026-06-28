@@ -37,6 +37,19 @@ export type ListUrlIngestionJobsParams = {
   source_type?: string;
 };
 
+export type DiscoveryRunStatus = "pending" | "running" | "completed" | "failed";
+
+export type DiscoveryRun = {
+  id: string;
+  status: DiscoveryRunStatus;
+  hubs_processed: number;
+  urls_found: number;
+  jobs_submitted: number;
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
+};
+
 export type StartupAIProfile = {
   ai_workload_type: string;
   model_type: string;

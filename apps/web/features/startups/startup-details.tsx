@@ -108,6 +108,53 @@ function ReviewControls({
   );
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  founders: "Fundadores",
+  funding_stage: "Estágio de funding",
+  funding_amount_usd: "Valor captado",
+  customers: "Clientes",
+  sector: "Setor",
+  description: "Descrição",
+};
+
+function FieldAuditSection({
+  fieldConfidence,
+  fieldEvidenceIds,
+}: {
+  fieldConfidence: Record<string, number>;
+  fieldEvidenceIds: Record<string, string[]>;
+}) {
+  const entries = Object.entries(fieldConfidence).filter(([key]) => key in FIELD_LABELS);
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="mt-6 border-t border-[var(--surface-border)] pt-6">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">Rastreabilidade de Extração</h3>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {entries.map(([field, confidence]) => {
+          const pct = Math.round(confidence * 100);
+          const color = pct >= 80 ? "bg-[var(--accent)]" : pct >= 50 ? "bg-yellow-400" : "bg-red-400";
+          const evidenceCount = fieldEvidenceIds[field]?.length ?? 0;
+          return (
+            <div className="rounded-md border border-[var(--surface-border)] p-3" key={field}>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-[var(--muted)]">{FIELD_LABELS[field] ?? field}</span>
+                <span className="tabular-nums text-[var(--fg)]">{pct}%</span>
+              </div>
+              <div className="mt-2 h-1.5 w-full rounded-full bg-[#20334d]">
+                <div className={`h-1.5 rounded-full ${color}`} style={{ width: `${pct}%` }} />
+              </div>
+              {evidenceCount > 0 && (
+                <p className="mt-1.5 text-[10px] text-[var(--muted)]">{evidenceCount} evidência{evidenceCount > 1 ? "s" : ""} de suporte</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function AIProfileSection({ profile }: { profile: StartupAIProfile }) {
   const knownFields = [
     { label: "Workload de IA", value: profile.ai_workload_type },
@@ -316,6 +363,7 @@ export function StartupDetails({ startupId }: { startupId: string }) {
           <Field label="Clientes" value={startup.customers.join(", ") || null} />
         </dl>
         {startup.ai_profile && <AIProfileSection profile={startup.ai_profile} />}
+        <FieldAuditSection fieldConfidence={startup.field_confidence} fieldEvidenceIds={startup.field_evidence_ids} />
         {startup.website_url && <a className="mt-6 inline-block text-sm text-[var(--accent)] underline" href={startup.website_url} rel="noreferrer" target="_blank">Abrir fonte principal</a>}
       </section>
 

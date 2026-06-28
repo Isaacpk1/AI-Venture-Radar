@@ -1,6 +1,7 @@
 import type {
   Briefing,
   CreateUrlIngestionJobInput,
+  DiscoveryRun,
   ListStartupsParams,
   ListUrlIngestionJobsParams,
   MaturityDistribution,
@@ -109,6 +110,14 @@ export async function createBatchUrlIngestionJobs(urls: string[]) {
     job: r.status === "fulfilled" ? r.value : null,
     error: r.status === "rejected" ? (r.reason as Error).message : null,
   }));
+}
+
+export function createDiscoveryRun() {
+  return request<DiscoveryRun>("/api/radar/startup-discovery/runs", { method: "POST", body: "{}" });
+}
+
+export function getDiscoveryRun(runId: string) {
+  return request<DiscoveryRun>(`/api/radar/startup-discovery/runs/${runId}`);
 }
 
 export async function refreshStartupAnalysis(startupId: string) {

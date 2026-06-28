@@ -247,6 +247,24 @@ describe("StartupDetails", () => {
     await waitFor(() => expect(mockedRefresh).toHaveBeenCalledWith(STARTUP_ID));
   });
 
+  it("exibe secao de rastreabilidade de extracao quando field_confidence tem dados", async () => {
+    mockedGetStartup.mockResolvedValue(
+      baseStartup({
+        field_confidence: { founders: 0.9, sector: 0.75 },
+        field_evidence_ids: { founders: ["ev-1", "ev-2"], sector: ["ev-1"] },
+      })
+    );
+    mockedGetEvidences.mockResolvedValue([]);
+    mockedListRecommendations.mockResolvedValue([]);
+    mockedListBriefings.mockResolvedValue([]);
+
+    renderWithClient(<StartupDetails startupId={STARTUP_ID} />);
+
+    expect(await screen.findByText("Rastreabilidade de Extração")).toBeInTheDocument();
+    expect(screen.getByText("90%")).toBeInTheDocument();
+    expect(screen.getByText("2 evidências de suporte")).toBeInTheDocument();
+  });
+
   it("registra revisao de recomendacao ao clicar em aprovar", async () => {
     const user = userEvent.setup();
     const recommendation = baseRecommendation();

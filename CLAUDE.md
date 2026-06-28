@@ -1943,6 +1943,32 @@ Extensao feita em 27/06/2026 (continua V5 — complemento visual do Briefing V4)
   ganha `ai_profile: null`
 - Testes: 32 passed (sem mudanca de contagem — so fixtures atualizados)
 
+Extensao feita em 27/06/2026 (continua V5 — complemento visual de Startups V4):
+- `FieldAuditSection` (componente interno de `startup-details.tsx`) — renderizado
+  abaixo de `AIProfileSection` quando `startup.field_confidence` tem ao menos um
+  campo basico conhecido; para cada campo mostra label traduzida, barra de
+  confianca colorida (verde >= 80%, amarelo >= 50%, vermelho < 50%) e contagem
+  de evidencias de suporte. Omitido quando `field_confidence` esta vazio
+  (startups criadas antes da V4 ou sem extracao)
+- `FIELD_LABELS` — mapa de chave interna para label em portugues:
+  founders/funding_stage/funding_amount_usd/customers/sector/description
+- Testes: 33 passed (+1: verifica secao "Rastreabilidade de Extracao" com
+  percentual e contagem de evidencias)
+
+Extensao feita em 27/06/2026 (continua V5 — frontend para Startup Discovery V1):
+- Tipos novos em `radar-types.ts`: `DiscoveryRunStatus` e `DiscoveryRun`
+- `createDiscoveryRun()` e `getDiscoveryRun()` em `radar-client.ts`
+- BFF routes: `app/api/radar/startup-discovery/runs/route.ts` (POST) +
+  `runs/[runId]/route.ts` (GET) — proxiam para `/startup-discovery/runs`
+- `features/discovery/startup-discovery.tsx`: botao "Descobrir startups" que
+  dispara um `DiscoveryRun` e faz polling a cada 3s ate status terminal;
+  exibe hubs consultados, metricas (hubs_processed/urls_found/jobs_submitted)
+  e link direto para `/jobs?source_type=startup_evidence`
+- `app/discovery/page.tsx` — nova pagina `/discovery`
+- `app/layout.tsx` ganhou link "Descoberta" na nav global
+- Testes: 36 passed (+3 em `startup-discovery.test.tsx`: renderiza hubs,
+  exibe resultados ao concluir, exibe erro ao falhar)
+
 ---
 
 ## Database state
@@ -2027,7 +2053,7 @@ startup_discovery_runs  rodada de descoberta automatica de startups em hubs publ
 | startup_discovery | 8 unit | 2026-06-27 |
 | shared | 10 unit (logging + observability) | 2026-06-27 |
 | **Total backend** | **644 testes coletados** | **2026-06-27** |
-| **Frontend (`apps/web`, Vitest)** | **32 testes** | **2026-06-27** |
+| **Frontend (`apps/web`, Vitest)** | **36 testes** | **2026-06-27** |
 
 Nota: numeros desta tabela vem de `pytest --collect-only -q` por modulo
 (nao exige Postgres/Redis/Qdrant vivos, so confirma quantos testes existem
