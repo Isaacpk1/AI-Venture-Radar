@@ -43,6 +43,8 @@ function baseStartup(overrides: Partial<Startup> = {}): Startup {
     funding_amount_usd: null,
     customers: [],
     ai_profile: null,
+    field_confidence: {},
+    field_evidence_ids: {},
     created_at: "2026-06-01T00:00:00Z",
     updated_at: "2026-06-01T00:00:00Z",
     ...overrides,

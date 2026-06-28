@@ -95,6 +95,8 @@ class StartupResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     ai_profile: StartupAIProfileResponse | None = None
+    field_confidence: dict[str, float] = {}
+    field_evidence_ids: dict[str, list[str]] = {}
 
     @classmethod
     def from_view(cls, view: StartupView) -> "StartupResponse":
@@ -125,6 +127,8 @@ class StartupResponse(BaseModel):
                 if view.ai_profile is not None
                 else None
             ),
+            field_confidence=view.field_confidence,
+            field_evidence_ids=view.field_evidence_ids,
         )
 
 

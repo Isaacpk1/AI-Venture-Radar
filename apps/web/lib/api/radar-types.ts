@@ -65,6 +65,8 @@ export type Startup = {
   funding_amount_usd: number | null;
   customers: string[];
   ai_profile: StartupAIProfile | null;
+  field_confidence: Record<string, number>;
+  field_evidence_ids: Record<string, string[]>;
   created_at: string;
   updated_at: string;
 };

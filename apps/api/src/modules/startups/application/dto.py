@@ -1,6 +1,6 @@
 """DTOs do modulo startups."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID
 
@@ -99,6 +99,8 @@ class StartupView:
     created_at: datetime
     updated_at: datetime
     ai_profile: StartupAIProfileView | None = None
+    field_confidence: dict[str, float] = field(default_factory=dict)
+    field_evidence_ids: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass

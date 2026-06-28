@@ -156,3 +156,24 @@ def test_startup_ai_profile_is_initially_none() -> None:
     startup = Startup(name="New Startup")
 
     assert startup.ai_profile is None
+
+
+def test_update_field_audit_persists_confidence_and_evidence_ids() -> None:
+    startup = Startup(name="Acme AI")
+    original_updated_at = startup.updated_at
+
+    startup.update_field_audit(
+        field_confidence={"founders": 0.9, "sector": 0.75},
+        field_evidence_ids={"founders": ["ev-1", "ev-2"]},
+    )
+
+    assert startup.field_confidence == {"founders": 0.9, "sector": 0.75}
+    assert startup.field_evidence_ids == {"founders": ["ev-1", "ev-2"]}
+    assert startup.updated_at > original_updated_at
+
+
+def test_startup_field_audit_defaults_are_empty_dicts() -> None:
+    startup = Startup(name="New Startup")
+
+    assert startup.field_confidence == {}
+    assert startup.field_evidence_ids == {}

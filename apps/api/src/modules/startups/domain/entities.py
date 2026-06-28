@@ -82,6 +82,10 @@ class Startup:
 
     ai_profile: StartupAIProfile | None = None
 
+    # Confianca e evidencias por campo basico extraido (founders, sector, etc.)
+    field_confidence: dict[str, float] = field(default_factory=dict)
+    field_evidence_ids: dict[str, list[str]] = field(default_factory=dict)
+
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
@@ -143,6 +147,17 @@ class Startup:
         """Registra o perfil estruturado de IA extraido pelo agente."""
 
         self.ai_profile = profile
+        self.updated_at = utc_now()
+
+    def update_field_audit(
+        self,
+        field_confidence: dict[str, float],
+        field_evidence_ids: dict[str, list[str]],
+    ) -> None:
+        """Registra confianca e evidencias de suporte por campo basico extraido."""
+
+        self.field_confidence = field_confidence
+        self.field_evidence_ids = field_evidence_ids
         self.updated_at = utc_now()
 
     def classify(self, level: AiMaturityLevel, reason: str) -> None:

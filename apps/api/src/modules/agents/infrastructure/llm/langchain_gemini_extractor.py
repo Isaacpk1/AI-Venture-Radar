@@ -190,9 +190,11 @@ class LangChainGeminiExtractor(ExtractionService):
                 "- scale_signal: volume/throughput observado se mencionado (texto curto ou null).\n"
                 "- current_tools: frameworks/stack mencionados (lista).\n"
                 "- business_goal: objetivo de negocio declarado (texto curto ou null).\n"
-                "- field_confidence: dict com confianca (0-1) apenas para os campos "
-                "que voce preencheu com evidencia real (ex. {'ai_workload_type': 0.9}). "
-                "Nao inclua campos que ficaram 'unknown'."
+                "- field_confidence: dict com confianca (0-1) para TODOS os campos "
+                "que voce preencheu com evidencia real — tanto campos basicos "
+                "(ex. {'founders': 0.9, 'sector': 0.8}) quanto campos de perfil de IA "
+                "(ex. {'ai_workload_type': 0.85}). "
+                "Nao inclua campos que ficaram vazios, null ou 'unknown'."
             )
         )
 

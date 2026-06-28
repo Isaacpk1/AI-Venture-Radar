@@ -16,7 +16,7 @@ Scraping V8
 Agents V12 (+ Startup Classifier Agent, Extraction Agent V8, NVIDIA RAG Agent V10, Recommendation Agent V11, Briefing Agent V12 — all 8 agents from the original brief now implemented)
 Ingestion V1 + ingestion_worker
 Embeddings V5 + embedding_worker
-Startups V2 + V3 + V4 (slice inicial: campos estruturados + classificacao de maturidade em IA + dedup por nome/dominio com rapidfuzz, limiar 92 calibrado com 17 pares reais)
+Startups V2 + V3 + V4 completo (campos estruturados + classificacao de maturidade em IA + dedup por nome/dominio com rapidfuzz limiar 92 + auditoria por campo: field_confidence {founders,sector,description,funding_stage,customers} + field_evidence_ids por evidencias de suporte; migration d2e8f1a5c9b3)
 RAG V4 (busca hibrida + reranking)
 NVIDIA Knowledge V1
 NVIDIA Knowledge V2 foundation + source registry + P0+P1+P2 complete (20/20 sources processed, 17/20 with retrievable content)
@@ -47,8 +47,7 @@ Auth (completamente fora de escopo, projeto e' demo/case — ver decisoes_penden
 Production observability (foundation exists: shared/logging + shared/
 observability + Langfuse self-hosted via infra/docker-compose.yml,
 mas sem metricas/alertas/retencao de producao)
-Startups V4 - confianca/auditoria por campo extraido (dedup ja entregue
-em 25/06/2026; slice restante continua futuro)
+Startups V4 - COMPLETO em 27/06/2026 (dedup + auditoria por campo)
 Ragas context_recall pos-BM25 (baseline 0.67 pre-troca; medir custo
 real via RUN_RAGAS_EVAL=1 fica para quando o usuario decidir rodar)
 ```
@@ -56,7 +55,7 @@ real via RUN_RAGAS_EVAL=1 fica para quando o usuario decidir rodar)
 Recent validation:
 
 ```txt
-642 testes coletados via --collect-only (reconferido em 2026-06-27 pos-Briefing V5/golden set);
+644 testes coletados via --collect-only (reconferido em 2026-06-27 pos-Startups V4 completo);
 com infra viva (Postgres/Redis/Qdrant), 559 passed, 1 skipped — o skip
 e o teste Ragas opt-in (RUN_RAGAS_EVAL=1).
 Frontend (Vitest): 32 passed (8 arquivos de teste, 2026-06-27).
@@ -972,7 +971,7 @@ Testes (estado atual, todas as extensoes acima incluidas): 64 unit + 5 integraca
 | V1 | Entregue | Modelo relacional basico (`Startup`, `StartupEvidence`) |
 | V2 | Entregue (slice inicial) | Campos estruturados (founders/funding/customers) |
 | V3 | Entregue (slice inicial) | Classificacao de maturidade em IA |
-| V4 | Entregue (slice inicial, 25/06/2026) | Dedup por nome/dominio (`rapidfuzz`); confianca/auditoria por campo extraido continua futuro |
+| V4 | Entregue (completo, 27/06/2026) | Dedup por nome/dominio (`rapidfuzz`, limiar 92) + auditoria por campo: `field_confidence`/`field_evidence_ids` em `Startup` para campos basicos; migration `d2e8f1a5c9b3` |
 | V5 | Entregue (27/06/2026, passo 2 do Briefing V4) | `StartupAIProfile` estruturado: 7 enums de dimensao de IA + `current_tools`/`business_goal`/`scale_signal` + `field_confidence`/`field_evidence_ids` por campo; JSONB em `startups`; extraction adapter atualizado; `StartupAIProfileView` no DTO e `StartupAIProfileResponse` no schema REST |
 
 **Versao atual: V5 (passo 2 do Briefing V4)**
@@ -1071,6 +1070,39 @@ reais antes de implementar, nao escolhido no escuro):
   mesmo dominio com nome levemente diferente devolve o mesmo id; empresa
   genuinamente diferente cria registro novo
 - `requirements.txt` ganhou `rapidfuzz>=3.0,<4`
+
+Extensao feita em 27/06/2026 (completa o V4 — auditoria por campo extraido,
+slice restante que continuava futuro desde a entrega de dedup):
+- `Startup` entity ganha `field_confidence: dict[str, float]` e
+  `field_evidence_ids: dict[str, list[str]]` com `field(default_factory=dict)`;
+  metodo novo `update_field_audit(field_confidence, field_evidence_ids)` segue
+  o mesmo padrao de `update_ai_profile()` — atualiza o campo e `updated_at`
+- `StartupModel` (`infrastructure/database/models/`) ganha 2 colunas JSONB:
+  `field_confidence NOT NULL DEFAULT '{}'` e `field_evidence_ids NOT NULL DEFAULT
+  '{}'`; migration `d2e8f1a5c9b3`
+- `StartupMapper` atualizado nos 3 metodos (`to_model`, `to_entity`, `update_model`)
+- Prompt do Gemini Extractor atualizado: `field_confidence` passa a incluir
+  tanto campos basicos (founders, sector, description, funding_stage,
+  funding_amount_usd, customers) quanto campos de perfil de IA (ai_workload_type
+  etc.) — antes pedia so os de perfil de IA
+- `AgentsExtractor` separa o dict de confianca por dominio: chaves de campos
+  basicos (`_MAIN_FIELD_NAMES`) vao para `ExtractionOutcome.field_confidence`
+  (novo campo); chaves de perfil de IA vao para `StartupAIProfile.field_confidence`
+  (comportamento existente preservado)
+- `ExtractionOutcome` (ports.py) ganha `field_confidence: dict[str, float]`
+- `ExtractStartupProfile.execute()` constroi `field_evidence_ids` a partir
+  dos IDs de todas as evidencias disponiveis no momento da extracao: cada
+  campo nao-vazio/nao-unknown recebe a lista completa de IDs; campos sem valor
+  extraido nao aparecem no dict. Chama `startup.update_field_audit(...)` depois
+  de `update_ai_profile()`, antes de `save()`
+- `StartupView` DTO, `StartupResponse` schema e `to_startup_view()` expõem
+  os dois campos novos; frontend `radar-types.ts` ganha `field_confidence:
+  Record<string, number>` e `field_evidence_ids: Record<string, string[]>`
+  no tipo `Startup`
+- Testes: 72 -> 74 (startups; +2 entity: update_field_audit + defaults
+  vazios; +3 use case: persiste field_confidence, popula field_evidence_ids
+  so para campos extraidos, ausente quando campo nao extraido) — total
+  backend: 642 -> 644
 
 ---
 
@@ -1946,8 +1978,9 @@ Extensao feita em 27/06/2026 (continua V5 — complemento visual do Briefing V4)
 | `a3c7f9e2b4d8` | 2026-06-27 | Adiciona `signal_origins` e `missing_signals` em `recommendations` (Briefing V4, passo 1) |
 | `b4c8e2f1a9d7` | 2026-06-27 | Adiciona coluna `ai_profile` JSONB em `startups` (Briefing V4, passo 2) |
 | `c5d9a3e7b2f1` | 2026-06-27 | Adiciona `nivel` e `faltando` em `recommendations` (Briefing V4, passo 5 — matriz de decisao por nivel) |
+| `d2e8f1a5c9b3` | 2026-06-27 | Adiciona `field_confidence` e `field_evidence_ids` JSONB em `startups` (Startups V4 — auditoria por campo extraido) |
 
-**Head atual: `c5d9a3e7b2f1`**
+**Head atual: `d2e8f1a5c9b3`**
 
 ### Tabelas existentes
 
@@ -1985,7 +2018,7 @@ startup_discovery_runs  rodada de descoberta automatica de startups em hubs publ
 | agents | 106 (unit + integracao) | 2026-06-27 |
 | ingestion | 38 (unit + integracao) | 2026-06-27 |
 | embeddings | 69 (unit + integracao) | 2026-06-27 |
-| startups | 72 (unit + integracao) | 2026-06-27 |
+| startups | 74 (unit + integracao) | 2026-06-27 |
 | rag | 21 (unit + integracao) | 2026-06-27 |
 | nvidia_knowledge | 15 unit | 2026-06-27 |
 | recommendations | 88 (unit + integracao) | 2026-06-27 |
@@ -1993,13 +2026,13 @@ startup_discovery_runs  rodada de descoberta automatica de startups em hubs publ
 | orchestration | 41 (unit + integracao) | 2026-06-27 |
 | startup_discovery | 8 unit | 2026-06-27 |
 | shared | 10 unit (logging + observability) | 2026-06-27 |
-| **Total backend** | **642 testes coletados** | **2026-06-27** |
+| **Total backend** | **644 testes coletados** | **2026-06-27** |
 | **Frontend (`apps/web`, Vitest)** | **32 testes** | **2026-06-27** |
 
 Nota: numeros desta tabela vem de `pytest --collect-only -q` por modulo
 (nao exige Postgres/Redis/Qdrant vivos, so confirma quantos testes existem
 no codigo). Reconferido direto por modulo em 2026-06-27 via --collect-only:
-soma das linhas backend confere com os 642 coletados.
+soma das linhas backend confere com os 644 coletados.
 Com infra viva (Postgres/Redis/Qdrant): **559 passed, 1 skipped** (o skip
 e o teste Ragas opt-in, `RUN_RAGAS_EVAL=1` nao definido).
 Frontend (`npx vitest run` em `apps/web/`): **32 passed** (reconferido 2026-06-27).
@@ -2198,7 +2231,7 @@ pytest -k "test_acceptance_policy_rejects_captcha" -v
 # Run DB migrations
 alembic upgrade head
 
-# Current migration head: c5d9a3e7b2f1 (nivel/faltando on recommendations, Briefing V4 step 5)
+# Current migration head: d2e8f1a5c9b3 (field_confidence/field_evidence_ids on startups, Startups V4 complete)
 ```
 
 ---

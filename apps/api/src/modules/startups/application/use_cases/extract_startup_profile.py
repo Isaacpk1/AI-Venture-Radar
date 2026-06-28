@@ -89,6 +89,28 @@ class ExtractStartupProfile(ExtractionTrigger):
             )
             if outcome.ai_profile is not None:
                 startup.update_ai_profile(outcome.ai_profile)
+
+            # Registra auditoria por campo: confianca do LLM + IDs das
+            # evidencias que serviram de base para cada campo extraido.
+            all_evidence_ids = [str(ev.id) for ev in evidences]
+            field_evidence_ids: dict[str, list[str]] = {}
+            if outcome.founders:
+                field_evidence_ids["founders"] = all_evidence_ids
+            if outcome.funding_stage and outcome.funding_stage.value != "unknown":
+                field_evidence_ids["funding_stage"] = all_evidence_ids
+            if outcome.funding_amount_usd is not None:
+                field_evidence_ids["funding_amount_usd"] = all_evidence_ids
+            if outcome.customers:
+                field_evidence_ids["customers"] = all_evidence_ids
+            if outcome.sector is not None:
+                field_evidence_ids["sector"] = all_evidence_ids
+            if outcome.description is not None:
+                field_evidence_ids["description"] = all_evidence_ids
+            startup.update_field_audit(
+                field_confidence=outcome.field_confidence,
+                field_evidence_ids=field_evidence_ids,
+            )
+
             await uow.startup_repository.save(startup)
             await uow.commit()
 

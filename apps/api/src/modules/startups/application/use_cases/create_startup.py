@@ -99,4 +99,6 @@ def to_startup_view(startup: Startup) -> StartupView:
         created_at=startup.created_at,
         updated_at=startup.updated_at,
         ai_profile=ai_profile_view,
+        field_confidence=dict(startup.field_confidence),
+        field_evidence_ids=dict(startup.field_evidence_ids),
     )

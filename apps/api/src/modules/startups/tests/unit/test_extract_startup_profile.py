@@ -231,3 +231,74 @@ async def test_try_extract_is_noop_when_extractor_unavailable() -> None:
     await use_case.try_extract(startup.id)
 
     assert uow.startup_repository.items[startup.id].founders == ()
+
+
+@pytest.mark.anyio
+async def test_extract_startup_profile_persists_main_field_confidence() -> None:
+    """Confianca por campo basico reportada pelo LLM e salva na startup."""
+
+    uow = _make_uow()
+    startup = Startup(name="Acme AI")
+    await uow.startup_repository.save(startup)
+    evidence = StartupEvidence(
+        startup_id=startup.id,
+        scraping_result_id=uuid4(),
+        source_url="https://acme.ai",
+        title="Acme AI",
+        notes="Founded by Ana Silva.",
+    )
+    await uow.evidence_repository.save(evidence)
+
+    outcome = ExtractionOutcome(
+        founders=["Ana Silva"],
+        sector="AI Infrastructure",
+        field_confidence={"founders": 0.9, "sector": 0.75},
+    )
+    extractor = FakeExtractionPort(outcome)
+
+    use_case = ExtractStartupProfile(lambda: uow, extractor)
+    await use_case.execute(ExtractStartupProfileInput(startup_id=startup.id))
+
+    saved = uow.startup_repository.items[startup.id]
+    assert saved.field_confidence["founders"] == 0.9
+    assert saved.field_confidence["sector"] == 0.75
+
+
+@pytest.mark.anyio
+async def test_extract_startup_profile_populates_field_evidence_ids_for_extracted_fields() -> None:
+    """IDs das evidencias disponiveis sao gravados para cada campo extraido."""
+
+    uow = _make_uow()
+    startup = Startup(name="Acme AI")
+    await uow.startup_repository.save(startup)
+    ev1 = StartupEvidence(
+        startup_id=startup.id,
+        scraping_result_id=uuid4(),
+        source_url="https://acme.ai",
+        title="Acme AI",
+        notes="Founded by Ana Silva.",
+    )
+    ev2 = StartupEvidence(
+        startup_id=startup.id,
+        scraping_result_id=uuid4(),
+        source_url="https://acme.ai/customers",
+        title="Customers",
+        notes="Customer: Empresa X.",
+    )
+    await uow.evidence_repository.save(ev1)
+    await uow.evidence_repository.save(ev2)
+
+    outcome = ExtractionOutcome(
+        founders=["Ana Silva"],
+        customers=["Empresa X"],
+    )
+    extractor = FakeExtractionPort(outcome)
+
+    use_case = ExtractStartupProfile(lambda: uow, extractor)
+    await use_case.execute(ExtractStartupProfileInput(startup_id=startup.id))
+
+    saved = uow.startup_repository.items[startup.id]
+    all_ids = {str(ev1.id), str(ev2.id)}
+    assert set(saved.field_evidence_ids["founders"]) == all_ids
+    assert set(saved.field_evidence_ids["customers"]) == all_ids
+    assert "sector" not in saved.field_evidence_ids

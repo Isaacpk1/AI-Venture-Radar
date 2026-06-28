@@ -91,6 +91,8 @@ class StartupMapper:
                 if entity.ai_profile is not None
                 else None
             ),
+            field_confidence=dict(entity.field_confidence),
+            field_evidence_ids=dict(entity.field_evidence_ids),
             created_at=entity.created_at,
             updated_at=entity.updated_at,
         )
@@ -124,6 +126,8 @@ class StartupMapper:
                 if model.ai_profile is not None
                 else None
             ),
+            field_confidence=dict(model.field_confidence or {}),
+            field_evidence_ids=dict(model.field_evidence_ids or {}),
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -153,4 +157,6 @@ class StartupMapper:
             if entity.ai_profile is not None
             else None
         )
+        model.field_confidence = dict(entity.field_confidence)
+        model.field_evidence_ids = dict(entity.field_evidence_ids)
         model.updated_at = entity.updated_at

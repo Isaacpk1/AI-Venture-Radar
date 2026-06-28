@@ -48,6 +48,11 @@ def _safe_enum(enum_cls, value: str, default):
         return default
 
 
+_MAIN_FIELD_NAMES = frozenset(
+    {"founders", "funding_stage", "funding_amount_usd", "customers", "sector", "description"}
+)
+
+
 class AgentsExtractor(ExtractionPort):
     """Implementa ``ExtractionPort`` chamando o modulo agents."""
 
@@ -78,6 +83,12 @@ class AgentsExtractor(ExtractionPort):
         # de tipo.
         funding_stage = FundingStage(r.funding_stage.value)
 
+        # Separa confianca por dominio: chaves de campos basicos ficam em
+        # ExtractionOutcome.field_confidence; chaves de perfil de IA ficam
+        # em StartupAIProfile.field_confidence.
+        main_confidence = {k: v for k, v in r.field_confidence.items() if k in _MAIN_FIELD_NAMES}
+        ai_profile_confidence = {k: v for k, v in r.field_confidence.items() if k not in _MAIN_FIELD_NAMES}
+
         ai_profile = StartupAIProfile(
             ai_workload_type=_safe_enum(AiWorkloadType, r.ai_workload_type, AiWorkloadType.UNKNOWN),
             model_type=_safe_enum(AiModelType, r.model_type, AiModelType.UNKNOWN),
@@ -89,7 +100,7 @@ class AgentsExtractor(ExtractionPort):
             scale_signal=r.scale_signal,
             current_tools=tuple(r.current_tools),
             business_goal=r.business_goal,
-            field_confidence=r.field_confidence,
+            field_confidence=ai_profile_confidence,
             field_evidence_ids=r.field_evidence_ids,
             extracted_at=datetime.now(UTC),
         )
@@ -102,4 +113,5 @@ class AgentsExtractor(ExtractionPort):
             sector=r.sector,
             description=r.description,
             ai_profile=ai_profile,
+            field_confidence=main_confidence,
         )
