@@ -22,6 +22,7 @@ NVIDIA Knowledge V1
 NVIDIA Knowledge V2 foundation + source registry + P0+P1+P2 complete (20/20 sources processed, 17/20 with retrievable content)
 Recommendations V1 + V2 (RAG grounding via NVIDIA Knowledge, com fallback deterministico) + V3 (confidence por qualidade de evidencia + complexity por tecnologia + priority ordinal por posicao; migration d7e3f1a2b9c4) + V4 (signal_origins + missing_signals; migration a3c7f9e2b4d8) + V5 (score composto 5 dimensoes + nova confianca 5 fatores + StartupAIContext + NvidiaSemanticCandidateSelector; passo 4 Briefing V4: retrieval semantico pre-filtra candidatos via nvidia_knowledge antes do keyword matching) + nivel/faltando por recomendacao (migration c5d9a3e7b2f1)
 Briefing V1 (+ extensao de RAG grounding) + V3 (exportacao em PDF) + V4 (briefing analitico: tese de fit, nivel de confianca geral, o que foi/nao foi encontrado, matriz de recomendacoes, fortes vs exploratorias, perguntas de qualificacao)
+Briefing V5 (27/06/2026) — golden set de 6 arquétipos de referencia com asserções de precisão: test_golden_set.py em recommendations/tests/unit/; métricas: média p@3 = 0.78 (piso 0.50), 10/10 testes passando; baseline gravado para detectar regressoes no motor de recomendacao
 Orchestration V1 + V2 completa (URL bruta -> scraping -> ingestion -> embeddings -> startup -> evidencia -> extract -> classify -> recommendations -> briefing, sem operacao manual entre etapas) + orchestration_worker automatico (+ extensao de historico paginado de jobs + limpeza de vetores orfaos no Qdrant quando URL e' re-raspada)
 Frontend V1 + V2 + V3 completa (jornada URL->job->resultado, portfolio paginado, historico global de jobs, badge de fit, evidencia clicavel por recomendacao, chatbot sobre NVIDIA Knowledge, export de briefing em PDF)
 Frontend V4 (dashboard /dashboard: graficos SVG de distribuicao por maturidade + top tecnologias NVIDIA, comparacao lado a lado de ate 3 startups, fila de analise em lote com resultados linkados; GET /startups/stats + GET /recommendations/stats novos no backend)
@@ -55,7 +56,7 @@ real via RUN_RAGAS_EVAL=1 fica para quando o usuario decidir rodar)
 Recent validation:
 
 ```txt
-632 testes coletados via --collect-only (reconferido em 2026-06-27 pos-Briefing V4);
+642 testes coletados via --collect-only (reconferido em 2026-06-27 pos-Briefing V5/golden set);
 com infra viva (Postgres/Redis/Qdrant), 559 passed, 1 skipped — o skip
 e o teste Ragas opt-in (RUN_RAGAS_EVAL=1).
 Frontend (Vitest): 32 passed (8 arquivos de teste, 2026-06-27).
@@ -1394,10 +1395,10 @@ O que a V3 entregou (25/06/2026 — scoring mais granular para o caso/demo):
 | V2 | Futuro (agente entregue em Agents V12) | Briefing gerado por agente |
 | V3 | Entregue (24/06/2026) | Exportacao em PDF preservando citacoes |
 | V4 | Entregue (27/06/2026) | Briefing analitico: tese de fit, nivel de confianca geral, o que foi/nao foi encontrado, matriz de recomendacoes, fortes vs exploratorias, perguntas de qualificacao |
-| V5 | Futuro | Golden set + metricas (precision@3, taxa de falsos positivos) + ranking de oportunidades |
+| V5 | Entregue (27/06/2026) | Golden set + metricas: 6 arquétipos de referencia, test_golden_set.py em recommendations/tests/unit/, media p@3 = 0.78, 10/10 testes passando |
 | V6 | Futuro | Robustez operacional: versionamento, auditoria, reprocessamento por etapa |
 
-**Versao atual: V4**
+**Versao atual: V5 — golden set e metricas**
 
 O que a V1 entregou:
 - `Briefing` (`domain/entities.py`) — `startup_id`, `content` (Markdown), `generated_at`
@@ -1508,6 +1509,24 @@ plano em `docs/briefing/roadmap.md`):
 - Testes: 36 unit + integracao (briefing); 78 unit + integracao (recommendations)
 - Documento: `docs/briefing/briefing_v4_briefing_analitico.md`; roadmap completo em
   `docs/briefing/roadmap.md`
+
+O que a V5 entregou (27/06/2026 — golden set de métricas):
+- `test_golden_set.py` (`recommendations/tests/unit/`) — 6 arquétipos de startups de
+  referencia com perfil completo (`sector`, `description`, `ai_context`, `evidence_signals`)
+  e assercoes de qualidade executadas contra o catalogo completo de 18 tecnologias NVIDIA
+- Métricas baseline registradas: média p@3 = 0.78 (piso assertado: 0.50); 10/10 testes
+  passando; nenhum falso positivo para tecnologias claramente fora do perfil
+- Arquétipos cobertos: LLM inference (AI-native, nlp, production) → NIM/Triton/TensorRT-LLM;
+  API-only SaaS (AI-enabled, mvp) → nenhuma recomendação forte; SaaS sem IA (non_ai) →
+  nenhuma tech NVIDIA; Computer vision (AI-native, vision, pilot) → TensorRT/Triton; Tabular
+  analytics (AI-enabled, analytics) → RAPIDS/cuDF/cuML; Enterprise MLOps (AI-native, mlops,
+  scale) → AI Enterprise/Triton/NeMo
+- Helper `_precision_at_k()`, `_false_positive_slugs()`, `_slug_rank()` para futuras
+  asserções de regressão; teste consolidado `test_golden_set_overall_metrics` exibe
+  relatório completo com `capsys` (não falha — é observabilidade)
+- Catalogo inline no arquivo de teste (valores reais de `catalog_data.py` copiados):
+  se o catálogo mudar, os testes de golden set detectam a divergência automaticamente
+- Testes: 88 unit + integracao em recommendations (78 → 88, +10 do golden set)
 
 ---
 
@@ -1870,6 +1889,28 @@ O que a V5 entregou (26/06/2026 — revisao humana de recommendations e briefing
 - Testes frontend: 30 -> 32 (+2: `startup-details.test.tsx` ganha "registra revisao de
   recomendacao ao clicar em aprovar"; `startup-portfolio.test.tsx` novo, 2 testes)
 
+Extensao feita em 27/06/2026 (continua V5 — complemento visual do Briefing V4):
+- `StartupAIProfile` (tipo novo em `radar-types.ts`) — espelha `StartupAIProfileResponse`
+  do backend (10 campos: `ai_workload_type`, `model_type`, `data_modality`,
+  `deployment_stage`, `infra_environment`, `gpu_need`, `latency_requirement`,
+  `scale_signal`, `current_tools`, `business_goal`); `Startup.ai_profile:
+  StartupAIProfile | null` adicionado ao tipo existente
+- `AIProfileSection` (componente interno de `startup-details.tsx`) — renderizado
+  dentro do card de perfil quando `startup.ai_profile != null`; lista os campos
+  conhecidos (filtra `"unknown"`) num grid, `current_tools` como chips, `business_goal`
+  em coluna dupla; secao inteira omitida quando todos os campos sao desconhecidos
+- `signal_origins` exibido no `RecommendationCard` como linha "Sinais: ..." logo
+  apos o box de `faltando` — campo ja existia no tipo mas nao era renderizado
+- Recomendacoes agrupadas visualmente em 2 secoes dentro do painel "Recomendacoes
+  NVIDIA": **"Recomendacoes Fortes"** (`nivel === "forte"`, cabecalho verde, sempre
+  visivel — mostra mensagem de ausencia quando vazio) e **"Hipoteses Exploratorias"**
+  (`nivel !== "forte"`, cabecalho muted, secao omitida quando vazia)
+- Fixtures de testes atualizados: `baseStartup()` ganha `ai_profile: null`;
+  `baseRecommendation()` ganha `signal_origins: []`, `missing_signals: []`,
+  `nivel: "exploratoria"`, `faltando: []`; fixture inline de `startup-portfolio.test.tsx`
+  ganha `ai_profile: null`
+- Testes: 32 passed (sem mudanca de contagem — so fixtures atualizados)
+
 ---
 
 ## Database state
@@ -1947,18 +1988,18 @@ startup_discovery_runs  rodada de descoberta automatica de startups em hubs publ
 | startups | 72 (unit + integracao) | 2026-06-27 |
 | rag | 21 (unit + integracao) | 2026-06-27 |
 | nvidia_knowledge | 15 unit | 2026-06-27 |
-| recommendations | 78 (unit + integracao) | 2026-06-27 |
+| recommendations | 88 (unit + integracao) | 2026-06-27 |
 | briefing | 36 (unit + integracao) | 2026-06-27 |
 | orchestration | 41 (unit + integracao) | 2026-06-27 |
 | startup_discovery | 8 unit | 2026-06-27 |
 | shared | 10 unit (logging + observability) | 2026-06-27 |
-| **Total backend** | **632 testes coletados** | **2026-06-27** |
+| **Total backend** | **642 testes coletados** | **2026-06-27** |
 | **Frontend (`apps/web`, Vitest)** | **32 testes** | **2026-06-27** |
 
 Nota: numeros desta tabela vem de `pytest --collect-only -q` por modulo
 (nao exige Postgres/Redis/Qdrant vivos, so confirma quantos testes existem
 no codigo). Reconferido direto por modulo em 2026-06-27 via --collect-only:
-soma das linhas backend confere com os 632 coletados.
+soma das linhas backend confere com os 642 coletados.
 Com infra viva (Postgres/Redis/Qdrant): **559 passed, 1 skipped** (o skip
 e o teste Ragas opt-in, `RUN_RAGAS_EVAL=1` nao definido).
 Frontend (`npx vitest run` em `apps/web/`): **32 passed** (reconferido 2026-06-27).
@@ -2252,7 +2293,8 @@ All logs must include relevant correlation IDs from: `request_id`, `job_id`, `st
 | Recommendations roadmap | `docs/recommendations/roadmap_recommendations.md` |
 | Briefing V1 | `docs/briefing/briefing_v1_template_executivo.md` |
 | Briefing V3 export PDF | `docs/briefing/briefing_v3_export_pdf.md` |
-| Briefing V4 briefing analitico (current) | `docs/briefing/briefing_v4_briefing_analitico.md` |
+| Briefing V4 briefing analitico | `docs/briefing/briefing_v4_briefing_analitico.md` |
+| Briefing V5 golden set (current) | `apps/api/src/modules/recommendations/tests/unit/test_golden_set.py` |
 | Briefing roadmap | `docs/briefing/roadmap.md` |
 | Orchestration V1 (current) | `docs/orchestration/orchestration_v1_analysis_jobs.md` |
 | Orchestration V2 URL ingestion jobs | `docs/orchestration/orchestration_v2_url_ingestion_jobs.md` |
