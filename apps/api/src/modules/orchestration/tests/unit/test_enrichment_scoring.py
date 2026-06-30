@@ -95,6 +95,17 @@ def test_subdomain_of_source_returns_50() -> None:
     assert score("https://blog.acme.com.br/team") == 50
 
 
+def test_same_domain_with_ai_signal_gets_boost() -> None:
+    assert (
+        score(
+            "https://acme.com.br/ai",
+            title="Acme AI product",
+            snippet="Artificial intelligence for operations.",
+        )
+        == 70
+    )
+
+
 # --- Startup name no titulo ou snippet ---
 
 def test_startup_name_in_title_returns_60() -> None:
@@ -104,8 +115,18 @@ def test_startup_name_in_title_returns_60() -> None:
 def test_startup_name_in_snippet_returns_60() -> None:
     assert score(
         "https://news.ycombinator.com/item?id=123",
-        snippet="Acme Startup just launched a new AI product.",
+        snippet="Acme Startup just launched a new product.",
     ) == 60
+
+
+def test_startup_name_with_ai_signal_gets_boost() -> None:
+    assert (
+        score(
+            "https://techcrunch.com/2025/01/acme-ai",
+            title="Acme Startup launches generative AI product",
+        )
+        == 80
+    )
 
 
 # --- Desconhecido sem nome da startup ---

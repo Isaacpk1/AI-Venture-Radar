@@ -204,7 +204,6 @@ Para entender o projeto rapidamente, leia nesta ordem:
 
 ## Observacoes de desenvolvimento
 
-- `CLAUDE.md` e `.claude/` sao arquivos locais de assistente e nao fazem parte da documentacao publica do projeto.
 - Arquivos `.env` nao devem ser versionados.
 - O Docker Compose atual cobre dependencias de infraestrutura; API, workers e frontend rodam localmente em processos separados.
 - A dockerizacao completa da aplicacao e hardening de producao aparecem como evolucao futura.

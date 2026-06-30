@@ -71,6 +71,7 @@ class StartupProfileSnapshot:
     funding_stage: str | None
     customers: list[str]
     evidence_urls: list[str]
+    ai_workload_type: str = "unknown"
 
 
 class IngestionPort(ABC):

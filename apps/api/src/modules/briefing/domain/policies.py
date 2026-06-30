@@ -111,7 +111,9 @@ def suggest_next_actions(recommendations: list[RecommendationItem]) -> list[str]
 
 
 def _recommendation_strength(recommendation: RecommendationItem) -> str:
-    if recommendation.nivel in {"forte", "moderada", "exploratoria"}:
+    if recommendation.nivel in {
+        "forte", "moderada", "exploratoria", "hipotese_prioritaria"
+    }:
         return recommendation.nivel
     if recommendation.score >= 0.65 and recommendation.confidence >= 0.65:
         return "forte"
@@ -276,8 +278,13 @@ def build_briefing_markdown(
     strong_recommendations = [
         r for r in recommendations if _recommendation_strength(r) == "forte"
     ]
+    hipotese_recommendations = [
+        r for r in recommendations
+        if _recommendation_strength(r) == "hipotese_prioritaria"
+    ]
     exploratory_recommendations = [
-        r for r in recommendations if _recommendation_strength(r) != "forte"
+        r for r in recommendations
+        if _recommendation_strength(r) not in {"forte", "hipotese_prioritaria"}
     ]
 
     lines = [f"# Briefing Executivo - {startup.name}", "", "## Resumo Executivo"]
@@ -292,10 +299,16 @@ def build_briefing_markdown(
 
     lines += ["", "## Tese de Fit NVIDIA"]
     lines.append(_best_recommendation_summary(recommendations))
-    if recommendations and _recommendation_strength(recommendations[0]) == "exploratoria":
+    top_strength = _recommendation_strength(recommendations[0]) if recommendations else None
+    if top_strength == "exploratoria":
         lines.append(
             "A recomendacao deve ser tratada como hipotese de qualificacao, "
             "nao como indicacao tecnica fechada."
+        )
+    elif top_strength == "hipotese_prioritaria":
+        lines.append(
+            "Fit relevante identificado mas evidencias insuficientes — "
+            "priorizar coleta de dados antes de proposta tecnica."
         )
 
     lines += ["", "## Nivel de Confianca Geral"]
@@ -336,7 +349,7 @@ def build_briefing_markdown(
     else:
         lines.append("- Nenhuma recomendacao gerada ainda.")
 
-    lines += ["", "## Recomendacoes Fortes"]
+    lines += ["", "## Recomendacoes Acionaveis"]
     if strong_recommendations:
         for recommendation in strong_recommendations:
             origins = (
@@ -351,20 +364,34 @@ def build_briefing_markdown(
     else:
         lines.append("- Nenhuma recomendacao forte com as evidencias atuais.")
 
-    lines += ["", "## Hipoteses Exploratorias"]
+    lines += ["", "## Hipoteses a Qualificar"]
+    if hipotese_recommendations:
+        for recommendation in hipotese_recommendations:
+            faltando = (
+                "; ".join(recommendation.faltando)
+                or "evidencias concretas sobre uso e maturidade da tecnologia"
+            )
+            lines.append(
+                f"- **{recommendation.technology_name}** (hipotese prioritaria — "
+                f"fit relevante, evidencias insuficientes): "
+                f"{recommendation.justification} Para confirmar: {faltando}."
+            )
+    else:
+        lines.append("- Nenhuma hipotese prioritaria identificada.")
+
+    lines += ["", "## O Que Coletar"]
     if exploratory_recommendations:
         for recommendation in exploratory_recommendations:
-            strength = _recommendation_strength(recommendation)
             faltando = (
                 "; ".join(recommendation.faltando)
                 or "mais evidencias sobre o workload e maturidade tecnica"
             )
             lines.append(
-                f"- **{recommendation.technology_name}** ({strength}): "
-                f"{recommendation.justification} Para elevar o nivel: {faltando}."
+                f"- **{recommendation.technology_name}**: "
+                f"Para elevar ao nivel de hipotese: {faltando}."
             )
     else:
-        lines.append("- Nenhuma hipotese exploratoria separada das recomendacoes fortes.")
+        lines.append("- Nenhuma recomendacao exploratoria adicional.")
 
     if nvidia_context:
         lines += ["", "## Contexto NVIDIA", nvidia_context]

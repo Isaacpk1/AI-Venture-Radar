@@ -17,6 +17,8 @@ class DiscoveryRunMapper:
             hubs_processed=run.hubs_processed,
             urls_found=run.urls_found,
             jobs_submitted=run.jobs_submitted,
+            candidates_discovered=run.candidates_discovered,
+            candidates_enriched=run.candidates_enriched,
             error_message=run.error_message,
             created_at=run.created_at,
             completed_at=run.completed_at,
@@ -28,6 +30,8 @@ class DiscoveryRunMapper:
         model.hubs_processed = run.hubs_processed
         model.urls_found = run.urls_found
         model.jobs_submitted = run.jobs_submitted
+        model.candidates_discovered = run.candidates_discovered
+        model.candidates_enriched = run.candidates_enriched
         model.error_message = run.error_message
         model.completed_at = run.completed_at
 
@@ -39,6 +43,8 @@ class DiscoveryRunMapper:
             hubs_processed=model.hubs_processed,
             urls_found=model.urls_found,
             jobs_submitted=model.jobs_submitted,
+            candidates_discovered=getattr(model, "candidates_discovered", 0),
+            candidates_enriched=getattr(model, "candidates_enriched", 0),
             error_message=model.error_message,
             created_at=model.created_at,
             completed_at=model.completed_at,

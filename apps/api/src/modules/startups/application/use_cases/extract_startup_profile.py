@@ -1,5 +1,7 @@
 """Caso de uso para extrair dados estruturados de uma startup."""
 
+import asyncio
+from dataclasses import replace
 from uuid import UUID
 
 from apps.api.src.modules.startups.application.dto import (
@@ -16,10 +18,56 @@ from apps.api.src.modules.startups.application.unit_of_work import (
 from apps.api.src.modules.startups.application.use_cases.create_startup import (
     to_startup_view,
 )
+from apps.api.src.modules.startups.domain.entities import StartupAIProfile
 from apps.api.src.modules.startups.domain.exceptions import (
     StartupExtractionUnavailableError,
     StartupNotFoundError,
 )
+from apps.api.src.shared.logging import get_logger
+
+
+logger = get_logger(__name__)
+TRY_EXTRACT_TIMEOUT_SECONDS = 45
+_AI_PROFILE_FIELD_NAMES = frozenset(
+    {
+        "ai_workload_type",
+        "model_type",
+        "data_modality",
+        "deployment_stage",
+        "infra_environment",
+        "gpu_need",
+        "latency_requirement",
+        "scale_signal",
+        "current_tools",
+        "business_goal",
+    }
+)
+
+
+def _profile_with_evidence_audit(
+    profile: StartupAIProfile,
+    *,
+    all_evidence_ids: list[str],
+) -> StartupAIProfile:
+    if not all_evidence_ids:
+        return profile
+
+    field_evidence_ids = dict(profile.field_evidence_ids)
+    for field_name in profile.field_confidence:
+        if field_name not in _AI_PROFILE_FIELD_NAMES:
+            continue
+        if field_name in field_evidence_ids:
+            continue
+        value = getattr(profile, field_name, None)
+        if value is None or value == ():
+            continue
+        if getattr(value, "value", value) == "unknown":
+            continue
+        field_evidence_ids[field_name] = all_evidence_ids
+
+    if field_evidence_ids == profile.field_evidence_ids:
+        return profile
+    return replace(profile, field_evidence_ids=field_evidence_ids)
 
 
 class ExtractStartupProfile(ExtractionTrigger):
@@ -44,8 +92,17 @@ class ExtractStartupProfile(ExtractionTrigger):
 
     async def try_extract(self, startup_id: UUID) -> None:
         try:
-            await self.execute(ExtractStartupProfileInput(startup_id=startup_id))
+            await asyncio.wait_for(
+                self.execute(ExtractStartupProfileInput(startup_id=startup_id)),
+                timeout=TRY_EXTRACT_TIMEOUT_SECONDS,
+            )
         except StartupExtractionUnavailableError:
+            return
+        except Exception as error:
+            logger.warning(
+                "startup extraction skipped after best-effort failure",
+                extra={"startup_id": str(startup_id), "reason": str(error)},
+            )
             return
 
     async def execute(
@@ -69,7 +126,10 @@ class ExtractStartupProfile(ExtractionTrigger):
             )
 
             evidence_texts = [
-                f"{evidence.title or ''} {evidence.notes or ''}".strip()
+                (
+                    f"[evidence_id={evidence.id}] "
+                    f"{evidence.title or ''} {evidence.notes or ''}"
+                ).strip()
                 for evidence in evidences
             ]
             outcome = await self._extractor.extract(
@@ -79,6 +139,7 @@ class ExtractStartupProfile(ExtractionTrigger):
                 evidence_texts=[text for text in evidence_texts if text],
             )
 
+            all_evidence_ids = [str(ev.id) for ev in evidences]
             startup.update(
                 founders=outcome.founders,
                 funding_stage=outcome.funding_stage,
@@ -88,11 +149,15 @@ class ExtractStartupProfile(ExtractionTrigger):
                 description=outcome.description,
             )
             if outcome.ai_profile is not None:
-                startup.update_ai_profile(outcome.ai_profile)
+                startup.update_ai_profile(
+                    _profile_with_evidence_audit(
+                        outcome.ai_profile,
+                        all_evidence_ids=all_evidence_ids,
+                    )
+                )
 
             # Registra auditoria por campo: confianca do LLM + IDs das
             # evidencias que serviram de base para cada campo extraido.
-            all_evidence_ids = [str(ev.id) for ev in evidences]
             field_evidence_ids: dict[str, list[str]] = {}
             if outcome.founders:
                 field_evidence_ids["founders"] = all_evidence_ids

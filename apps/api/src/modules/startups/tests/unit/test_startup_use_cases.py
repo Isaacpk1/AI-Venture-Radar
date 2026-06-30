@@ -161,6 +161,21 @@ async def test_create_startup_persists_and_returns_view() -> None:
 
 
 @pytest.mark.anyio
+async def test_create_startup_infers_brazil_from_br_domain() -> None:
+    uow = _make_uow()
+    use_case = CreateStartup(lambda: uow)
+
+    view = await use_case.execute(
+        CreateStartupInput(
+            name="Acme Brasil AI",
+            website_url="https://acme.com.br",
+        )
+    )
+
+    assert view.country == "BR"
+
+
+@pytest.mark.anyio
 async def test_create_startup_via_public_contract_returns_id() -> None:
     uow = _make_uow()
     use_case = CreateStartup(lambda: uow)

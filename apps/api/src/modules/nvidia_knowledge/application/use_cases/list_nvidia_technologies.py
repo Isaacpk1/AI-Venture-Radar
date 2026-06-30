@@ -26,6 +26,7 @@ def technology_to_view(technology: NvidiaTechnology) -> NvidiaTechnologyView:
         keywords=list(technology.keywords),
         official_url=technology.official_url,
         complexity=technology.complexity,
+        supported_workloads=dict(technology.supported_workloads),
     )
 
 

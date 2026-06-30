@@ -51,6 +51,8 @@ class EvidenceSnapshot:
     title: str | None
     notes: str | None
     confidence_score: float = 0.5
+    source_url: str | None = None
+    evidence_type: str | None = None
 
 
 @dataclass(frozen=True)

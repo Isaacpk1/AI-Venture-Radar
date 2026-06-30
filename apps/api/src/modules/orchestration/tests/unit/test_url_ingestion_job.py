@@ -255,6 +255,7 @@ class FakeStartupsPort(StartupsPort):
             funding_stage="seed",
             customers=["Contoso"],
             evidence_urls=[],
+            ai_workload_type="nlp",
         )
 
 
@@ -482,10 +483,12 @@ async def test_scraping_rejection_schedules_enrichment_instead_of_stopping_silen
     ]
     assert saved.status is UrlIngestionJobStatus.FAILED
     assert saved.startup_id == startup_id
-    assert startups_port.created == [("kunumi.com", "https://www.kunumi.com/")]
+    assert startups_port.created == [("Kunumi", "https://www.kunumi.com/")]
     assert [item.url for item in enrichment_jobs] == [
+        "https://www.kunumi.com/product",
+        "https://www.kunumi.com/products",
+        "https://www.kunumi.com/solution",
         "https://www.crunchbase.com/organization/kunumi",
-        "https://www.kunumi.com/about",
     ]
     assert dispatcher.dispatched_job_ids == [item.id for item in enrichment_jobs]
 
@@ -687,8 +690,10 @@ async def test_analyzing_schedules_enrichment_jobs_when_profile_is_incomplete() 
         item for item in repository.items.values() if item.parent_job_id == job.id
     ]
     assert [item.url for item in enrichment_jobs] == [
-        "https://acme.example.com/about",
-        "https://acme.example.com/team",
+        "https://acme.example.com/product",
+        "https://acme.example.com/products",
+        "https://acme.example.com/solution",
+        "https://acme.example.com/solutions",
     ]
     assert {item.startup_id for item in enrichment_jobs} == {startup_id}
     assert {item.enrichment_round for item in enrichment_jobs} == {1}
@@ -744,15 +749,21 @@ async def test_analyzing_prefers_external_search_candidates_when_configured() ->
         item for item in repository.items.values() if item.parent_job_id == job.id
     ]
     assert [item.url for item in enrichment_jobs] == [
+        "https://acme.example.com/product",
+        "https://acme.example.com/products",
+        "https://acme.example.com/solution",
         "https://www.linkedin.com/company/acme-ai",
-        "https://news.example.com/acme-seed",
     ]
     assert planner.calls[0]["missing_signals"] == [
         "founders",
         "funding_stage",
         "customers",
+        "ai_profile",
     ]
-    assert executor.calls[0][0] == "acme founders funding customers"
+    assert (
+        executor.calls[0][0]
+        == '"Acme AI" Brasil startup artificial intelligence AI machine learning product'
+    )
 
 
 @pytest.mark.anyio
@@ -800,10 +811,15 @@ async def test_analyzing_uses_deterministic_queries_when_planner_is_empty() -> N
         item for item in repository.items.values() if item.parent_job_id == job.id
     ]
     assert [item.url for item in enrichment_jobs] == [
+        "https://acme.example.com/product",
+        "https://acme.example.com/products",
+        "https://acme.example.com/solution",
         "https://www.crunchbase.com/organization/acme-ai",
-        "https://acme.example.com/about",
     ]
-    assert executor.calls[0][0] == '"Acme AI" founders funding customers'
+    assert (
+        executor.calls[0][0]
+        == '"Acme AI" Brasil startup artificial intelligence AI machine learning product'
+    )
     assert executor.calls[0][2] == 5
 
 
@@ -900,7 +916,7 @@ async def test_analyzing_uses_hostname_when_document_has_no_title() -> None:
     await use_case.execute(job_id=job.id)
 
     assert startups_port.created == [
-        ("acme.example.com", "https://www.acme.example.com/about")
+        ("Example", "https://www.acme.example.com/about")
     ]
 
 

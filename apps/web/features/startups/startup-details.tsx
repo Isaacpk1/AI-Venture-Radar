@@ -50,6 +50,144 @@ function computeFitBadge(startup: Startup, recommendations: Recommendation[], br
   return { label: "Precisa mais evidencia", tone: "needs-evidence" as const };
 }
 
+function compactText(value: string | null | undefined, maxLength = 520) {
+  const normalized = value?.replace(/\s+/g, " ").trim();
+  if (!normalized) return null;
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength).trim()}...`;
+}
+
+function formatPercent(value: number) {
+  return `${Math.round(value * 100)}%`;
+}
+
+const EVIDENCE_SIGNAL_PATTERNS = [
+  { label: "AI", pattern: /\b(ai|artificial intelligence|inteligencia artificial|inteligência artificial)\b/i },
+  { label: "Agentes", pattern: /\b(agent|agents|agente|agentes|custom agents?)\b/i },
+  { label: "LLM", pattern: /\b(llm|large language model|model provider|modelo de linguagem)\b/i },
+  { label: "Automacao", pattern: /\b(automate|automation|automacao|automação|repetitive tasks|workflow)\b/i },
+  { label: "Busca enterprise", pattern: /\b(enterprise search|search across|busca|connectors?)\b/i },
+  { label: "Meeting notes", pattern: /\b(meeting notes|transcribe|summarize|reunioes|reuniões)\b/i },
+  { label: "Governanca", pattern: /\b(governance|governanca|governança|admin controls|permissions|controls)\b/i },
+  { label: "Seguranca", pattern: /\b(security|seguranca|segurança|soc 2|iso 27001|gdpr|hipaa|encryption)\b/i },
+];
+
+function evidenceSignals(text: string) {
+  return EVIDENCE_SIGNAL_PATTERNS.filter(({ pattern }) => pattern.test(text))
+    .map(({ label }) => label)
+    .slice(0, 6);
+}
+
+const EVIDENCE_SECTION_RULES = [
+  { title: "Sinais de IA", pattern: /\b(ai|artificial intelligence|notion ai|agent|agents|custom agents?|llm|generative|machine learning|model agnostic)\b/i },
+  { title: "Produto e workflow", pattern: /\b(workspace|docs|projects|meeting notes|enterprise search|calendar|mail|slack|github|google drive|workflow|tasks|reports|databases)\b/i },
+  { title: "Seguranca e governanca", pattern: /\b(security|governance|admin controls|permissions|saml|sso|soc 2|iso 27001|gdpr|ccpa|hipaa|encryption|zero data retention|no training)\b/i },
+  { title: "Comercial e escala", pattern: /\b(enterprise|business|pricing|credits|trusted by|customers|teams|startups|small businesses|free to try|contact sales)\b/i },
+];
+
+function evidenceSentences(text: string) {
+  return text
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/(?<=[.!?])\s+|(?=\b(?:Notion Agent|Custom Agents|Enterprise Search|AI Meeting Notes|No training|SOC 2|GDPR|HIPAA|What can|How does|How much)\b)/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length >= 24);
+}
+
+function evidenceSections(text: string) {
+  const sentences = evidenceSentences(text);
+  const used = new Set<string>();
+  const sections = EVIDENCE_SECTION_RULES.map(({ title, pattern }) => {
+    const items = sentences
+      .filter((sentence) => pattern.test(sentence))
+      .filter((sentence) => {
+        if (used.has(sentence)) return false;
+        used.add(sentence);
+        return true;
+      })
+      .slice(0, 2)
+      .map((sentence) => compactText(sentence, 160) || sentence);
+
+    return { title, items };
+  }).filter((section) => section.items.length > 0);
+
+  if (sections.length > 0) return sections;
+
+  const fallback = compactText(text, 220);
+  return fallback ? [{ title: "Resumo", items: [fallback] }] : [];
+}
+
+function MetricPill({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "accent" | "neutral" | "warning" }) {
+  const toneClass = {
+    accent: "border-[var(--accent)]/40 bg-[var(--accent)]/10 text-[var(--accent)]",
+    neutral: "border-[var(--surface-border)] bg-[#07111f] text-[var(--muted)]",
+    warning: "border-[#e8b84b]/40 bg-[#3a2c14] text-[#e8b84b]",
+  }[tone];
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${toneClass}`}>
+      <span className="text-[10px] font-semibold uppercase tracking-wide opacity-80">{label}</span>
+      <span className="font-semibold">{value}</span>
+    </span>
+  );
+}
+
+function EvidenceCard({ evidence }: { evidence: StartupEvidence }) {
+  const [expanded, setExpanded] = useState(false);
+  const text = evidence.notes || "Evidencia coletada e aprovada pelo pipeline.";
+  const sections = evidenceSections(text);
+  const signals = evidenceSignals(text);
+  const shouldShowRaw = text.replace(/\s+/g, " ").trim().length > 280;
+
+  return (
+    <article className="border-t border-[var(--surface-border)] py-4 first:border-t-0 first:pt-0 last:pb-0">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <a className="font-medium text-[var(--accent)] underline underline-offset-4" href={evidence.source_url} rel="noreferrer" target="_blank">
+            {evidence.title || evidence.source_url}
+          </a>
+          <p className="mt-1 text-xs uppercase tracking-wide text-[var(--muted)]">{evidence.evidence_type.replaceAll("_", " ")}</p>
+        </div>
+        {evidence.confidence_score !== null && evidence.confidence_score !== undefined ? (
+          <MetricPill label="fonte" value={formatPercent(evidence.confidence_score)} tone="accent" />
+        ) : null}
+      </div>
+      {signals.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {signals.map((signal) => (
+            <span className="rounded-full bg-[#20334d] px-2 py-1 text-xs text-[var(--muted)]" key={signal}>{signal}</span>
+          ))}
+        </div>
+      ) : null}
+      <div className="mt-4 grid gap-3">
+        {sections.map((section) => (
+          <div className="rounded-md border border-[var(--surface-border)] bg-[#07111f] p-3" key={section.title}>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">{section.title}</p>
+            <ul className="mt-2 space-y-1.5 text-sm leading-6 text-[var(--fg)]">
+              {section.items.map((item) => (
+                <li className="grid grid-cols-[8px_1fr] gap-2" key={item}>
+                  <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      {shouldShowRaw ? (
+        <button className="mt-2 text-xs font-semibold text-[var(--accent)] underline underline-offset-4" onClick={() => setExpanded((current) => !current)} type="button">
+          {expanded ? "Ocultar texto bruto" : "Ver texto bruto"}
+        </button>
+      ) : null}
+      {expanded ? (
+        <div className="mt-3 max-h-64 overflow-auto rounded-md border border-[var(--surface-border)] bg-[#050b14] p-3 text-xs leading-5 text-[var(--muted)]">
+          {text}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
 function ReviewControls({
   currentStatus,
   currentComment,
@@ -230,34 +368,41 @@ function RecommendationCard({ recommendation, evidences, startupId }: { recommen
   };
 
   return (
-    <article className="rounded-md border border-[var(--surface-border)] p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-[var(--muted)]">#{recommendation.priority}</span>
-          <h3 className="font-medium">{recommendation.technology_name}</h3>
+    <article className="rounded-lg border border-[var(--surface-border)] bg-[#07111f] p-4">
+      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-[var(--surface-border)] px-2 py-0.5 text-xs font-bold text-[var(--muted)]">#{recommendation.priority}</span>
+            <h3 className="text-base font-semibold">{recommendation.technology_name}</h3>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${nivelColor[recommendation.nivel] ?? nivelColor.exploratoria}`}>
+              {nivelLabel[recommendation.nivel] ?? recommendation.nivel}
+            </span>
+          </div>
+          <MarkdownContent className="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)] [&_p]:mt-0" content={recommendation.justification} />
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${nivelColor[recommendation.nivel] ?? nivelColor.exploratoria}`}>
-            {nivelLabel[recommendation.nivel] ?? recommendation.nivel}
-          </span>
+        <div className="flex min-w-[150px] flex-row gap-2 sm:flex-col sm:items-end">
+          <div className="rounded-md border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-3 py-2 text-right">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">Fit</p>
+            <p className="text-2xl font-semibold text-[var(--accent)]">{formatPercent(recommendation.score)}</p>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${complexityColor[recommendation.complexity] ?? complexityColor.medium}`}>
             {complexityLabel[recommendation.complexity] ?? recommendation.complexity}
           </span>
-          <span className="text-sm text-[var(--accent)]">{Math.round(recommendation.score * 100)}% fit</span>
-          <span className="text-xs text-[var(--muted)]" title="Confiança baseada na qualidade das evidências">
-            {Math.round(recommendation.confidence * 100)}% conf.
+          <span className="text-xs text-[var(--muted)]" title="Confianca baseada na qualidade e especificidade das evidencias">
+            {formatPercent(recommendation.confidence)} conf. evid.
           </span>
         </div>
       </div>
-      <MarkdownContent className="mt-2 text-sm text-[var(--muted)] [&_p]:mt-0" content={recommendation.justification} />
+      </div>
       {recommendation.faltando && recommendation.faltando.length > 0 && (
-        <div className="mt-2 rounded-md bg-neutral-900/60 px-3 py-2 text-xs text-[var(--muted)] border border-neutral-700">
-          <span className="font-semibold text-neutral-300">Para elevar: </span>
+        <div className="mt-4 rounded-md border border-[#e8b84b]/30 bg-[#3a2c14] px-3 py-2 text-xs leading-5 text-[#e8b84b]">
+          <span className="font-semibold">Para elevar: </span>
           {recommendation.faltando.join(" · ")}
         </div>
       )}
       {recommendation.signal_origins && recommendation.signal_origins.length > 0 && (
-        <div className="mt-2 text-xs text-[var(--muted)]">
+        <div className="mt-3 text-xs leading-5 text-[var(--muted)]">
           <span className="font-semibold">Sinais: </span>
           {recommendation.signal_origins.join(" · ")}
         </div>
@@ -267,7 +412,7 @@ function RecommendationCard({ recommendation, evidences, startupId }: { recommen
           {recommendation.matched_keywords.map((keyword) => <span className="rounded-full bg-[#20334d] px-2 py-1 text-xs text-[var(--muted)]" key={keyword}>{keyword}</span>)}
         </div>
       )}
-      <button className="mt-3 text-xs font-semibold text-[var(--accent)] underline" onClick={() => setExpanded((current) => !current)} type="button">
+      <button className="mt-4 text-xs font-semibold text-[var(--accent)] underline underline-offset-4" onClick={() => setExpanded((current) => !current)} type="button">
         {expanded ? "Ocultar evidencia" : "Ver evidencia"}
       </button>
       {expanded && (
@@ -367,9 +512,13 @@ export function StartupDetails({ startupId }: { startupId: string }) {
         {startup.website_url && <a className="mt-6 inline-block text-sm text-[var(--accent)] underline" href={startup.website_url} rel="noreferrer" target="_blank">Abrir fonte principal</a>}
       </section>
 
-      <section className="grid gap-8 lg:grid-cols-2">
-        <div className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface)] p-6"><h2 className="text-xl font-semibold">Evidencias</h2>
-          <div className="mt-5 space-y-4">{evidences.length ? evidences.map((evidence) => <article className="rounded-md border border-[var(--surface-border)] p-4" key={evidence.id}><a className="font-medium text-[var(--accent)] underline" href={evidence.source_url} rel="noreferrer" target="_blank">{evidence.title || evidence.source_url}</a><p className="mt-2 text-sm text-[var(--muted)]">{evidence.notes || "Evidencia coletada e aprovada pelo pipeline."}</p></article>) : <p className="text-[var(--muted)]">Nenhuma evidencia disponivel.</p>}</div>
+      <section className="grid gap-8 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.35fr)]">
+        <div className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface)] p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold">Evidencias</h2>
+            <MetricPill label="fontes" value={String(evidences.length)} />
+          </div>
+          <div className="mt-5">{evidences.length ? evidences.map((evidence) => <EvidenceCard evidence={evidence} key={evidence.id} />) : <p className="text-[var(--muted)]">Nenhuma evidencia disponivel.</p>}</div>
         </div>
         <div className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface)] p-6">
           <h2 className="text-xl font-semibold">Recomendacoes NVIDIA</h2>

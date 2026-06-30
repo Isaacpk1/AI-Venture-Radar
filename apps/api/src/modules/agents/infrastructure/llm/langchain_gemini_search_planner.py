@@ -141,7 +141,8 @@ class LangChainGeminiSearchPlanner(SearchPlanningService):
             content=(
                 "Voce e o Search Planner Agent do AI Venture Radar. "
                 "Sua tarefa e planejar buscas para encontrar fontes melhores "
-                "sobre uma startup. Nao conclua fatos e nao invente dados: "
+                "sobre uma startup, com foco principal no ecossistema "
+                "brasileiro. Nao conclua fatos e nao invente dados: "
                 "apenas gere queries objetivas e priorizadas."
             )
         )
@@ -157,7 +158,12 @@ class LangChainGeminiSearchPlanner(SearchPlanningService):
                 f"URLs ja tentadas ou excluidas: {sorted(plan_input.excluded_urls)}\n"
                 f"Numero maximo de queries: {plan_input.max_queries}\n\n"
                 "Priorize buscas que ajudem a verificar: site oficial, produto, "
-                "fundadores, funding, clientes, uso de IA e fontes confiaveis.\n\n"
+                "fundadores, funding, clientes, uso de IA e fontes confiaveis. "
+                "Inclua sempre pelo menos uma query explicitamente voltada a IA "
+                "(ex: artificial intelligence, machine learning, generative AI, "
+                "LLM, AI product) e termos Brasil/Brazil quando fizer sentido "
+                "para separar AI-native, AI-enabled e non-AI no contexto de "
+                "startups brasileiras.\n\n"
                 f"Texto que gerou a duvida:\n{text}"
             )
         )

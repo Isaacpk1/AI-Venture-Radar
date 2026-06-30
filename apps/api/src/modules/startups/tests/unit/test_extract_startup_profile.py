@@ -82,10 +82,14 @@ async def test_extract_startup_profile_persists_outcome() -> None:
     assert view.funding_stage is FundingStage.SERIES_A
     assert view.funding_amount_usd == 2_000_000.0
     assert view.customers == ["Empresa X"]
-    assert extractor.received_evidence_texts == [
+    assert extractor.received_evidence_texts is not None
+    assert extractor.received_evidence_texts[0].startswith(
+        f"[evidence_id={evidence.id}] "
+    )
+    assert (
         "Acme launches LLM chatbot Fundada por Ana Silva, Series A de "
         "USD 2M, cliente Empresa X."
-    ]
+    ) in extractor.received_evidence_texts[0]
 
 
 @pytest.mark.anyio
@@ -197,6 +201,50 @@ async def test_extract_startup_profile_persists_ai_profile() -> None:
     assert saved.ai_profile.gpu_need is AiGpuNeed.HIGH
     assert "PyTorch" in saved.ai_profile.current_tools
     assert saved.ai_profile.field_confidence["ai_workload_type"] == 0.95
+
+
+@pytest.mark.anyio
+async def test_extract_startup_profile_populates_ai_profile_evidence_ids() -> None:
+    """Campos do perfil de IA tambem recebem auditoria de evidencias."""
+
+    uow = _make_uow()
+    startup = Startup(name="Aprix")
+    await uow.startup_repository.save(startup)
+    ev1 = StartupEvidence(
+        startup_id=startup.id,
+        scraping_result_id=uuid4(),
+        source_url="https://aprix.ai/product",
+        title="Aprix Product",
+        notes="Analytics platform processing millions of prices per day.",
+    )
+    ev2 = StartupEvidence(
+        startup_id=startup.id,
+        scraping_result_id=uuid4(),
+        source_url="https://aprix.ai/careers",
+        title="Data Engineer",
+        notes="The team uses tabular ML pipelines in production.",
+    )
+    await uow.evidence_repository.save(ev1)
+    await uow.evidence_repository.save(ev2)
+
+    profile = StartupAIProfile(
+        ai_workload_type=AiWorkloadType.ANALYTICS,
+        deployment_stage=AiDeploymentStage.PRODUCTION,
+        gpu_need=AiGpuNeed.MEDIUM,
+        field_confidence={"ai_workload_type": 0.9, "gpu_need": 0.7},
+    )
+    outcome = ExtractionOutcome(ai_profile=profile)
+    extractor = FakeExtractionPort(outcome)
+
+    use_case = ExtractStartupProfile(lambda: uow, extractor)
+    await use_case.execute(ExtractStartupProfileInput(startup_id=startup.id))
+
+    saved = uow.startup_repository.items[startup.id]
+    assert saved.ai_profile is not None
+    all_ids = {str(ev1.id), str(ev2.id)}
+    assert set(saved.ai_profile.field_evidence_ids["ai_workload_type"]) == all_ids
+    assert set(saved.ai_profile.field_evidence_ids["gpu_need"]) == all_ids
+    assert "model_type" not in saved.ai_profile.field_evidence_ids
 
 
 @pytest.mark.anyio

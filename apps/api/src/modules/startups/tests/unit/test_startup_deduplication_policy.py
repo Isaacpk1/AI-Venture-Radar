@@ -14,6 +14,7 @@ from apps.api.src.modules.startups.domain.entities import Startup
 from apps.api.src.modules.startups.domain.policies import (
     NAME_SIMILARITY_THRESHOLD,
     find_duplicate_startup,
+    infer_country_from_url,
     normalize_domain,
 )
 
@@ -123,3 +124,19 @@ def test_no_match_when_nothing_similar_exists() -> None:
 )
 def test_normalize_domain(raw: str, expected: str) -> None:
     assert normalize_domain(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("https://startup.com.br", "BR"),
+        ("https://www.startup.ai.br/produto", "BR"),
+        ("startup.org.br", "BR"),
+        ("https://startup.com", None),
+        (None, None),
+    ],
+)
+def test_infer_country_from_url_uses_only_brazilian_domains(
+    raw: str | None, expected: str | None
+) -> None:
+    assert infer_country_from_url(raw) == expected

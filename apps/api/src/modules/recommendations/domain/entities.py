@@ -61,8 +61,10 @@ class Recommendation:
             raise RecommendationError("confidence deve ficar entre 0 e 1.")
         if self.complexity not in {"low", "medium", "high"}:
             raise RecommendationError("complexity deve ser low, medium ou high.")
-        if self.nivel not in {"forte", "moderada", "exploratoria"}:
-            raise RecommendationError("nivel deve ser forte, moderada ou exploratoria.")
+        if self.nivel not in {"forte", "moderada", "exploratoria", "hipotese_prioritaria"}:
+            raise RecommendationError(
+                "nivel deve ser forte, moderada, exploratoria ou hipotese_prioritaria."
+            )
         if self.review_status not in {"pending", "approved", "rejected"}:
             raise RecommendationError(
                 "review_status deve ser pending, approved ou rejected."

@@ -118,6 +118,8 @@ separar justificativa tecnica de justificativa de negocio
 riscos e tradeoffs estruturados por recomendacao
 ```
 
+Nota tecnica de calibragem: `docs/recommendations/fit_confianca_briefing.md`.
+
 ---
 
 ## Tecnologias candidatas

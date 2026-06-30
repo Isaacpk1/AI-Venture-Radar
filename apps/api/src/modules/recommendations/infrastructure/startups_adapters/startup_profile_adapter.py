@@ -67,6 +67,8 @@ class StartupsModuleProfileSource(StartupProfileSource):
                     title=evidence.title,
                     notes=evidence.notes,
                     confidence_score=evidence.confidence_score if evidence.confidence_score is not None else 0.5,
+                    source_url=evidence.source_url,
+                    evidence_type=evidence.evidence_type.value,
                 )
                 for evidence in profile.evidences
             ),

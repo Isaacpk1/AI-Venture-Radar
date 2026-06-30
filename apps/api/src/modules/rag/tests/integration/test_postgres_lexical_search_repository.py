@@ -13,7 +13,12 @@ from sqlalchemy import text
 
 from apps.api.src.modules.ingestion.domain.enums import DocumentSourceType
 from apps.api.src.database.relational.session import AsyncSessionFactory, engine
-from apps.api.src.modules.ingestion.domain.entities import Chunk, Document, IngestionJob
+from apps.api.src.modules.ingestion.domain.entities import (
+    Chunk,
+    Document,
+    IngestionJob,
+    document_content_hash,
+)
 from apps.api.src.modules.ingestion.infrastructure.database.repositories.postgres_chunk_repository import (
     PostgresChunkRepository,
 )
@@ -79,6 +84,7 @@ async def test_lexical_search_finds_chunk_by_websearch_query() -> None:
             clean_text="texto limpo do documento",
             word_count=4,
             chunk_count=2,
+            content_hash=document_content_hash("texto limpo do documento"),
             source_type=DocumentSourceType.NVIDIA_KNOWLEDGE,
         )
         await PostgresDocumentRepository(session).save(document)

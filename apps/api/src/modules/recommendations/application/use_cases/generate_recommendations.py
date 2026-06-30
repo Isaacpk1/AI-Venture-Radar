@@ -30,6 +30,8 @@ from apps.api.src.modules.recommendations.domain.policies import (
     match_technologies,
 )
 
+INCEPTION_SLUG = "nvidia-inception"
+
 
 class GenerateRecommendations(RecommendationGenerator):
     """Cruza o perfil da startup com o catalogo NVIDIA e persiste o resultado.
@@ -61,6 +63,8 @@ class GenerateRecommendations(RecommendationGenerator):
                 evidence_id=evidence.evidence_id,
                 text=f"{evidence.title or ''} {evidence.notes or ''}".lower(),
                 confidence_score=evidence.confidence_score,
+                source_url=evidence.source_url,
+                evidence_type=evidence.evidence_type,
             )
             for evidence in profile.evidences
         ]
@@ -97,6 +101,11 @@ class GenerateRecommendations(RecommendationGenerator):
             evidence_signals=evidence_signals,
             technologies=candidates,
         )
+
+        if not matches:
+            floor = self._inception_floor(startup_id, candidates)
+            if floor is not None:
+                matches = [floor]
 
         grounded_results = await self._ground_matches(matches)
         recommendations = [
@@ -174,6 +183,47 @@ class GenerateRecommendations(RecommendationGenerator):
         )
 
     @staticmethod
+    def _inception_floor(
+        startup_id: UUID,
+        candidates: list[TechnologyCandidate],
+    ) -> MatchResult | None:
+        """Retorna um MatchResult minimo para NVIDIA Inception quando matches e vazio.
+
+        O floor garante que nenhum briefing seja completamente vazio — Inception e
+        o ponto de entrada natural no ecossistema NVIDIA para qualquer startup de IA.
+        Score 0.21 (acima do MIN_MATCH_SCORE=0.20), nivel exploratoria, confianca
+        muito baixa (sem evidencia concreta de fit).
+        """
+        inception = next(
+            (c for c in candidates if c.slug == INCEPTION_SLUG), None
+        )
+        if inception is None:
+            return None
+
+        from apps.api.src.modules.recommendations.domain.policies import (
+            NIVEL_EXPLORATORIA,
+        )
+
+        return MatchResult(
+            technology=inception,
+            score=0.21,
+            confidence=0.10,
+            matched_keywords=(),
+            evidence_ids=(),
+            signal_origins=(),
+            missing_signals=inception.keywords,
+            score_breakdown={
+                "workload_alignment": 0.40,
+                "evidence_signal": 0.20,
+                "startup_maturity": 0.50,
+                "keyword_prior": 0.0,
+                "implementation_viability": 0.60,
+            },
+            nivel=NIVEL_EXPLORATORIA,
+            faltando=("evidências concretas sobre uso da tecnologia",),
+        )
+
+    @staticmethod
     def _to_recommendation(
         startup_id: UUID,
         match: MatchResult,
@@ -208,6 +258,12 @@ def _use_case(match: MatchResult) -> str:
 
 
 def _build_justification(match: MatchResult) -> str:
+    if not match.matched_keywords:
+        return (
+            f"{match.technology.name} e o ponto de entrada natural no ecossistema NVIDIA "
+            "para startups de IA. Nao foram identificados sinais especificos de fit "
+            "com o perfil atual — recomenda-se aprofundar a coleta de evidencias."
+        )
     keywords = ", ".join(match.matched_keywords)
     return (
         f"Evidencias e perfil mencionam: {keywords}. "

@@ -14,7 +14,10 @@ from apps.api.src.modules.startups.application.unit_of_work import (
     StartupsUnitOfWorkFactory,
 )
 from apps.api.src.modules.startups.domain.entities import Startup
-from apps.api.src.modules.startups.domain.policies import find_duplicate_startup
+from apps.api.src.modules.startups.domain.policies import (
+    find_duplicate_startup,
+    infer_country_from_url,
+)
 
 
 class CreateStartup(StartupCreator):
@@ -55,7 +58,8 @@ class CreateStartup(StartupCreator):
                 website_url=startup_input.website_url,
                 description=startup_input.description,
                 sector=startup_input.sector,
-                country=startup_input.country,
+                country=startup_input.country
+                or infer_country_from_url(startup_input.website_url),
             )
             await uow.startup_repository.save(startup)
             await uow.commit()

@@ -1,31 +1,57 @@
 """Caso de uso principal: descobre startups em hubs publicos.
 
-Fluxo por run:
-  1. Cria e persiste um DiscoveryRun (pending -> running).
-  2. Para cada hub do registry, chama o extrator correspondente para
-     obter URLs de startups.
-  3. Limita o total a `max_per_run` URLs.
-  4. Cada URL e submetida como `url_ingestion_job` com
-     `source_type="startup_evidence"` — o pipeline existente cuida do
-     resto (scraping, ingestion, embeddings, analise).
-  5. Salva o resultado agregado no DiscoveryRun (completed ou failed).
+Dois modos de extracao (configurado em HubSource.extraction_mode):
 
-Um hub que falha nao cancela os outros — best-effort. O run so falha
-inteiro se TODOS os hubs falharem.
+  "url"  — extracao direta de URLs (InovAtiva, Abstartups):
+    1. Extrator retorna URLs de startups.
+    2. Cada URL e submetida diretamente como url_ingestion_job.
+    3. DiscoverySubmission salvo por URL.
+
+  "name" — extracao por nome + enriquecimento (100 Open Startups):
+    1. Extrator retorna nomes, categorias e ranking (sem URL).
+    2. Candidatos sao salvos como StartupDiscoveryCandidate (status=DISCOVERED).
+    3. CandidateEnrichmentService busca site oficial via Tavily.
+    4. Candidatos com official_site_confidence >= AUTO_SUBMIT_CONFIDENCE
+       sao submetidos automaticamente como url_ingestion_job
+       (status=SUBMITTED, url_ingestion_job_id preenchido).
+    5. Candidatos abaixo do limiar ficam como REJECTED/FAILED para revisao.
+
+Best-effort por hub: falha de um hub nao cancela os outros.
+O run so falha inteiro se TODOS os hubs falharem.
 """
 
+import unicodedata
+import re
 from typing import Callable
 
 from apps.api.src.modules.startup_discovery.application.dto import (
+    CandidateView,
+    DiscoveredCandidateItem,
     DiscoveryRunView,
+    StartupCandidate,
     SubmittedUrlView,
 )
-from apps.api.src.modules.startup_discovery.application.ports import HubLinkExtractor
-from apps.api.src.modules.startup_discovery.domain.entities import DiscoveryRun
+from apps.api.src.modules.startup_discovery.application.ports import (
+    HubLinkExtractor,
+    HubNameExtractor,
+)
+from apps.api.src.modules.startup_discovery.domain.entities import (
+    DiscoveryRun,
+    DiscoverySubmission,
+    StartupDiscoveryCandidate,
+)
+from apps.api.src.modules.startup_discovery.domain.enums import CandidateStatus
 from apps.api.src.modules.startup_discovery.domain.hub_registry import HUB_SOURCES
 from apps.api.src.shared.logging import get_logger
 
 logger = get_logger(__name__)
+
+AUTO_SUBMIT_CONFIDENCE: float = 0.75
+
+
+def _normalize_name(name: str) -> str:
+    name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
 class RunStartupDiscovery:
@@ -35,86 +61,235 @@ class RunStartupDiscovery:
         *,
         uow_factory: Callable,
         extractors: dict[str, HubLinkExtractor],
+        name_extractors: dict[str, HubNameExtractor] | None = None,
         url_ingestion_submitter,
+        candidate_enricher=None,
         max_per_run: int = 20,
     ) -> None:
         self._uow_factory = uow_factory
         self._extractors = extractors
+        self._name_extractors: dict[str, HubNameExtractor] = name_extractors or {}
         self._submitter = url_ingestion_submitter
+        self._enricher = candidate_enricher
         self._max_per_run = max_per_run
 
     async def execute(self) -> DiscoveryRunView:
         run = DiscoveryRun()
-        await self._save(run)
+        await self._save_run(run)
 
         run.start()
-        await self._save(run)
+        await self._save_run(run)
 
         submitted_urls: list[SubmittedUrlView] = []
         hubs_processed = 0
         had_success = False
+        hub_failures: list[str] = []
+        total_candidates_discovered = 0
+        total_candidates_enriched = 0
 
         for hub in HUB_SOURCES:
-            if len(submitted_urls) >= self._max_per_run:
+            remaining = self._max_per_run - len(submitted_urls)
+            if remaining <= 0:
                 break
 
-            extractor = self._extractors.get(hub.extractor_type)
-            if extractor is None:
-                logger.warning(
-                    "no extractor for hub, skipping",
-                    extra={"hub": hub.name, "extractor_type": hub.extractor_type},
-                )
-                continue
-
-            remaining = self._max_per_run - len(submitted_urls)
-            try:
-                urls = await extractor.extract(hub.listing_url, limit=remaining)
-                had_success = True
-            except Exception as exc:
-                logger.warning(
-                    "hub extractor failed, skipping hub",
-                    extra={"hub": hub.name, "reason": str(exc)},
-                )
-                continue
-
-            hubs_processed += 1
-            logger.info(
-                "hub extracted",
-                extra={"hub": hub.name, "urls_found": len(urls)},
-            )
-
-            for url in urls:
-                try:
-                    job_id = await self._submitter.submit(url)
-                    submitted_urls.append(
-                        SubmittedUrlView(hub_name=hub.name, url=url, job_id=job_id)
-                    )
-                    logger.info(
-                        "url_ingestion_job submitted",
-                        extra={"hub": hub.name, "url": url, "job_id": str(job_id)},
-                    )
-                except Exception as exc:
+            if hub.extraction_mode == "name":
+                name_extractor = self._name_extractors.get(hub.extractor_type)
+                if name_extractor is None:
                     logger.warning(
-                        "failed to submit url_ingestion_job",
-                        extra={"url": url, "reason": str(exc)},
+                        "no name extractor for hub, skipping",
+                        extra={"hub": hub.name, "extractor_type": hub.extractor_type},
                     )
+                    continue
+
+                try:
+                    discovered = await name_extractor.extract(
+                        hub.listing_url, limit=remaining
+                    )
+                    had_success = True
+                except Exception as exc:
+                    failure_reason = f"{type(exc).__name__}: {exc}"
+                    hub_failures.append(f"{hub.name}: {failure_reason}")
+                    logger.warning(
+                        "name extractor failed, skipping hub",
+                        extra={"hub": hub.name, "reason": failure_reason},
+                    )
+                    continue
+
+                hubs_processed += 1
+                total_candidates_discovered += len(discovered)
+                logger.info(
+                    "name hub extracted",
+                    extra={"hub": hub.name, "candidates_found": len(discovered)},
+                )
+
+                candidates = [
+                    StartupDiscoveryCandidate(
+                        run_id=run.id,
+                        name=item.name,
+                        normalized_name=_normalize_name(item.name),
+                        discovery_source=hub.name,
+                        discovery_source_url=hub.listing_url,
+                        category=item.category,
+                        rank=item.rank,
+                        description=item.description,
+                    )
+                    for item in discovered
+                ]
+                for candidate in candidates:
+                    await self._save_candidate(candidate)
+
+                if self._enricher is not None:
+                    enriched = await self._enricher.enrich_batch(candidates)
+                    for candidate in enriched:
+                        if candidate.status == CandidateStatus.ENRICHED:
+                            total_candidates_enriched += 1
+                        await self._save_candidate(candidate)
+
+                    for candidate in enriched:
+                        if (
+                            candidate.status == CandidateStatus.ENRICHED
+                            and candidate.official_site_confidence is not None
+                            and candidate.official_site_confidence >= AUTO_SUBMIT_CONFIDENCE
+                            and candidate.official_website_url
+                        ):
+                            try:
+                                job_id = await self._submitter.submit(
+                                    candidate.official_website_url
+                                )
+                                candidate.mark_submitted(job_id)
+                                await self._save_candidate(candidate)
+                                submitted_urls.append(
+                                    SubmittedUrlView(
+                                        hub_name=hub.name,
+                                        url=candidate.official_website_url,
+                                        job_id=job_id,
+                                        name=candidate.name,
+                                    )
+                                )
+                                logger.info(
+                                    "candidate auto-submitted",
+                                    extra={
+                                        "startup_name": candidate.name,
+                                        "url": candidate.official_website_url,
+                                        "confidence": candidate.official_site_confidence,
+                                        "job_id": str(job_id),
+                                    },
+                                )
+                            except Exception as exc:
+                                logger.warning(
+                                    "failed to submit enriched candidate",
+                                    extra={
+                                        "startup_name": candidate.name,
+                                        "url": candidate.official_website_url,
+                                        "reason": str(exc),
+                                    },
+                                )
+
+            else:
+                extractor = self._extractors.get(hub.extractor_type)
+                if extractor is None:
+                    logger.warning(
+                        "no extractor for hub, skipping",
+                        extra={"hub": hub.name, "extractor_type": hub.extractor_type},
+                    )
+                    continue
+
+                try:
+                    extracted = await extractor.extract(hub.listing_url, limit=remaining)
+                    url_candidates = [_to_candidate(item) for item in extracted]
+                    had_success = True
+                except Exception as exc:
+                    failure_reason = f"{type(exc).__name__}: {exc}"
+                    hub_failures.append(f"{hub.name}: {failure_reason}")
+                    logger.warning(
+                        "hub extractor failed, skipping hub",
+                        extra={"hub": hub.name, "reason": failure_reason},
+                    )
+                    continue
+
+                hubs_processed += 1
+                logger.info(
+                    "url hub extracted",
+                    extra={"hub": hub.name, "candidates_found": len(url_candidates)},
+                )
+
+                for candidate in url_candidates:
+                    try:
+                        job_id = await self._submitter.submit(candidate.website_url)
+                        submission = DiscoverySubmission(
+                            run_id=run.id,
+                            hub_name=hub.name,
+                            website_url=candidate.website_url,
+                            job_id=job_id,
+                            name=candidate.name,
+                            hub_profile_url=candidate.hub_profile_url,
+                            short_description=candidate.short_description,
+                            declared_sector=candidate.declared_sector,
+                        )
+                        await self._save_submission(submission)
+                        submitted_urls.append(_submission_to_view(submission))
+                        logger.info(
+                            "url_ingestion_job submitted",
+                            extra={
+                                "hub": hub.name,
+                                "url": candidate.website_url,
+                                "name": candidate.name,
+                                "job_id": str(job_id),
+                            },
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "failed to submit url_ingestion_job",
+                            extra={"url": candidate.website_url, "reason": str(exc)},
+                        )
 
         if not had_success and HUB_SOURCES:
-            run.fail("Todos os hubs falharam na extracao de links.")
+            details = "; ".join(hub_failures) if hub_failures else "sem detalhes"
+            run.fail(f"Todos os hubs falharam na extracao. Detalhes: {details}")
         else:
             run.complete(
                 hubs_processed=hubs_processed,
                 urls_found=len(submitted_urls),
                 jobs_submitted=len(submitted_urls),
+                candidates_discovered=total_candidates_discovered,
+                candidates_enriched=total_candidates_enriched,
             )
 
-        await self._save(run)
+        await self._save_run(run)
         return _to_view(run, submitted_urls)
 
-    async def _save(self, run: DiscoveryRun) -> None:
+    async def _save_run(self, run: DiscoveryRun) -> None:
         async with self._uow_factory() as uow:
             await uow.repository.save(run)
             await uow.commit()
+
+    async def _save_submission(self, submission: DiscoverySubmission) -> None:
+        async with self._uow_factory() as uow:
+            await uow.repository.save_submission(submission)
+            await uow.commit()
+
+    async def _save_candidate(self, candidate: StartupDiscoveryCandidate) -> None:
+        async with self._uow_factory() as uow:
+            await uow.candidate_repository.save(candidate)
+            await uow.commit()
+
+
+def _to_candidate(item: StartupCandidate | str) -> StartupCandidate:
+    if isinstance(item, StartupCandidate):
+        return item
+    return StartupCandidate(website_url=item)
+
+
+def _submission_to_view(submission: DiscoverySubmission) -> SubmittedUrlView:
+    return SubmittedUrlView(
+        hub_name=submission.hub_name,
+        url=submission.website_url,
+        job_id=submission.job_id,
+        name=submission.name,
+        hub_profile_url=submission.hub_profile_url,
+        short_description=submission.short_description,
+        declared_sector=submission.declared_sector,
+    )
 
 
 def _to_view(run: DiscoveryRun, submitted: list[SubmittedUrlView]) -> DiscoveryRunView:
@@ -124,8 +299,31 @@ def _to_view(run: DiscoveryRun, submitted: list[SubmittedUrlView]) -> DiscoveryR
         hubs_processed=run.hubs_processed,
         urls_found=run.urls_found,
         jobs_submitted=run.jobs_submitted,
+        candidates_discovered=run.candidates_discovered,
+        candidates_enriched=run.candidates_enriched,
         error_message=run.error_message,
         created_at=run.created_at,
         completed_at=run.completed_at,
         submitted_urls=submitted,
+    )
+
+
+def _to_candidate_view(candidate: StartupDiscoveryCandidate) -> CandidateView:
+    return CandidateView(
+        id=candidate.id,
+        run_id=candidate.run_id,
+        name=candidate.name,
+        normalized_name=candidate.normalized_name,
+        discovery_source=candidate.discovery_source,
+        category=candidate.category,
+        rank=candidate.rank,
+        description=candidate.description,
+        official_website_url=candidate.official_website_url,
+        official_site_confidence=candidate.official_site_confidence,
+        enrichment_sources=candidate.enrichment_sources,
+        status=candidate.status,
+        rejection_reason=candidate.rejection_reason,
+        url_ingestion_job_id=candidate.url_ingestion_job_id,
+        created_at=candidate.created_at,
+        updated_at=candidate.updated_at,
     )

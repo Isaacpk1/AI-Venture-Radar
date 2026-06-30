@@ -18,9 +18,11 @@ from apps.api.src.modules.recommendations.domain.policies import (
     _compute_nivel,
     _compute_faltando,
     match_technologies,
+    MIN_MATCH_SCORE,
     NIVEL_FORTE,
     NIVEL_MODERADA,
     NIVEL_EXPLORATORIA,
+    WORKLOAD_ADMISSION_THRESHOLD,
 )
 
 NIM = TechnologyCandidate(
@@ -284,6 +286,43 @@ def test_word_boundary_still_matches_real_standalone_keywords() -> None:
     assert "llm" in results[0].matched_keywords
 
 
+def test_negative_training_context_does_not_create_nemo_match() -> None:
+    """Frases de privacidade sobre nao treinar modelos nao sao sinal de NeMo."""
+
+    results = match_technologies(
+        sector="saas",
+        description=(
+            "B2B SaaS powered by generative AI API. "
+            "No own model training and no own GPU infrastructure."
+        ),
+        ai_maturity_level="ai_enabled",
+        ai_context=StartupAIContext(ai_workload_type="nlp", gpu_need="low"),
+        evidence_signals=[],
+        technologies=[NEMO],
+    )
+
+    assert results == []
+
+
+def test_negative_training_context_is_reported_when_other_nemo_signals_match() -> None:
+    evidence_id = uuid4()
+    results = match_technologies(
+        sector=None,
+        description=None,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=evidence_id,
+                text="enterprise llm ai agent with no training on your data",
+            )
+        ],
+        technologies=[NEMO],
+    )
+
+    assert len(results) == 1
+    assert "training" not in results[0].matched_keywords
+    assert any("training" in item for item in results[0].faltando)
+
+
 def test_confidence_higher_with_strong_evidence_than_profile_only() -> None:
     """Match com evidencia de alta qualidade tem confianca maior que perfil puro."""
 
@@ -310,6 +349,43 @@ def test_confidence_higher_with_strong_evidence_than_profile_only() -> None:
     assert len(results_with_evidence) == 1
     assert len(results_profile_only) == 1
     assert results_with_evidence[0].confidence > results_profile_only[0].confidence
+
+
+def test_technical_source_increases_confidence_over_generic_website() -> None:
+    """Docs/API/blog tecnico valem mais que landing page para confianca."""
+
+    technical_id = uuid4()
+    generic_id = uuid4()
+    technical = match_technologies(
+        sector=None,
+        description=None,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=technical_id,
+                text="generative ai inference api deployment microservice",
+                confidence_score=0.9,
+                source_url="https://acme.ai/docs/api",
+                evidence_type="documentation",
+            )
+        ],
+        technologies=[NIM],
+    )
+    generic = match_technologies(
+        sector=None,
+        description=None,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=generic_id,
+                text="generative ai inference api deployment microservice",
+                confidence_score=0.9,
+                source_url="https://acme.ai/product",
+                evidence_type="website",
+            )
+        ],
+        technologies=[NIM],
+    )
+
+    assert technical[0].confidence > generic[0].confidence
 
 
 def test_confidence_is_lower_for_profile_only_match() -> None:
@@ -817,3 +893,73 @@ def test_no_ai_context_uses_neutral_defaults() -> None:
     # score = 0.35*0.40 + 0.25*0.20 + 0.15*0.50 + 0.15*1.0 + 0.10*0.60
     #       = 0.14 + 0.05 + 0.075 + 0.15 + 0.06 = 0.475 → 0.48
     assert 0.40 <= results[0].score <= 0.60
+
+
+def test_workload_admission_admits_with_one_keyword_when_alignment_strong() -> None:
+    """P2: uma startup com workload nlp + 1 keyword bate => NIM admitido."""
+
+    nlp_context = StartupAIContext(
+        ai_workload_type="nlp",
+        deployment_stage="production",
+        gpu_need="medium",
+        has_operational_signal=True,
+    )
+    # NIM tem supported_workloads={"nlp": 0.80} => workload_aln=0.80 >= threshold
+    # Startup so tem "llm" no setor (1 de 6 keywords) => sem a porta workload ficaria
+    # bloqueado por MIN_MATCHED_KEYWORDS=2; com a porta, deve ser admitido
+    results = match_technologies(
+        sector="llm platform",
+        description=None,
+        ai_context=nlp_context,
+        evidence_signals=[],
+        technologies=[NIM],
+    )
+
+    assert len(results) == 1
+    assert results[0].technology.slug == "nvidia-nim"
+    assert results[0].matched_keywords == ("llm",)
+    # Score com 1 keyword: keyword_prior=1/6=0.17, workload_aln=0.80
+    # score = 0.35*0.80 + 0.25*0.20 + 0.15*0.85 + 0.15*0.17 + 0.10*0.55 ≈ 0.50
+    assert results[0].score >= MIN_MATCH_SCORE
+
+
+def test_workload_admission_does_not_admit_with_zero_keywords() -> None:
+    """P2: mesmo com workload forte, zero keywords => nao admitido."""
+
+    nlp_context = StartupAIContext(
+        ai_workload_type="nlp",
+        deployment_stage="production",
+        gpu_need="medium",
+    )
+    # Startup sem nenhuma keyword do RIVA (speech/asr/tts/voice/translation/conversational ai)
+    results = match_technologies(
+        sector="data analytics platform",
+        description="financial reporting and dashboards",
+        ai_context=nlp_context,
+        evidence_signals=[],
+        technologies=[RIVA],
+    )
+
+    assert len(results) == 0
+
+
+def test_workload_admission_does_not_admit_when_alignment_below_threshold() -> None:
+    """P2: 1 keyword + workload_aln < 0.60 => nao admitido."""
+
+    analytics_context = StartupAIContext(
+        ai_workload_type="analytics",
+        deployment_stage="production",
+        gpu_need="low",
+    )
+    # NeMo tem supported_workloads={"analytics": nao definido -> 0.0} => nao atinge threshold
+    # Com 1 keyword "llm" no setor, nao deve ser admitido
+    results = match_technologies(
+        sector="llm platform",
+        description=None,
+        ai_context=analytics_context,
+        evidence_signals=[],
+        technologies=[NEMO],  # NEMO nao suporta analytics bem
+    )
+
+    # Sem keyword suficiente e sem alinhamento de workload => zero resultados
+    assert len(results) == 0

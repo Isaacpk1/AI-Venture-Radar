@@ -21,6 +21,7 @@ a startup e salvar o job, a proxima entrega nao deve criar uma segunda
 startup nem duplicar a evidencia.
 """
 
+import re
 from urllib.parse import urljoin, urlparse, urlunparse
 from uuid import UUID
 
@@ -51,10 +52,30 @@ from apps.api.src.shared.logging import bind_context, get_logger
 STARTUP_EVIDENCE_SOURCE_TYPE = "startup_evidence"
 MAX_EVIDENCE_TEXT_CHARS = 8000
 MAX_ENRICHMENT_ROUNDS = 1
-MAX_ENRICHMENT_URLS_PER_ROUND = 2
+MAX_ENRICHMENT_URLS_PER_ROUND = 4
 MAX_ENRICHMENT_SEARCH_QUERIES = 3
 MAX_ENRICHMENT_SEARCH_RESULTS_PER_QUERY = 5
-ENRICHMENT_PATHS = ("about", "team", "customers", "case-studies")
+
+# Paths that commonly reveal tech stack, team, and traction — ordered by signal value.
+ENRICHMENT_PATHS = (
+    "product",
+    "products",
+    "solution",
+    "solutions",
+    "platform",
+    "technology",
+    "careers",
+    "jobs",
+    "carreiras",
+    "trabalhe-conosco",
+    "engineering",
+    "blog",
+    "about",
+    "sobre",
+    "team",
+    "customers",
+    "case-studies",
+)
 TRUSTED_ENRICHMENT_HOSTS = {
     "crunchbase.com",
     "www.crunchbase.com",
@@ -67,7 +88,34 @@ TRUSTED_ENRICHMENT_HOSTS = {
     "pitchbook.com",
     "tracxn.com",
     "f6s.com",
+    # Public job boards often expose stack and deployment hints.
+    "gupy.io",
+    "boards.greenhouse.io",
+    "jobs.lever.co",
 }
+AI_EVIDENCE_TERMS = (
+    " ai ",
+    " ai-",
+    " ai.",
+    "artificial intelligence",
+    "inteligencia artificial",
+    "inteligência artificial",
+    "machine learning",
+    "deep learning",
+    "generative ai",
+    "gen ai",
+    "llm",
+    "large language model",
+    "computer vision",
+    "natural language",
+    "nlp",
+    "neural network",
+    "model training",
+    "model inference",
+    "foundation model",
+    "agentic",
+    "automation with ai",
+)
 BLOCKED_ENRICHMENT_HOSTS = {
     # Redes sociais — conteudo fragmentado, sem informacao estruturada de empresa
     "facebook.com",
@@ -88,7 +136,7 @@ BLOCKED_ENRICHMENT_HOSTS = {
     "youtube.com",
     "youtu.be",
     "vimeo.com",
-    # Emprego / avaliacoes — util para cultura, nao para perfil de empresa
+    # Avaliacoes — util para cultura, nao para perfil tecnico de empresa
     "glassdoor.com",
     "indeed.com",
     "vagas.com.br",
@@ -101,11 +149,73 @@ BLOCKED_ENRICHMENT_HOSTS = {
 logger = get_logger(__name__)
 
 
+# Generic page-type words that appear as fragments in HTML titles.
+_GENERIC_PAGE_FRAGMENT_RE = re.compile(
+    r"^(?:home|about(?:\s+us)?|quem\s+somos|inicio|"
+    r"bem[- ]vindo(?:s)?|nossa\s+empresa|company|welcome|"
+    r"official\s+site|website|contact(?:o)?|"
+    r"products?|solutions?|servi[cç]os?|platform)$",
+    re.IGNORECASE,
+)
+
+# Known multi-segment TLDs (order matters: longest first).
+_MULTI_TLDS = ("com.br", "co.uk", "org.br", "net.br", "gov.br", "co.in")
+
+
+def _domain_to_brand(hostname: str) -> str:
+    """Extract a readable brand name from a hostname.
+
+    'plat.econodata.com.br' -> 'Econodata'
+    'www.aprix.ai'          -> 'Aprix'
+    'app.datlo.io'          -> 'Datlo'
+    """
+    h = hostname.lower().removeprefix("www.")
+    # Strip known multi-segment TLDs first
+    for tld in _MULTI_TLDS:
+        if h.endswith(f".{tld}"):
+            h = h[: -(len(tld) + 1)]
+            break
+    # Remove any remaining TLD (.ai, .io, .com, etc.)
+    if "." in h:
+        h = h.rsplit(".", 1)[0]
+    # Strip any leading subdomain (app., plat., api., staging., etc.)
+    if "." in h:
+        h = h.rsplit(".", 1)[-1]
+    return h.capitalize() if h else hostname
+
+
+def _clean_page_title(title: str) -> str:
+    """Remove generic page-type fragments from an HTML title.
+
+    'About us - Aprix Pricing'  -> 'Aprix Pricing'
+    'Home | Econodata'          -> 'Econodata'
+    'NeuralMind – AI solutions' -> 'NeuralMind'
+    """
+    for sep in (" - ", " | ", " – ", " — ", " • ", " / ", " \\ "):
+        if sep in title:
+            parts = [p.strip() for p in title.split(sep)]
+            meaningful = [
+                p for p in parts if p and not _GENERIC_PAGE_FRAGMENT_RE.match(p)
+            ]
+            if meaningful:
+                # Prefer the shortest non-generic part (usually the brand).
+                return min(meaningful, key=len)
+    return title.strip()
+
+
 def _derive_startup_name(*, title: str | None, url: str) -> str:
-    if title:
-        return title
     hostname = urlparse(url).netloc
-    return hostname.removeprefix("www.") or url
+    brand_from_domain = _domain_to_brand(hostname) if hostname else url
+
+    if title:
+        cleaned = _clean_page_title(title)
+        # Fall back to domain-derived name when the cleaned title is still
+        # a hostname (nothing meaningful was in the title).
+        if cleaned.lower() in (hostname.lower(), hostname.lower().removeprefix("www.")):
+            return brand_from_domain
+        return cleaned
+
+    return brand_from_domain
 
 
 def _normalize_url(url: str) -> str:
@@ -143,6 +253,11 @@ def _startup_terms(name: str) -> list[str]:
     ]
 
 
+def _has_ai_evidence_signal(text: str) -> bool:
+    normalized = f" {text.lower()} "
+    return any(term in normalized for term in AI_EVIDENCE_TERMS)
+
+
 def _score_external_candidate(
     *,
     url: str,
@@ -157,20 +272,32 @@ def _score_external_candidate(
 
     source_host = _hostname(source_url)
     if host == source_host or host.endswith(f".{source_host}"):
-        return 50
+        base_score = 50
+        searchable_text = " ".join([url, title or "", snippet or ""])
+        return base_score + (20 if _has_ai_evidence_signal(searchable_text) else 0)
 
-    is_trusted = host in TRUSTED_ENRICHMENT_HOSTS or host.endswith(".linkedin.com")
+    is_trusted = (
+        host in TRUSTED_ENRICHMENT_HOSTS
+        or host.endswith(".gupy.io")
+        or host.endswith(".greenhouse.io")
+        or host.endswith(".lever.co")
+        or host.endswith(".linkedin.com")
+    )
     if is_trusted:
         # LinkedIn (qualquer subdominio regional, ex: br.linkedin.com):
-        # so paginas de empresa sao uteis; perfis individuais (/in/) nao.
-        if host.endswith("linkedin.com") and "/company/" not in url.lower():
+        # paginas de empresa e vagas sao uteis; perfis individuais (/in/) nao.
+        if host.endswith("linkedin.com") and not any(
+            segment in url.lower() for segment in ("/company/", "/jobs/")
+        ):
             return -1
-        return 90
+        searchable_text = " ".join([url, title or "", snippet or ""])
+        return 90 + (20 if _has_ai_evidence_signal(searchable_text) else 0)
 
     terms = _startup_terms(startup_name)
-    searchable_text = " ".join([url, title or "", snippet or ""]).lower()
-    if terms and any(term in searchable_text for term in terms):
-        return 60
+    searchable_text = " ".join([url, title or "", snippet or ""])
+    searchable_text_lower = searchable_text.lower()
+    if terms and any(term in searchable_text_lower for term in terms):
+        return 60 + (20 if _has_ai_evidence_signal(searchable_text) else 0)
 
     return -1
 
@@ -188,9 +315,10 @@ def _deterministic_enrichment_queries(
 ) -> list[str]:
     missing_text = " ".join(missing_signals)
     return [
-        f'"{startup_name}" founders funding customers',
-        f'"{startup_name}" artificial intelligence startup {missing_text}',
-        f'"{startup_name}" Crunchbase LinkedIn company funding',
+        f'"{startup_name}" Brasil startup artificial intelligence AI machine learning product',
+        f'"{startup_name}" Brazil generative AI LLM startup {missing_text}',
+        f'"{startup_name}" Brasil fundadores funding clientes',
+        f'"{startup_name}" Crunchbase LinkedIn company funding Brazil',
     ]
 
 
@@ -487,7 +615,9 @@ class AdvanceUrlIngestionJob:
             return []
 
         profile = await self._startups_port.get_profile(job.startup_id)
-        missing_signals = [
+
+        # Check for missing structural signals (business profile).
+        basic_missing = [
             label
             for label, is_missing in (
                 ("founders", not profile.founders),
@@ -496,6 +626,14 @@ class AdvanceUrlIngestionJob:
             )
             if is_missing
         ]
+
+        # Also enrich when AI workload is still unknown (avoids thin-page problem).
+        ai_profile_unknown = profile.ai_workload_type == "unknown"
+
+        missing_signals = basic_missing
+        if ai_profile_unknown and "ai_profile" not in missing_signals:
+            missing_signals = [*missing_signals, "ai_profile"]
+
         if not missing_signals:
             return []
 
@@ -513,23 +651,31 @@ class AdvanceUrlIngestionJob:
             ]
             if url
         }
-        candidates = await self._find_external_enrichment_urls(
+        same_domain_limit = (
+            MAX_ENRICHMENT_URLS_PER_ROUND - 1
+            if self._search_planner_port is not None
+            and self._search_executor_port is not None
+            else MAX_ENRICHMENT_URLS_PER_ROUND
+        )
+        candidates = self._same_domain_enrichment_urls(
+            profile_website_url=profile.website_url,
+            job_url=job.url,
+            known_urls=known_urls,
+            candidates=[],
+        )[:same_domain_limit]
+
+        external_candidates = await self._find_external_enrichment_urls(
             job=job,
             profile=profile,
             missing_signals=missing_signals,
             known_urls=known_urls,
             content=content,
         )
-        remaining_slots = MAX_ENRICHMENT_URLS_PER_ROUND - len(candidates)
-        if remaining_slots > 0:
-            candidates.extend(
-                self._same_domain_enrichment_urls(
-                    profile_website_url=profile.website_url,
-                    job_url=job.url,
-                    known_urls=known_urls,
-                    candidates=candidates,
-                )[:remaining_slots]
-            )
+        candidates.extend(
+            url
+            for url in external_candidates
+            if url not in known_urls and url not in candidates
+        )
         candidates = candidates[:MAX_ENRICHMENT_URLS_PER_ROUND]
         if not candidates:
             return []
@@ -614,11 +760,11 @@ class AdvanceUrlIngestionJob:
 
         queries = _unique_non_empty(
             [
-                *queries,
                 *_deterministic_enrichment_queries(
                     startup_name=profile.name,
                     missing_signals=missing_signals,
                 ),
+                *queries,
             ]
         )
 

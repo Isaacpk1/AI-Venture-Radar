@@ -19,6 +19,8 @@ class DiscoveryRunModel(Base):
     hubs_processed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     urls_found: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     jobs_submitted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    candidates_discovered: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    candidates_enriched: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(

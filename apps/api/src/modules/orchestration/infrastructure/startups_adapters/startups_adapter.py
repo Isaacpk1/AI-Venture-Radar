@@ -77,6 +77,10 @@ class StartupsModulePort(StartupsPort):
     async def get_profile(self, startup_id: UUID) -> StartupProfileSnapshot:
         profile = await self._profile_reader.get_profile(startup_id)
         startup = profile.startup
+        ai_workload_type = "unknown"
+        if startup.ai_profile is not None:
+            ai_workload_type = startup.ai_profile.ai_workload_type or "unknown"
+
         return StartupProfileSnapshot(
             name=startup.name,
             website_url=startup.website_url,
@@ -86,4 +90,5 @@ class StartupsModulePort(StartupsPort):
             else None,
             customers=list(startup.customers),
             evidence_urls=[evidence.source_url for evidence in profile.evidences],
+            ai_workload_type=ai_workload_type,
         )

@@ -44,6 +44,11 @@ class FakeBriefingAgentService:
         return BriefingAgentResult(content=self.content, briefing_id=self.briefing_id)
 
 
+class FailingBriefingAgentService:
+    async def generate(self, briefing_input, *, thread_id=None):
+        raise RuntimeError("llm indisponivel")
+
+
 def _make_view(**overrides) -> BriefingView:
     defaults = dict(
         id=uuid4(),
@@ -84,6 +89,18 @@ async def test_uses_agent_service_when_available_without_calling_generator() -> 
     assert briefing_id == expected_id
     assert generator.called is False
     assert agent_service.received_startup_id == startup_id
+
+
+@pytest.mark.anyio
+async def test_falls_back_to_deterministic_generator_when_agent_fails() -> None:
+    view = _make_view()
+    generator = FakeGenerator(view)
+    port = BriefingModulePort(generator, agent_service=FailingBriefingAgentService())
+
+    briefing_id = await port.generate(uuid4())
+
+    assert briefing_id == view.id
+    assert generator.called is True
 
 
 @pytest.mark.anyio

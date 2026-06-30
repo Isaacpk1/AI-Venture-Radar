@@ -1,5 +1,6 @@
 """Caso de uso para classificar a maturidade de IA de uma startup."""
 
+import asyncio
 from uuid import UUID
 
 from apps.api.src.modules.startups.application.dto import (
@@ -20,6 +21,11 @@ from apps.api.src.modules.startups.domain.exceptions import (
     StartupClassificationUnavailableError,
     StartupNotFoundError,
 )
+from apps.api.src.shared.logging import get_logger
+
+
+logger = get_logger(__name__)
+TRY_CLASSIFY_TIMEOUT_SECONDS = 45
 
 
 class ClassifyStartup(ClassificationTrigger):
@@ -35,8 +41,17 @@ class ClassifyStartup(ClassificationTrigger):
 
     async def try_classify(self, startup_id: UUID) -> None:
         try:
-            await self.execute(ClassifyStartupInput(startup_id=startup_id))
+            await asyncio.wait_for(
+                self.execute(ClassifyStartupInput(startup_id=startup_id)),
+                timeout=TRY_CLASSIFY_TIMEOUT_SECONDS,
+            )
         except StartupClassificationUnavailableError:
+            return
+        except Exception as error:
+            logger.warning(
+                "startup classification skipped after best-effort failure",
+                extra={"startup_id": str(startup_id), "reason": str(error)},
+            )
             return
 
     async def execute(self, classify_input: ClassifyStartupInput) -> StartupView:

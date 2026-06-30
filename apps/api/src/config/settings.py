@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
     startup_discovery_max_per_run: int = 20
+    startup_discovery_scheduler_enabled: bool = False
+    startup_discovery_scheduler_interval_seconds: float = 604800.0
+    startup_discovery_scheduler_run_on_startup: bool = False
     scraping_startup_timeout_seconds: float = 90.0
     scraping_reference_timeout_seconds: float = 120.0
 
