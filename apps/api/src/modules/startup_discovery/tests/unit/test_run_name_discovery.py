@@ -122,9 +122,11 @@ class FakeUrlExtractor(HubLinkExtractor):
 class FakeUrlSubmitter:
     def __init__(self) -> None:
         self.submitted: list[str] = []
+        self.submitted_names: list[str | None] = []
 
-    async def submit(self, url: str) -> UUID:
+    async def submit(self, url: str, *, name: str | None = None) -> UUID:
         self.submitted.append(url)
+        self.submitted_names.append(name)
         return uuid4()
 
 

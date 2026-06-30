@@ -393,6 +393,36 @@ async def test_add_startup_evidence_infers_technical_type_from_jobs_and_github()
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.terra.com.br/noticias/dino/neuralmind",
+        "https://revistapesquisa.fapesp.br/cresce-o-apoio-a-startups",
+        "https://bhtec.org.br/2025/10/10/neuralmind",
+        "https://parque.inova.unicamp.br/neuralmind-programa-google",
+    ],
+)
+async def test_add_startup_evidence_infers_news_type_from_news_hosts(
+    url: str,
+) -> None:
+    uow = _make_uow()
+    startup = Startup(name="NeuralMind")
+    await uow.startup_repository.save(startup)
+
+    evidence_view = await AddStartupEvidence(lambda: uow).execute(
+        AddStartupEvidenceInput(
+            startup_id=startup.id,
+            scraping_result_id=uuid4(),
+            source_url=url,
+            title="NeuralMind recebe apoio para IA",
+            notes="Empresa treina modelos BERT em portugues.",
+        )
+    )
+
+    assert evidence_view.evidence_type is StartupEvidenceType.NEWS
+
+
+@pytest.mark.anyio
 async def test_add_startup_evidence_infers_website_type_for_plain_site() -> None:
     uow = _make_uow()
     startup = Startup(name="Acme AI")

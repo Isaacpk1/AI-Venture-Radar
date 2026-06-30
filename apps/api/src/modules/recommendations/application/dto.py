@@ -67,6 +67,7 @@ class AIProfileSnapshot:
     deployment_stage: str = "unknown"
     gpu_need: str = "unknown"
     has_operational_signal: bool = False
+    profile_strength: float = 0.0
 
 
 @dataclass(frozen=True)

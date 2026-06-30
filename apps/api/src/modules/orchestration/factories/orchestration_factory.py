@@ -114,7 +114,10 @@ class OrchestrationFactory:
         search_executor = AgentsFactory.create_search_executor()
         return AdvanceUrlIngestionJob(
             uow_factory=PostgresAnalysisUnitOfWork,
-            scraping_port=ScrapingModulePort(ScrapingFactory.create_job_submitter()),
+            scraping_port=ScrapingModulePort(
+                ScrapingFactory.create_job_submitter(),
+                ScrapingFactory.create_result_html_reader(),
+            ),
             ingestion_port=IngestionModulePort(
                 IngestionFactory.create_job_submitter(),
                 IngestionFactory.create_ingested_document_reader(),

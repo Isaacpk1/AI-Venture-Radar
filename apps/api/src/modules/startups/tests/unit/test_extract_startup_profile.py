@@ -116,6 +116,34 @@ async def test_extract_startup_profile_persists_sector_and_description() -> None
 
 
 @pytest.mark.anyio
+async def test_extract_startup_profile_persists_country_and_audit() -> None:
+    uow = _make_uow()
+    startup = Startup(name="Parana AI")
+    await uow.startup_repository.save(startup)
+    evidence = StartupEvidence(
+        startup_id=startup.id,
+        scraping_result_id=uuid4(),
+        source_url="https://parana.ai/news",
+        title="Startup paranaense cresce com IA",
+        notes="A empresa brasileira tem sede no Parana.",
+    )
+    await uow.evidence_repository.save(evidence)
+
+    outcome = ExtractionOutcome(country="BR")
+    extractor = FakeExtractionPort(outcome)
+
+    use_case = ExtractStartupProfile(lambda: uow, extractor)
+    view = await use_case.execute(
+        ExtractStartupProfileInput(startup_id=startup.id)
+    )
+
+    assert view.country == "BR"
+    saved = uow.startup_repository.items[startup.id]
+    assert saved.field_evidence_ids["country"] == [str(evidence.id)]
+    assert "country" in saved.field_confidence
+
+
+@pytest.mark.anyio
 async def test_extract_startup_profile_does_not_erase_sector_when_outcome_has_none() -> None:
     uow = _make_uow()
     startup = Startup(name="Acme AI", sector="LLM customer service", description="Existing description")
@@ -131,6 +159,23 @@ async def test_extract_startup_profile_does_not_erase_sector_when_outcome_has_no
 
     assert view.sector == "LLM customer service"
     assert view.description == "Existing description"
+
+
+@pytest.mark.anyio
+async def test_extract_startup_profile_does_not_erase_country_when_outcome_has_none() -> None:
+    uow = _make_uow()
+    startup = Startup(name="Acme BR", website_url="https://acme.com.br", country="BR")
+    await uow.startup_repository.save(startup)
+
+    outcome = ExtractionOutcome(founders=["Ana Silva"], country=None)
+    extractor = FakeExtractionPort(outcome)
+
+    use_case = ExtractStartupProfile(lambda: uow, extractor)
+    view = await use_case.execute(
+        ExtractStartupProfileInput(startup_id=startup.id)
+    )
+
+    assert view.country == "BR"
 
 
 @pytest.mark.anyio
@@ -167,8 +212,9 @@ async def test_try_extract_persists_outcome() -> None:
     extractor = FakeExtractionPort(outcome)
 
     use_case = ExtractStartupProfile(lambda: uow, extractor)
-    await use_case.try_extract(startup.id)
+    result = await use_case.try_extract(startup.id)
 
+    assert result.succeeded is True
     assert uow.startup_repository.items[startup.id].founders == ("Ana Silva",)
 
 
@@ -316,8 +362,10 @@ async def test_try_extract_is_noop_when_extractor_unavailable() -> None:
 
     use_case = ExtractStartupProfile(lambda: uow, None)
 
-    await use_case.try_extract(startup.id)
+    result = await use_case.try_extract(startup.id)
 
+    assert result.succeeded is False
+    assert result.unavailable is True
     assert uow.startup_repository.items[startup.id].founders == ()
 
 

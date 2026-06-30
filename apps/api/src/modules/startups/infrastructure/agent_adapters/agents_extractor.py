@@ -49,7 +49,15 @@ def _safe_enum(enum_cls, value: str, default):
 
 
 _MAIN_FIELD_NAMES = frozenset(
-    {"founders", "funding_stage", "funding_amount_usd", "customers", "sector", "description"}
+    {
+        "founders",
+        "funding_stage",
+        "funding_amount_usd",
+        "customers",
+        "sector",
+        "description",
+        "country",
+    }
 )
 
 
@@ -118,6 +126,7 @@ class AgentsExtractor(ExtractionPort):
             customers=r.customers,
             sector=r.sector,
             description=r.description,
+            country=r.country,
             ai_profile=ai_profile,
             field_confidence=main_confidence,
             field_evidence_ids=main_evidence_ids,

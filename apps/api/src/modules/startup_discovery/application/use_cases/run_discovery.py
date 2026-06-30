@@ -208,7 +208,8 @@ class RunStartupDiscovery:
                         ):
                             try:
                                 job_id = await self._submitter.submit(
-                                    candidate.official_website_url
+                                    candidate.official_website_url,
+                                    name=candidate.name,
                                 )
                                 candidate.mark_submitted(job_id)
                                 await self._save_candidate(candidate)
@@ -284,7 +285,10 @@ class RunStartupDiscovery:
                         )
                         continue
                     try:
-                        job_id = await self._submitter.submit(candidate.website_url)
+                        job_id = await self._submitter.submit(
+                            candidate.website_url,
+                            name=candidate.name,
+                        )
                         submission = DiscoverySubmission(
                             run_id=run.id,
                             hub_name=hub.name,

@@ -57,6 +57,7 @@ class LangChainGeminiExtractionResponse(BaseModel):
     customers: list[str] = Field(default_factory=list, max_length=20)
     sector: str | None = Field(default=None, max_length=80)
     description: str | None = Field(default=None, max_length=500)
+    country: str | None = Field(default=None, max_length=40)
 
     # Perfil estruturado de IA
     ai_workload_type: AiWorkloadTypeLiteral = "unknown"
@@ -134,6 +135,7 @@ class LangChainGeminiExtractor(ExtractionService):
             customers=parsed.customers,
             sector=parsed.sector,
             description=parsed.description,
+            country=parsed.country,
             ai_workload_type=parsed.ai_workload_type,
             model_type=parsed.model_type,
             data_modality=parsed.data_modality,
@@ -175,7 +177,10 @@ class LangChainGeminiExtractor(ExtractionService):
                 "- funding_amount_usd: valor em USD ou null.\n"
                 "- customers: clientes mencionados.\n"
                 "- sector: rotulo curto de categoria em ingles (ex. 'Healthcare AI').\n"
-                "- description: 1-2 frases em ingles resumindo o produto.\n\n"
+                "- description: 1-2 frases em ingles resumindo o produto.\n"
+                "- country: codigo ISO-2 do pais sede da empresa se mencionado "
+                "ou claramente inferivel da evidencia (ex. 'BR' para "
+                "Brasil/cidades brasileiras); senao null. Nao invente.\n\n"
                 "PERFIL DE IA (sempre em ingles, baseado no que as evidencias "
                 "realmente descrevem — use 'unknown' quando sem evidencia):\n"
                 "- ai_workload_type: tipo de workload de IA principal "

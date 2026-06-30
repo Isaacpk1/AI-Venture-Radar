@@ -9,11 +9,19 @@ from apps.api.src.modules.orchestration.application.ports import (
 from apps.api.src.modules.scraping.application.public.job_submitter import (
     ScrapingJobSubmitter,
 )
+from apps.api.src.modules.scraping.application.public.result_reader import (
+    ScrapingResultHtmlReader,
+)
 
 
 class ScrapingModulePort(ScrapingPort):
-    def __init__(self, submitter: ScrapingJobSubmitter) -> None:
+    def __init__(
+        self,
+        submitter: ScrapingJobSubmitter,
+        html_reader: ScrapingResultHtmlReader,
+    ) -> None:
         self._submitter = submitter
+        self._html_reader = html_reader
 
     async def submit(self, url: str, *, source_type: str = "startup_evidence") -> UUID:
         return await self._submitter.submit(url, source_type=source_type)
@@ -26,3 +34,6 @@ class ScrapingModulePort(ScrapingPort):
             result_id=status.result_id,
             error_message=status.error_message,
         )
+
+    async def get_html(self, result_id: UUID) -> str | None:
+        return await self._html_reader.get_html(result_id)

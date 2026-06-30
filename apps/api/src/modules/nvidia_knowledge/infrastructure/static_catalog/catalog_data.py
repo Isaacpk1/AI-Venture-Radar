@@ -550,8 +550,12 @@ INITIAL_NVIDIA_TECHNOLOGIES: tuple[NvidiaTechnology, ...] = (
         ),
         official_url="https://developer.nvidia.com/morpheus-cybersecurity",
         complexity="high",
-        supported_workloads={
-            "analytics": 0.65,
-        },
+        # "cybersecurity"/"anomaly_detection" nao existem em AiWorkloadType
+        # (startups/domain/enums.py): vocabulario real e
+        # nlp/vision/recommendation/simulation/analytics/mlops/speech/unknown.
+        # Vazio mantem o workload neutro (0.40, abaixo do limiar de admissao
+        # 0.60) — Morpheus so entra por keyword real, nunca por falso-positivo
+        # de "analytics".
+        supported_workloads={},
     ),
 )

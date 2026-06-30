@@ -32,6 +32,24 @@ from apps.api.src.modules.recommendations.domain.policies import (
 
 INCEPTION_SLUG = "nvidia-inception"
 
+# Sinais textuais que indicam uma SEGUNDA carga de IA além da principal.
+# Resolve o caso Driva/Econodata: ai_workload_type="analytics" perde o
+# copiloto/agente (NLP). Aqui detectamos workloads adicionais no texto.
+_SECONDARY_WORKLOAD_SIGNALS = {
+    "nlp": ("copilot", "copiloto", "chatbot", "agente", "agent", "llm",
+            "linguagem natural", "assistente", "geração de texto", "generative"),
+    "vision": ("visão computacional", "computer vision", "imagem", "vídeo", "ocr"),
+    "speech": ("voz", "fala", "transcrição", "speech", "asr", "tts"),
+}
+
+
+def _detect_secondary_workloads(text: str) -> tuple[str, ...]:
+    t = text.lower()
+    return tuple(
+        wl for wl, terms in _SECONDARY_WORKLOAD_SIGNALS.items()
+        if any(term in t for term in terms)
+    )
+
 
 class GenerateRecommendations(RecommendationGenerator):
     """Cruza o perfil da startup com o catalogo NVIDIA e persiste o resultado.
@@ -91,6 +109,11 @@ class GenerateRecommendations(RecommendationGenerator):
                 deployment_stage=p.deployment_stage,
                 gpu_need=p.gpu_need,
                 has_operational_signal=p.has_operational_signal,
+                profile_strength=p.profile_strength,
+                secondary_workloads=_detect_secondary_workloads(
+                    f"{profile.sector or ''} {profile.description or ''} "
+                    + " ".join(s.text for s in evidence_signals)
+                ),
             )
 
         matches = match_technologies(

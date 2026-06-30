@@ -1,8 +1,6 @@
 """Caso de uso para extrair dados estruturados de uma startup."""
 
 import asyncio
-import re
-import unicodedata
 from dataclasses import replace
 from uuid import UUID
 
@@ -10,8 +8,12 @@ from apps.api.src.modules.startups.application.dto import (
     ExtractStartupProfileInput,
     StartupView,
 )
+from apps.api.src.modules.startups.application.evidence_text_cleaner import (
+    compact_evidence_text,
+)
 from apps.api.src.modules.startups.application.ports import ExtractionOutcome, ExtractionPort
 from apps.api.src.modules.startups.application.public.extraction_trigger import (
+    ExtractionAttemptResult,
     ExtractionTrigger,
 )
 from apps.api.src.modules.startups.application.unit_of_work import (
@@ -30,47 +32,6 @@ from apps.api.src.shared.logging import get_logger
 
 logger = get_logger(__name__)
 TRY_EXTRACT_TIMEOUT_SECONDS = 120
-MAX_EVIDENCE_CHARS_FOR_EXTRACTION = 6000
-MAX_BOILERPLATE_LINE_CHARS = 160
-_BOILERPLATE_LINE_HINTS = (
-    "assine",
-    "cadastre",
-    "compartilhe",
-    "cookie",
-    "copa do mundo fifa",
-    "entrar",
-    "facebook",
-    "home",
-    "instagram",
-    "linkedin",
-    "login",
-    "menu",
-    "newsletter",
-    "politica de privacidade",
-    "publicidade",
-    "termos de uso",
-    "twitter",
-)
-_CONTENT_LINE_HINTS = (
-    "api",
-    "bert",
-    "cliente",
-    "clientes",
-    "computer vision",
-    "funding",
-    "ia",
-    "inteligencia artificial",
-    "machine learning",
-    "modelo",
-    "modelos",
-    "nlp",
-    "plataforma",
-    "produto",
-    "rodada",
-    "startup",
-    "treina",
-    "visao computacional",
-)
 _AI_PROFILE_FIELD_NAMES = frozenset(
     {
         "ai_workload_type",
@@ -93,58 +54,9 @@ _MAIN_FIELD_NAMES = frozenset(
         "customers",
         "sector",
         "description",
+        "country",
     }
 )
-
-
-def _normalize_boilerplate_key(text: str) -> str:
-    without_accents = "".join(
-        char
-        for char in unicodedata.normalize("NFKD", text)
-        if not unicodedata.combining(char)
-    )
-    return re.sub(r"\s+", " ", without_accents).strip().lower()
-
-
-def _is_boilerplate_line(line: str) -> bool:
-    normalized = _normalize_boilerplate_key(line)
-    if not normalized:
-        return True
-    if any(hint in normalized for hint in _CONTENT_LINE_HINTS):
-        return False
-    return len(normalized) <= MAX_BOILERPLATE_LINE_CHARS and any(
-        hint in normalized for hint in _BOILERPLATE_LINE_HINTS
-    )
-
-
-def _strip_evidence_boilerplate(text: str) -> str:
-    """Remove linhas curtas de navegacao/rodape e repeticoes obvias."""
-    seen: set[str] = set()
-    kept: list[str] = []
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        key = _normalize_boilerplate_key(line)
-        if not key:
-            continue
-        if key in seen:
-            continue
-        seen.add(key)
-        if _is_boilerplate_line(line):
-            continue
-        kept.append(line)
-    return "\n".join(kept)
-
-
-def _compact_evidence_text(text: str) -> str:
-    """Colapsa whitespace e limita tamanho do texto de evidencia.
-
-    Boilerplate de navegacao infla o texto com muitos espacos e quebras de
-    linha. Compactar reduz tokens sem remover palavras do corpo, e o limite por
-    evidencia evita que varias paginas longas estourem o timeout do LLM.
-    """
-    stripped = _strip_evidence_boilerplate(text)
-    compacted = re.sub(r"\s+", " ", stripped).strip()
-    return compacted[:MAX_EVIDENCE_CHARS_FOR_EXTRACTION]
 
 
 def _base_confidence(n_evidences: int) -> float:
@@ -181,6 +93,8 @@ def _deterministic_main_field_confidence(
         result["sector"] = round(min(0.90, base + 0.05), 2)
     if outcome.description is not None:
         result["description"] = round(min(0.90, base + 0.05), 2)
+    if outcome.country is not None:
+        result["country"] = round(min(0.90, base + 0.05), 2)
     return result
 
 
@@ -293,32 +207,46 @@ class ExtractStartupProfile(ExtractionTrigger):
         self._uow_factory = uow_factory
         self._extractor = extractor
 
-    async def try_extract(self, startup_id: UUID) -> None:
+    async def try_extract(self, startup_id: UUID) -> ExtractionAttemptResult:
         try:
             await asyncio.wait_for(
                 self.execute(ExtractStartupProfileInput(startup_id=startup_id)),
                 timeout=TRY_EXTRACT_TIMEOUT_SECONDS,
             )
-        except StartupExtractionUnavailableError:
-            return
+            return ExtractionAttemptResult(succeeded=True)
+        except StartupExtractionUnavailableError as error:
+            return ExtractionAttemptResult(
+                succeeded=False,
+                unavailable=True,
+                error_message=str(error) or "Servico de extracao indisponivel.",
+            )
         except (asyncio.TimeoutError, TimeoutError):
+            reason = f"timeout after {TRY_EXTRACT_TIMEOUT_SECONDS}s"
             logger.warning(
                 "startup extraction timed out",
                 extra={
                     "startup_id": str(startup_id),
-                    "reason": f"timeout after {TRY_EXTRACT_TIMEOUT_SECONDS}s",
+                    "reason": reason,
                 },
             )
-            return
+            return ExtractionAttemptResult(
+                succeeded=False,
+                timed_out=True,
+                error_message=reason,
+            )
         except Exception as error:
+            reason = str(error) or repr(error)
             logger.warning(
                 "startup extraction skipped after best-effort failure",
                 extra={
                     "startup_id": str(startup_id),
-                    "reason": str(error) or repr(error),
+                    "reason": reason,
                 },
             )
-            return
+            return ExtractionAttemptResult(
+                succeeded=False,
+                error_message=reason,
+            )
 
     async def execute(
         self, extract_input: ExtractStartupProfileInput
@@ -341,9 +269,14 @@ class ExtractStartupProfile(ExtractionTrigger):
             )
 
             evidence_texts = [
-                _compact_evidence_text(
-                    f"[evidence_id={evidence.id}] "
-                    f"{evidence.title or ''} {evidence.notes or ''}"
+                compact_evidence_text(
+                    "\n".join(
+                        [
+                            f"[evidence_id={evidence.id}]",
+                            evidence.title or "",
+                            evidence.notes or "",
+                        ]
+                    )
                 )
                 for evidence in evidences
             ]
@@ -363,6 +296,7 @@ class ExtractStartupProfile(ExtractionTrigger):
                 customers=outcome.customers,
                 sector=outcome.sector,
                 description=outcome.description,
+                country=outcome.country,
             )
             if outcome.ai_profile is not None:
                 startup.update_ai_profile(
@@ -392,6 +326,8 @@ class ExtractStartupProfile(ExtractionTrigger):
                 field_evidence_ids.setdefault("sector", all_evidence_ids)
             if outcome.description is not None:
                 field_evidence_ids.setdefault("description", all_evidence_ids)
+            if outcome.country is not None:
+                field_evidence_ids.setdefault("country", all_evidence_ids)
 
             # field_confidence: usa o valor do LLM quando disponivel; cai para
             # calculo deterministico quando o modelo retorna dict vazio (comportamento

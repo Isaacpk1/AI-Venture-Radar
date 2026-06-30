@@ -250,6 +250,8 @@ class StartupAIContext:
     deployment_stage: str = "unknown"
     gpu_need: str = "unknown"
     has_operational_signal: bool = False
+    profile_strength: float = 0.0
+    secondary_workloads: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -305,15 +307,22 @@ def _workload_alignment(
     """
     if ai_context is None or not candidate.supported_workloads:
         return 0.40
-    if ai_context.ai_workload_type == "unknown":
+    workloads = [ai_context.ai_workload_type, *ai_context.secondary_workloads]
+    scores = [
+        candidate.supported_workloads.get(wl, 0.0)
+        for wl in workloads
+        if wl and wl != "unknown"
+    ]
+    if not scores:
         return 0.40
-    return candidate.supported_workloads.get(ai_context.ai_workload_type, 0.0)
+    return max(scores)
 
 
 def _evidence_signal_score(
     *,
     matched_evidence_ids: set[UUID],
     evidence_signals: list[EvidenceSignal],
+    profile_strength: float = 0.0,
 ) -> float:
     """Qualidade e profundidade do sinal de evidencia que suporta o match.
 
@@ -321,12 +330,15 @@ def _evidence_signal_score(
     Com evidencias: media do confidence_score + bonus de profundidade (max +0.15
     por cada evidencia adicional alem da primeira, cap em 0.95).
     """
+    # Admitida por perfil (sem evidencia casada por keyword): o perfil FOI
+    # extraido de fonte real (field_evidence_ids), entao o field_confidence do
+    # perfil vale como sinal de evidencia — escalado, com piso historico 0.20.
     if not matched_evidence_ids:
-        return 0.20
+        return max(0.20, round(0.9 * profile_strength, 2))
 
     matching = [s for s in evidence_signals if s.evidence_id in matched_evidence_ids]
     if not matching:
-        return 0.20
+        return max(0.20, round(0.9 * profile_strength, 2))
 
     base = sum(_source_quality(s) for s in matching) / len(matching)
     depth_bonus = min(0.15, 0.05 * (len(matched_evidence_ids) - 1))
@@ -453,6 +465,64 @@ def _implementation_viability(
     return _VIABILITY.get((gpu, complexity), 0.55)
 
 
+def _workload_admission_category_allowed(
+    ai_context: StartupAIContext | None,
+    candidate: TechnologyCandidate,
+    *,
+    matched_keyword_count: int,
+) -> bool:
+    """Evita que workload generico admita tecnologias de outra categoria.
+
+    O caminho por workload e deliberadamente mais permissivo que keywords, mas
+    ele nao pode transformar "analytics" ou "nlp" em sinal de speech,
+    cybersecurity ou healthcare sem evidencias textuais diretas.
+    """
+
+    if ai_context is None:
+        return False
+
+    workloads = {
+        workload
+        for workload in (ai_context.ai_workload_type, *ai_context.secondary_workloads)
+        if workload and workload != "unknown"
+    }
+    category = candidate.category
+
+    if category == "speech_ai":
+        return "speech" in workloads
+    if category == "cybersecurity":
+        return bool(workloads & {"cybersecurity", "security"})
+    if category == "healthcare_ai":
+        return matched_keyword_count > 0 and bool(
+            workloads & {"healthcare", "vision"}
+        )
+
+    if matched_keyword_count > 0:
+        return True
+
+    if "analytics" in workloads:
+        return category in {"data_science", "accelerated_computing"}
+    if "nlp" in workloads:
+        return category in {
+            "model_serving",
+            "model_training",
+            "model_optimization",
+            "mlops",
+            "ai_platform",
+        }
+    if "vision" in workloads:
+        return category in {
+            "computer_vision",
+            "model_serving",
+            "model_optimization",
+            "mlops",
+        }
+    if "speech" in workloads:
+        return category in {"speech_ai", "model_serving", "model_training"}
+
+    return False
+
+
 def _composite_score(
     *,
     keyword_prior: float,
@@ -542,7 +612,20 @@ def _composite_confidence(
         evidence_signals=evidence_signals,
         ai_context=ai_context,
     )
-    return min(raw_confidence, cap)
+    evidence_conf = min(raw_confidence, cap)
+
+    # Caminho de perfil: quando a rec foi admitida por alinhamento de workload
+    # e o perfil esta bem extraido (field_confidence alto), credita isso como
+    # fundamentacao real — o perfil aponta para as fontes via field_evidence_ids.
+    profile_strength = ai_context.profile_strength if ai_context else 0.0
+    profile_conf = (
+        0.45 * workload_proximity
+        + 0.35 * profile_strength
+        + 0.20 * operational_signal
+    )
+    profile_conf = min(profile_conf, 0.78)  # perfil e prova indireta: teto < 1
+
+    return round(max(evidence_conf, profile_conf), 2)
 
 
 def _compute_nivel(score: float, confidence: float) -> str:
@@ -703,6 +786,11 @@ def match_technologies(
             ai_context is not None
             and ai_context.ai_workload_type != "unknown"
             and workload_aln >= WORKLOAD_ADMISSION_THRESHOLD
+            and _workload_admission_category_allowed(
+                ai_context,
+                technology,
+                matched_keyword_count=len(matched_keywords),
+            )
             and not (
                 technology.category == "healthcare_ai"
                 and len(matched_keywords) == 0
@@ -722,6 +810,7 @@ def match_technologies(
         evidence_sig = _evidence_signal_score(
             matched_evidence_ids=matched_evidence_ids,
             evidence_signals=evidence_signals,
+            profile_strength=(ai_context.profile_strength if ai_context else 0.0),
         )
         startup_mat = _startup_maturity_score(ai_context)
 
@@ -754,6 +843,12 @@ def match_technologies(
         }
         nivel = _compute_nivel(score, confidence)
         missing_signals_tuple = tuple(missing_signals)
+        if (
+            nivel == NIVEL_FORTE
+            and not matched_evidence_ids
+            and missing_signals_tuple
+        ):
+            nivel = NIVEL_MODERADA
         matching_evidences = [
             signal
             for signal in evidence_signals

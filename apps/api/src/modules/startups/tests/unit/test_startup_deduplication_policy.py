@@ -102,6 +102,52 @@ def test_falls_back_to_name_when_domains_differ() -> None:
     assert match is existing[0]
 
 
+def test_matches_distinctive_brand_inside_article_title_and_url() -> None:
+    """Caso real: discovery achou primeiro uma noticia sobre NeuralMind.
+
+    Depois, ao encontrar o site oficial, deve reutilizar a startup existente
+    mesmo que o website_url salvo seja do publisher, nao da empresa.
+    """
+
+    existing = [
+        Startup(
+            name=(
+                "NeuralMind: Inteligencia artificial brasileira a servico "
+                "da inovacao e do impacto social"
+            ),
+            website_url=(
+                "https://bhtec.org.br/2025/10/10/"
+                "neuralmind-inteligencia-artificial-brasileira-a-servico-da-inovacao"
+            ),
+        )
+    ]
+
+    match = find_duplicate_startup(
+        name="NeuralMind",
+        website_url="https://neuralmind.ai",
+        existing=existing,
+    )
+
+    assert match is existing[0]
+
+
+def test_does_not_use_containment_for_short_ambiguous_names() -> None:
+    existing = [
+        Startup(
+            name="StoneAge Analytics",
+            website_url="https://stoneage.example.com",
+        )
+    ]
+
+    match = find_duplicate_startup(
+        name="Stone",
+        website_url="https://stone.example.com",
+        existing=existing,
+    )
+
+    assert match is None
+
+
 def test_no_match_when_nothing_similar_exists() -> None:
     existing = [Startup(name="Totally Unrelated Co")]
 

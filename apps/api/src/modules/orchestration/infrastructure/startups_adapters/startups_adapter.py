@@ -11,6 +11,7 @@ aqui.
 from uuid import UUID
 
 from apps.api.src.modules.orchestration.application.ports import (
+    StartupExtractionAttempt,
     StartupProfileSnapshot,
     StartupsPort,
 )
@@ -68,8 +69,14 @@ class StartupsModulePort(StartupsPort):
             notes=notes,
         )
 
-    async def try_extract(self, startup_id: UUID) -> None:
-        await self._extraction_trigger.try_extract(startup_id)
+    async def try_extract(self, startup_id: UUID) -> StartupExtractionAttempt:
+        result = await self._extraction_trigger.try_extract(startup_id)
+        return StartupExtractionAttempt(
+            succeeded=result.succeeded,
+            unavailable=result.unavailable,
+            timed_out=result.timed_out,
+            error_message=result.error_message,
+        )
 
     async def try_classify(self, startup_id: UUID) -> None:
         await self._classification_trigger.try_classify(startup_id)
@@ -78,8 +85,20 @@ class StartupsModulePort(StartupsPort):
         profile = await self._profile_reader.get_profile(startup_id)
         startup = profile.startup
         ai_workload_type = "unknown"
+        deployment_stage = "unknown"
+        gpu_need = "unknown"
         if startup.ai_profile is not None:
             ai_workload_type = startup.ai_profile.ai_workload_type or "unknown"
+            deployment_stage = (
+                getattr(startup.ai_profile.deployment_stage, "value", None)
+                or startup.ai_profile.deployment_stage
+                or "unknown"
+            )
+            gpu_need = (
+                getattr(startup.ai_profile.gpu_need, "value", None)
+                or startup.ai_profile.gpu_need
+                or "unknown"
+            )
 
         return StartupProfileSnapshot(
             name=startup.name,
@@ -91,4 +110,6 @@ class StartupsModulePort(StartupsPort):
             customers=list(startup.customers),
             evidence_urls=[evidence.source_url for evidence in profile.evidences],
             ai_workload_type=ai_workload_type,
+            deployment_stage=deployment_stage,
+            gpu_need=gpu_need,
         )

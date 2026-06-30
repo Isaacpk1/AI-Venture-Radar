@@ -34,6 +34,7 @@ from apps.api.src.modules.orchestration.application.ports import (
     IngestionPort,
     RecommendationsPort,
     ScrapingPort,
+    StartupExtractionAttempt,
     StartupProfileSnapshot,
     StartupsPort,
     UrlIngestionTaskDispatcher,
@@ -52,6 +53,11 @@ from apps.api.src.shared.logging import bind_context, get_logger
 STARTUP_EVIDENCE_SOURCE_TYPE = "startup_evidence"
 MAX_EVIDENCE_TEXT_CHARS = 8000
 MAX_ENRICHMENT_ROUNDS = 1
+
+_TERMINAL_JOB_STATUSES = {
+    UrlIngestionJobStatus.COMPLETED,
+    UrlIngestionJobStatus.FAILED,
+}
 MAX_ENRICHMENT_URLS_PER_ROUND = 4
 MAX_ENRICHMENT_SEARCH_QUERIES = 3
 MAX_ENRICHMENT_SEARCH_RESULTS_PER_QUERY = 5
@@ -296,6 +302,96 @@ def _same_domain_candidate_urls(source_url: str) -> list[str]:
     return [_normalize_url(urljoin(base, path)) for path in ENRICHMENT_PATHS]
 
 
+# ---------------------------------------------------------------------------
+# P0d — Extração de links reais do HTML da home
+# ---------------------------------------------------------------------------
+
+_HREF_RE = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
+
+# Paths que levam a conteúdo substantivo sobre o produto/empresa
+_ENRICHMENT_KEYWORD_RE = re.compile(
+    r"(about|sobre|produto|product|platform|plataform|solution|solucao|"
+    r"blog|tech|engineering|engenharia|team|equipe|carreira|career|vaga|"
+    r"job|customer|cliente|case|feature|pricing|preco|api|docs|"
+    r"documentation|how|why|partner|parceiro|resource|recurso)",
+    re.IGNORECASE,
+)
+
+# Extensões de arquivo que não são páginas
+_SKIP_EXT_RE = re.compile(
+    r"\.(png|jpg|jpeg|gif|svg|ico|pdf|zip|mp4|mp3|css|js|woff2?|ttf|eot|map)$",
+    re.IGNORECASE,
+)
+
+# Segmentos de path que não valem para enriquecimento
+_SKIP_SEGMENT_RE = re.compile(
+    r"^(login|signin|sign-in|signup|sign-up|register|logout|auth|"
+    r"dashboard|app|admin|cdn|static|assets|images|img|fonts|"
+    r"privacy|privacidade|terms|termos|cookies|sitemap|rss)$",
+    re.IGNORECASE,
+)
+
+
+def _extract_internal_links(html: str, base_url: str) -> list[str]:
+    """Extrai links internos relevantes do HTML da home (P0d).
+
+    Retorna URLs normalizadas do mesmo domínio, ordenadas por relevância
+    (páginas de produto/sobre/blog/tech primeiro), sem media/auth/assets.
+    """
+    parsed_base = urlparse(base_url)
+    base_host = parsed_base.netloc.lower().removeprefix("www.")
+
+    seen: set[str] = set()
+    scored: list[tuple[int, str]] = []
+
+    for match in _HREF_RE.finditer(html):
+        href = match.group(1).strip()
+
+        # Descarta URIs especiais
+        if href.startswith(("data:", "mailto:", "tel:", "javascript:", "#")):
+            continue
+
+        try:
+            absolute = urljoin(base_url, href)
+            parsed = urlparse(absolute)
+        except Exception:
+            continue
+
+        # Apenas mesmo domínio
+        link_host = parsed.netloc.lower().removeprefix("www.")
+        if link_host != base_host:
+            continue
+
+        path = parsed.path
+        if not path or path == "/":
+            continue
+
+        # Descarta arquivos de mídia/estilo
+        if _SKIP_EXT_RE.search(path):
+            continue
+
+        # Normaliza sem query/fragment
+        normalized = _normalize_url(
+            urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
+        )
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+
+        # Descarta paths com segmentos irrelevantes
+        segments = [s for s in path.strip("/").split("/") if s]
+        if any(_SKIP_SEGMENT_RE.match(s) for s in segments):
+            continue
+
+        # Pontua por relevância do path
+        score = 10 if _ENRICHMENT_KEYWORD_RE.search(path) else 0
+        scored.append((score, normalized))
+
+    # Relevantes primeiro; dentro do mesmo score, paths mais curtos (mais gerais)
+    scored.sort(key=lambda x: (-x[0], len(x[1])))
+    return [url for _, url in scored]
+
+
 def _hostname(url: str) -> str:
     return urlparse(url).netloc.lower().removeprefix("www.")
 
@@ -438,6 +534,36 @@ def _unique_non_empty(items: list[str]) -> list[str]:
         seen.add(normalized)
         unique.append(normalized)
     return unique
+
+
+def _key_missing_fields(profile: StartupProfileSnapshot) -> list[str]:
+    """Campos-chave que movem a recomendacao e que ainda estao desconhecidos.
+
+    Funcao pura extraida para ser testavel sem instanciar o use case.
+    """
+    return [
+        label
+        for label, value in (
+            ("ai_workload_type", profile.ai_workload_type),
+            ("deployment_stage", profile.deployment_stage),
+            ("gpu_need", profile.gpu_need),
+        )
+        if value == "unknown"
+    ]
+
+
+def _recommendation_blocking_missing_fields(
+    profile: StartupProfileSnapshot,
+) -> list[str]:
+    """Campos minimos para recomendar sem cair em palpite fraco."""
+    return [
+        label
+        for label, value in (
+            ("ai_workload_type", profile.ai_workload_type),
+            ("deployment_stage", profile.deployment_stage),
+        )
+        if value in {None, "", "unknown", "none", "null"}
+    ]
 
 
 class AdvanceUrlIngestionJob:
@@ -595,6 +721,10 @@ class AdvanceUrlIngestionJob:
                 assert job.scraping_result_id is not None
                 try:
                     await self._run_analysis(job)
+                except UrlIngestionStillProcessingError:
+                    # Pai aguardando filhos de enriquecimento: re-enfileira,
+                    # NAO falha. Mesmo padrao das fases scraping/ingestion.
+                    raise
                 except Exception as error:
                     logger.warning(
                         "analysis failed, failing url ingestion job",
@@ -606,6 +736,7 @@ class AdvanceUrlIngestionJob:
 
                 job.complete()
                 await self._save(job)
+                await self._dispatch_parent_after_enrichment_child(job)
                 logger.info(
                     "url ingestion job completed",
                     extra={
@@ -695,23 +826,67 @@ class AdvanceUrlIngestionJob:
                 await self._save(job)
                 logger.info("evidence attached to startup")
 
-            logger.info("running extraction (best-effort)")
-            await self._startups_port.try_extract(job.startup_id)
+            # --- Coordenacao do enriquecimento: o pai (round 0) e o DONO UNICO
+            # da recomendacao/briefing. Filhos so coletam evidencia. Isso elimina
+            # a corrida do "ultimo irmao" (duas fontes terminando juntas adiavam
+            # ambas, orfanando a recomendacao).
+            if job.enrichment_round > 0:
+                # Filho de enriquecimento: evidencia ja anexada acima; nao recomenda.
+                logger.info("enrichment child collected evidence; parent will finalize")
+                return
 
-            logger.info("running classification (best-effort)")
-            await self._startups_port.try_classify(job.startup_id)
+            children = await self._list_enrichment_children(job)
 
-            enrichment_job_ids = await self._schedule_enrichment_if_needed(
-                job,
-                content=content,
-            )
-            if enrichment_job_ids:
-                logger.info(
-                    "enrichment url ingestion jobs scheduled",
-                    extra={"count": len(enrichment_job_ids)},
+            if not children:
+                # Primeira passada do pai: extrai, classifica, agenda enriquecimento.
+                logger.info("running extraction (best-effort)")
+                extraction_attempt = await self._startups_port.try_extract(
+                    job.startup_id
                 )
+                logger.info("running classification (best-effort)")
+                await self._startups_port.try_classify(job.startup_id)
 
-            if not job.recommendations_done:
+                enrichment_job_ids = await self._schedule_enrichment_if_needed(
+                    job, content=content
+                )
+                if enrichment_job_ids:
+                    logger.info(
+                        "analysis deferred until enrichment sources complete",
+                        extra={"count": len(enrichment_job_ids)},
+                    )
+                    raise UrlIngestionStillProcessingError(
+                        "Aguardando fontes de enriquecimento."
+                    )
+                # Sem enriquecimento necessario -> segue direto para recomendacao.
+            else:
+                # Passadas seguintes do pai: espera TODOS os filhos terminarem.
+                await self._complete_collected_enrichment_children(children)
+                if any(c.status not in _TERMINAL_JOB_STATUSES for c in children):
+                    raise UrlIngestionStillProcessingError(
+                        "Aguardando filhos de enriquecimento."
+                    )
+                # Filhos terminaram: re-extrai/classifica com a evidencia nova.
+                logger.info("running extraction after enrichment (best-effort)")
+                extraction_attempt = await self._startups_port.try_extract(
+                    job.startup_id
+                )
+                logger.info("running classification after enrichment (best-effort)")
+                await self._startups_port.try_classify(job.startup_id)
+
+            # Dono unico roda recomendacao + briefing UMA vez. Se o worker cair
+            # depois de recommendations e antes do briefing, o retry reaproveita
+            # o count ja persistido.
+            if job.recommendations_done:
+                recommendation_count = job.recommendation_count or 0
+                logger.info(
+                    "recommendations already generated; skipping regeneration",
+                    extra={"recommendation_count": recommendation_count},
+                )
+            else:
+                await self._ensure_profile_ready_for_recommendations(
+                    job,
+                    extraction_attempt=extraction_attempt,
+                )
                 recommendation_count = await self._recommendations_port.generate(
                     job.startup_id
                 )
@@ -721,19 +896,75 @@ class AdvanceUrlIngestionJob:
                     "recommendations generated",
                     extra={"recommendation_count": recommendation_count},
                 )
-            else:
-                recommendation_count = job.recommendation_count or 0
-                logger.info(
-                    "recommendations already done, skipping",
-                    extra={"recommendation_count": recommendation_count},
-                )
 
             briefing_id = await self._briefing_port.generate(job.startup_id)
             logger.info("briefing generated", extra={"briefing_id": str(briefing_id)})
-
             job.record_analysis_result(
                 recommendation_count=recommendation_count, briefing_id=briefing_id
             )
+
+    async def _ensure_profile_ready_for_recommendations(
+        self,
+        job: UrlIngestionJob,
+        *,
+        extraction_attempt: StartupExtractionAttempt,
+    ) -> None:
+        assert job.startup_id is not None
+
+        profile = await self._startups_port.get_profile(job.startup_id)
+        missing = _recommendation_blocking_missing_fields(profile)
+        if not missing:
+            return
+
+        reason = (
+            extraction_attempt.error_message
+            or "extracao completou sem preencher os campos minimos"
+        )
+        status = (
+            "timeout"
+            if extraction_attempt.timed_out
+            else "indisponivel"
+            if extraction_attempt.unavailable
+            else "falhou"
+            if not extraction_attempt.succeeded
+            else "incompleta"
+        )
+        raise RuntimeError(
+            "Perfil estruturado de IA incompleto apos consolidar as evidencias "
+            f"ja anexadas; campos criticos ausentes: {', '.join(missing)}. "
+            f"Status da extracao: {status}. Motivo: {reason}. "
+            "Recomendacoes nao foram geradas para evitar briefing fraco."
+        )
+
+    async def _list_enrichment_children(
+        self, job: UrlIngestionJob
+    ) -> list[UrlIngestionJob]:
+        """Jobs de enriquecimento filhos deste job (mesma startup, parent=este)."""
+        if job.startup_id is None:
+            return []
+        async with self._uow_factory() as uow:
+            jobs = await uow.url_ingestion_job_repository.list_by_startup_id(
+                job.startup_id
+            )
+        return [j for j in jobs if j.parent_job_id == job.id]
+
+    async def _complete_collected_enrichment_children(
+        self, children: list[UrlIngestionJob]
+    ) -> None:
+        """Fecha filhos que ja anexaram evidencia, mas ficaram em ANALYZING.
+
+        Se o worker cair entre ``mark_evidence_attached`` e ``complete()``, o pai
+        ficava esperando um filho que ja tinha cumprido sua unica funcao.
+        """
+
+        for child in children:
+            if (
+                child.status is UrlIngestionJobStatus.ANALYZING
+                and child.enrichment_round > 0
+                and child.evidence_attached
+            ):
+                child.complete()
+                await self._save(child)
 
     async def _schedule_enrichment_if_needed(
         self,
@@ -748,7 +979,21 @@ class AdvanceUrlIngestionJob:
 
         profile = await self._startups_port.get_profile(job.startup_id)
 
-        # Check for missing structural signals (business profile).
+        # Parada por CAMPOS-CHAVE: enriquece enquanto algum campo que move a
+        # recomendacao estiver desconhecido (workload, estagio, GPU). O teto
+        # MAX_ENRICHMENT_ROUNDS garante terminacao mesmo quando o dado nunca
+        # aparece em fonte publica.
+        key_missing = _key_missing_fields(profile)
+
+        # Para quando os campos-chave ja estao preenchidos (perfil "bom o
+        # suficiente"), mesmo que founders/clientes faltem — esses sao pouco
+        # recuperaveis publicamente e nao mudam a recomendacao.
+        if not key_missing:
+            return []
+
+        # founders/funding/customers nao disparam enriquecimento sozinhos:
+        # entram apenas como dica adicional de busca quando ja vamos enriquecer
+        # por um campo-chave.
         basic_missing = [
             label
             for label, is_missing in (
@@ -758,16 +1003,7 @@ class AdvanceUrlIngestionJob:
             )
             if is_missing
         ]
-
-        # Also enrich when AI workload is still unknown (avoids thin-page problem).
-        ai_profile_unknown = profile.ai_workload_type == "unknown"
-
-        missing_signals = basic_missing
-        if ai_profile_unknown and "ai_profile" not in missing_signals:
-            missing_signals = [*missing_signals, "ai_profile"]
-
-        if not missing_signals:
-            return []
+        missing_signals = [*key_missing, *basic_missing]
 
         async with self._uow_factory() as uow:
             existing_jobs = await uow.url_ingestion_job_repository.list_by_startup_id(
@@ -783,6 +1019,21 @@ class AdvanceUrlIngestionJob:
             ]
             if url
         }
+        # P0d — tenta extrair links reais do HTML já raspado antes de chutar paths.
+        # Best-effort: qualquer falha (sem result_id, DB indisponível, HTML None)
+        # cai silenciosamente no fallback de paths fixos.
+        extracted_html_links: list[str] = []
+        if job.scraping_result_id is not None:
+            try:
+                html = await self._scraping_port.get_html(job.scraping_result_id)
+                if html:
+                    extracted_html_links = _extract_internal_links(html, job.url)
+            except Exception as _html_err:
+                logger.debug(
+                    "could not extract internal links from html",
+                    extra={"reason": str(_html_err)},
+                )
+
         # Quando a busca esta disponivel, os paths same-domain sao apenas um
         # palpite (e em geral 404 — a "parede de 404" das 12 startups). Por
         # isso reservamos s o' 1 slot para o palpite same-domain de maior chance
@@ -798,6 +1049,7 @@ class AdvanceUrlIngestionJob:
             job_url=job.url,
             known_urls=known_urls,
             candidates=[],
+            extracted_links=extracted_html_links,
         )[:same_domain_limit]
 
         external_candidates = await self._find_external_enrichment_urls(
@@ -853,6 +1105,28 @@ class AdvanceUrlIngestionJob:
             },
         )
         return dispatched_job_ids
+
+    async def _dispatch_parent_after_enrichment_child(
+        self, job: UrlIngestionJob
+    ) -> None:
+        if job.parent_job_id is None:
+            return
+
+        try:
+            await self._task_dispatcher.dispatch(job_id=job.parent_job_id)
+            logger.info(
+                "parent url ingestion job requeued after enrichment child completed",
+                extra={"parent_job_id": str(job.parent_job_id)},
+            )
+        except Exception as error:
+            logger.warning(
+                "failed to requeue parent url ingestion job after enrichment child",
+                extra={
+                    "parent_job_id": str(job.parent_job_id),
+                    "child_job_id": str(job.id),
+                    "reason": str(error),
+                },
+            )
 
     async def _find_external_enrichment_urls(
         self,
@@ -957,10 +1231,18 @@ class AdvanceUrlIngestionJob:
         job_url: str,
         known_urls: set[str],
         candidates: list[str],
+        extracted_links: list[str] | None = None,
     ) -> list[str]:
+        # P0d: quando temos links reais do HTML, usamos eles em vez de adivinhar.
+        # Fallback para ENRICHMENT_PATHS quando o HTML não estava disponível.
+        source_urls = (
+            extracted_links
+            if extracted_links
+            else _same_domain_candidate_urls(profile_website_url or job_url)
+        )
         return [
             url
-            for url in _same_domain_candidate_urls(profile_website_url or job_url)
+            for url in source_urls
             if url not in known_urls and url not in candidates
         ]
 

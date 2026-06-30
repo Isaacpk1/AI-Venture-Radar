@@ -17,6 +17,18 @@ from apps.api.src.modules.startups.domain.policies import calibrate_ai_maturity_
             "Runway",
             "Generative video platform building AI models for video generation and world simulation.",
         ),
+        (
+            "ModeloBR",
+            "A empresa treina modelos proprios, faz pre-treino em portugues e oferece document analysis via API.",
+        ),
+        (
+            "Pesquisa Neural",
+            "DeepTech que desenvolve modelos de IA com transformer, fine-tuning e redes neurais proprietarias.",
+        ),
+        (
+            "VisionLab",
+            "Computer vision company using reinforcement learning and neural network research in production.",
+        ),
     ],
 )
 def test_tap_keeps_core_ai_companies_as_ai_native(name: str, evidence: str) -> None:
@@ -37,8 +49,8 @@ def test_tap_keeps_core_ai_companies_as_ai_native(name: str, evidence: str) -> N
     "name,evidence",
     [
         ("Notion AI", "Workspace with docs, meetings, project management and AI agents."),
-        ("Grammarly", "Writing assistant with AI suggestions for communication."),
-        ("Canva AI", "Design platform with AI tools for presentations and marketing."),
+        ("Grammarly", "Grammar and spelling assistant with AI suggestions."),
+        ("Canva AI", "Design tool with AI features for presentations."),
     ],
 )
 def test_tap_downgrades_productivity_layers_to_ai_enabled(

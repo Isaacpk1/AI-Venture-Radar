@@ -7,6 +7,9 @@ from apps.api.src.modules.startups.application.dto import (
     ClassifyStartupInput,
     StartupView,
 )
+from apps.api.src.modules.startups.application.evidence_text_cleaner import (
+    compact_evidence_text,
+)
 from apps.api.src.modules.startups.application.ports import StartupClassifierPort
 from apps.api.src.modules.startups.application.public.classification_trigger import (
     ClassificationTrigger,
@@ -47,10 +50,22 @@ class ClassifyStartup(ClassificationTrigger):
             )
         except StartupClassificationUnavailableError:
             return
+        except (asyncio.TimeoutError, TimeoutError):
+            logger.warning(
+                "startup classification timed out",
+                extra={
+                    "startup_id": str(startup_id),
+                    "reason": f"timeout after {TRY_CLASSIFY_TIMEOUT_SECONDS}s",
+                },
+            )
+            return
         except Exception as error:
             logger.warning(
                 "startup classification skipped after best-effort failure",
-                extra={"startup_id": str(startup_id), "reason": str(error)},
+                extra={
+                    "startup_id": str(startup_id),
+                    "reason": str(error) or repr(error),
+                },
             )
             return
 
@@ -73,7 +88,9 @@ class ClassifyStartup(ClassificationTrigger):
             )
 
             evidence_texts = [
-                f"{evidence.title or ''} {evidence.notes or ''}".strip()
+                compact_evidence_text(
+                    "\n".join([evidence.title or "", evidence.notes or ""])
+                )
                 for evidence in evidences
             ]
             outcome = await self._classifier.classify(

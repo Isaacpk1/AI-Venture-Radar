@@ -181,6 +181,7 @@ class ExtractionResult:
     customers: list[str]
     sector: str | None = None
     description: str | None = None
+    country: str | None = None
     # Perfil estruturado de IA (Briefing V4, passo 2)
     ai_workload_type: str = "unknown"
     model_type: str = "unknown"

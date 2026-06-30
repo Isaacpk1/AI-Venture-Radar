@@ -42,6 +42,10 @@ class StartupsModuleProfileSource(StartupProfileSource):
         ai_profile_snapshot: AIProfileSnapshot | None = None
         if profile.startup.ai_profile is not None:
             p = profile.startup.ai_profile
+            _fc = getattr(p, "field_confidence", None) or {}
+            _profile_strength = (
+                sum(_fc.values()) / len(_fc) if _fc else 0.0
+            )
             ai_profile_snapshot = AIProfileSnapshot(
                 ai_workload_type=p.ai_workload_type,
                 deployment_stage=p.deployment_stage,
@@ -50,6 +54,7 @@ class StartupsModuleProfileSource(StartupProfileSource):
                     p.deployment_stage in ("production", "scale")
                     or bool(p.scale_signal)
                 ),
+                profile_strength=_profile_strength,
             )
 
         return StartupProfileSnapshot(

@@ -42,42 +42,87 @@ _AI_SIGNAL_TERMS = (
 )
 
 _AI_NATIVE_TERMS = (
+    # Model providers / labs / fronteira.
     "frontier ai",
     "foundation model",
+    "modelo fundacional",
     "model provider",
     "large language model",
+    "modelo de linguagem",
     "llm",
+    # Treina / constroi / fine-tunes modelo proprio (EN + PT).
     "train model",
+    "trains its own",
+    "trains their own",
+    "own models",
+    "proprietary model",
+    "treina modelo",
+    "treina os proprios",
+    "treina seus proprios",
+    "modelo proprio",
+    "modelos proprios",
+    "modelo proprietario",
+    "pre-train",
+    "pre-treino",
+    "pretraining",
+    "fine-tun",
+    "fine tun",
+    "fine-tuning",
+    "ajuste fino",
+    "desenvolve modelos de ia",
+    "desenvolvemos modelos",
+    "cria modelos de ia",
+    "nossos modelos",
+    "modelos especializados",
+    "bertimbau",
+    # Arquitetura / pesquisa de modelo.
+    "transformer",
+    "rede neural",
+    "redes neurais",
+    "neural network",
+    "deep learning",
+    "aprendizado profundo",
+    "reinforcement learning",
+    "aprendizado por reforco",
+    "computer vision",
+    "visao computacional",
+    "model weights",
+    "pesos do modelo",
+    # Infra de treino/inferencia.
     "training and inference",
     "inference infrastructure",
     "model infrastructure",
     "gpu cluster",
+    # Geracao de midia por IA (o modelo e o produto).
     "text-to-video",
     "video generation",
     "generative video",
+    "image generation",
+    "geracao de imagem",
+    "geracao de video",
+    "speech synthesis",
     "simulate the world",
 )
 
 _AI_ENABLED_PRODUCT_TERMS = (
     "workspace",
-    "docs",
-    "document",
-    "notes",
     "meeting notes",
     "project management",
     "collaboration",
-    "writing",
     "grammar",
     "spelling",
-    "communication",
-    "design",
     "presentation",
-    "marketing",
-    "sales",
-    "support",
-    "customer service",
     "crm",
     "ecommerce",
+    "e-commerce",
+    "varejo",
+    "loja online",
+    "design tool",
+    "editor de imagem",
+    "planilha",
+    "spreadsheet",
+    "help desk",
+    "service desk",
 )
 
 _KNOWN_AI_ENABLED_COMPANIES = (
@@ -94,6 +139,10 @@ _KNOWN_AI_ENABLED_COMPANIES = (
 def _normalize_name(name: str) -> str:
     normalized = _LEGAL_SUFFIXES.sub("", name.lower())
     return _NON_ALNUM.sub(" ", normalized).strip()
+
+
+def _compact_name_key(name: str) -> str:
+    return _NON_ALNUM.sub("", _normalize_name(name))
 
 
 def normalize_domain(website_url: str) -> str:
@@ -138,6 +187,7 @@ def find_duplicate_startup(
 
     candidate_domain = normalize_domain(website_url) if website_url else None
     candidate_name = _normalize_name(name)
+    candidate_key = _compact_name_key(name)
 
     best_match: Startup | None = None
     best_score = 0.0
@@ -145,6 +195,18 @@ def find_duplicate_startup(
         if candidate_domain and startup.website_url:
             if normalize_domain(startup.website_url) == candidate_domain:
                 return startup
+
+        startup_name_key = _compact_name_key(startup.name)
+        startup_url_key = _NON_ALNUM.sub("", (startup.website_url or "").lower())
+        # Discovery sometimes first sees a substantive article/profile page and
+        # creates "Brand: long article title" with the publisher URL. When the
+        # official site is discovered later, exact-domain matching cannot help.
+        # For brand names long enough to be distinctive, treat containment in
+        # the existing title or source URL as a strong duplicate signal.
+        if len(candidate_key) >= 8 and (
+            candidate_key in startup_name_key or candidate_key in startup_url_key
+        ):
+            return startup
 
         score = fuzz.WRatio(candidate_name, _normalize_name(startup.name))
         if score > best_score:

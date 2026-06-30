@@ -34,6 +34,9 @@ from apps.api.src.modules.startup_discovery.infrastructure.orchestration_adapter
 from apps.api.src.modules.startup_discovery.infrastructure.search_adapters.tavily_web_search_adapter import (
     TavilyWebSearchAdapter,
 )
+from apps.api.src.modules.startups.infrastructure.database.postgres_unit_of_work import (
+    PostgresStartupsUnitOfWork,
+)
 
 
 def _url_extractors() -> dict:
@@ -67,7 +70,8 @@ class StartupDiscoveryFactory:
             extractors=_url_extractors(),
             name_extractors=_name_extractors(),
             url_ingestion_submitter=StartupDiscoveryUrlIngestionAdapter(
-                OrchestrationFactory.create_create_url_ingestion_job()
+                OrchestrationFactory.create_create_url_ingestion_job(),
+                PostgresStartupsUnitOfWork,
             ),
             candidate_enricher=enricher,
             max_per_run=settings.startup_discovery_max_per_run,
