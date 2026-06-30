@@ -85,6 +85,28 @@ def test_tracxn_returns_90() -> None:
     assert score("https://tracxn.com/d/companies/acme") == 90
 
 
+def test_github_org_matching_startup_name_returns_90() -> None:
+    assert score("https://github.com/acme-startup") == 90
+
+
+def test_github_org_with_ai_signal_gets_boost() -> None:
+    assert (
+        score(
+            "https://github.com/acme-startup/ml-platform",
+            title="Acme Startup PyTorch CUDA platform",
+        )
+        == 110
+    )
+
+
+def test_github_unrelated_org_is_blocked() -> None:
+    assert score("https://github.com/unrelated-lab/ml-platform") == -1
+
+
+def test_public_job_board_returns_90() -> None:
+    assert score("https://jobs.lever.co/acme-startup/data-engineer") == 90
+
+
 # --- Same domain ---
 
 def test_same_domain_returns_50() -> None:
@@ -133,3 +155,48 @@ def test_startup_name_with_ai_signal_gets_boost() -> None:
 
 def test_unknown_url_without_startup_name_returns_minus_one() -> None:
     assert score("https://somesite.com/totally-unrelated-page") == -1
+
+
+# --- Noticia independente (fonte primaria, deve vencer diretorios) ---
+
+def test_news_host_with_startup_name_returns_95() -> None:
+    assert score(
+        "https://exame.com/negocios/acme-startup",
+        title="Acme Startup capta rodada e dobra faturamento",
+    ) == 95
+
+
+def test_news_host_with_ai_signal_gets_boost() -> None:
+    assert (
+        score(
+            "https://braziljournal.com/acme",
+            title="Acme Startup lança plataforma de inteligência artificial",
+        )
+        == 115
+    )
+
+
+def test_news_host_without_startup_name_is_rejected() -> None:
+    # Indice/home de portal de noticia, sem ser sobre a startup -> inutil.
+    assert score("https://exame.com/ultimas-noticias", title="Últimas notícias") == -1
+
+
+def test_government_release_counts_as_news() -> None:
+    assert score(
+        "https://www.parana.pr.gov.br/aen/Noticia/startup-acme-recebe-apoio",
+        title="Startup Acme recebe apoio do Estado",
+    ) == 95
+
+
+def test_innovation_hub_counts_as_news() -> None:
+    assert score(
+        "https://sanpedrovalley.org.br/acme-lanca-produto",
+        snippet="A Acme Startup lançou um novo produto.",
+    ) == 95
+
+
+def test_news_outranks_directory() -> None:
+    # O ponto da mudanca: com slot limitado, noticia deve vencer diretorio.
+    news = score("https://exame.com/negocios/acme", title="Acme Startup cresce 200%")
+    directory = score("https://wellfound.com/company/acme")
+    assert news > directory

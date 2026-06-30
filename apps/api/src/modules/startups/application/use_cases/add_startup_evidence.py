@@ -13,7 +13,65 @@ from apps.api.src.modules.startups.application.unit_of_work import (
     StartupsUnitOfWorkFactory,
 )
 from apps.api.src.modules.startups.domain.entities import StartupEvidence
+from apps.api.src.modules.startups.domain.enums import StartupEvidenceType
 from apps.api.src.modules.startups.domain.exceptions import StartupNotFoundError
+
+_TECHNICAL_EVIDENCE_HINTS = (
+    "github.com",
+    "gitlab.com",
+    "docs.",
+    "/docs",
+    "documentation",
+    "developer",
+    "developers",
+    "api",
+    "engineering",
+    "careers",
+    "jobs",
+    "gupy.io",
+    "greenhouse.io",
+    "lever.co",
+    "pytorch",
+    "tensorflow",
+    "cuda",
+    "triton",
+    "vllm",
+    "openai api",
+    "kubernetes",
+    "requirements.txt",
+    "package.json",
+)
+_BLOG_EVIDENCE_HINTS = ("blog", "engineering")
+_NEWS_EVIDENCE_HINTS = (
+    "news",
+    "crunchbase.com",
+    "startups.com.br",
+    "techcrunch.com",
+    "linkedin.com/company",
+)
+
+
+def _infer_evidence_type(evidence_input: AddStartupEvidenceInput) -> StartupEvidenceType:
+    if evidence_input.evidence_type is not StartupEvidenceType.OTHER:
+        return evidence_input.evidence_type
+
+    text = " ".join(
+        [
+            evidence_input.source_url,
+            evidence_input.title or "",
+            evidence_input.notes or "",
+        ]
+    ).lower()
+
+    if any(hint in text for hint in _TECHNICAL_EVIDENCE_HINTS):
+        return StartupEvidenceType.TECHNICAL
+    if any(hint in text for hint in _NEWS_EVIDENCE_HINTS):
+        return StartupEvidenceType.NEWS
+    if any(hint in text for hint in _BLOG_EVIDENCE_HINTS):
+        return StartupEvidenceType.BLOG
+    if evidence_input.source_url:
+        return StartupEvidenceType.WEBSITE
+    return StartupEvidenceType.OTHER
 
 
 class AddStartupEvidence(EvidenceAttacher):
@@ -48,7 +106,7 @@ class AddStartupEvidence(EvidenceAttacher):
             startup_id=evidence_input.startup_id,
             scraping_result_id=evidence_input.scraping_result_id,
             source_url=evidence_input.source_url,
-            evidence_type=evidence_input.evidence_type,
+            evidence_type=_infer_evidence_type(evidence_input),
             title=evidence_input.title,
             confidence_score=evidence_input.confidence_score,
             notes=evidence_input.notes,

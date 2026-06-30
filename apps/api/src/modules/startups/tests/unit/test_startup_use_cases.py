@@ -371,3 +371,40 @@ async def test_add_and_list_startup_evidences() -> None:
     assert evidence_view.evidence_type is StartupEvidenceType.NEWS
     assert len(evidences) == 1
     assert evidences[0].id == evidence_view.id
+
+
+@pytest.mark.anyio
+async def test_add_startup_evidence_infers_technical_type_from_jobs_and_github() -> None:
+    uow = _make_uow()
+    startup = Startup(name="Acme AI")
+    await uow.startup_repository.save(startup)
+
+    evidence_view = await AddStartupEvidence(lambda: uow).execute(
+        AddStartupEvidenceInput(
+            startup_id=startup.id,
+            scraping_result_id=uuid4(),
+            source_url="https://github.com/acme-ai/platform",
+            title="Acme AI platform",
+            notes="requirements.txt includes PyTorch and CUDA.",
+        )
+    )
+
+    assert evidence_view.evidence_type is StartupEvidenceType.TECHNICAL
+
+
+@pytest.mark.anyio
+async def test_add_startup_evidence_infers_website_type_for_plain_site() -> None:
+    uow = _make_uow()
+    startup = Startup(name="Acme AI")
+    await uow.startup_repository.save(startup)
+
+    evidence_view = await AddStartupEvidence(lambda: uow).execute(
+        AddStartupEvidenceInput(
+            startup_id=startup.id,
+            scraping_result_id=uuid4(),
+            source_url="https://acme.example.com/about",
+            title="About Acme",
+        )
+    )
+
+    assert evidence_view.evidence_type is StartupEvidenceType.WEBSITE

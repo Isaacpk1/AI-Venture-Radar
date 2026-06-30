@@ -193,6 +193,41 @@ async def test_run_discovery_propagates_candidate_metadata():
 
 
 @pytest.mark.anyio
+async def test_run_discovery_skips_consultancy_url_candidate():
+    repo = FakeDiscoveryRunRepository()
+    submitter = FakeUrlSubmitter()
+    consultancy = StartupCandidate(
+        website_url="https://consultoria-dados.example.com",
+        name="Consultoria Dados",
+        short_description="Consultoria de dados e outsourcing para empresas.",
+        declared_sector="Data services",
+    )
+    product = StartupCandidate(
+        website_url="https://startup-ai.example.com",
+        name="Startup AI",
+        short_description="Plataforma SaaS de IA para operacoes.",
+        declared_sector="AI",
+    )
+    extractors = {hub.extractor_type: FailingHubExtractor() for hub in HUB_SOURCES}
+    extractors[HUB_SOURCES[0].extractor_type] = FakeCandidateExtractor(
+        [consultancy, product]
+    )
+
+    use_case = RunStartupDiscovery(
+        uow_factory=make_uow_factory(repo),
+        extractors=extractors,
+        url_ingestion_submitter=submitter,
+        max_per_run=10,
+    )
+
+    view = await use_case.execute()
+
+    assert view.status == DiscoveryRunStatus.COMPLETED
+    assert submitter.submitted == ["https://startup-ai.example.com"]
+    assert view.jobs_submitted == 1
+
+
+@pytest.mark.anyio
 async def test_run_discovery_skips_failing_hub_best_effort():
     repo = FakeDiscoveryRunRepository()
     submitter = FakeUrlSubmitter()

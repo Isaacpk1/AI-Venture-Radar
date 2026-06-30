@@ -20,6 +20,7 @@ from apps.api.src.modules.recommendations.domain.policies import (
     match_technologies,
     MIN_MATCH_SCORE,
     NIVEL_FORTE,
+    NIVEL_HIPOTESE,
     NIVEL_MODERADA,
     NIVEL_EXPLORATORIA,
     WORKLOAD_ADMISSION_THRESHOLD,
@@ -69,6 +70,24 @@ RAPIDS = TechnologyCandidate(
     keywords=("data science", "analytics", "dataframe", "gpu", "pandas", "spark"),
     complexity="medium",
     supported_workloads={"analytics": 0.95, "recommendation": 0.75, "mlops": 0.60},
+)
+CUDF = TechnologyCandidate(
+    slug="cudf",
+    name="cuDF",
+    category="data_science",
+    use_cases=("acelerar processamento de dataframes",),
+    keywords=("dataframe", "pandas", "gpu", "rapids", "etl", "data science"),
+    complexity="low",
+    supported_workloads={"analytics": 0.95, "recommendation": 0.55, "mlops": 0.50},
+)
+CUML = TechnologyCandidate(
+    slug="cuml",
+    name="cuML",
+    category="data_science",
+    use_cases=("acelerar machine learning classico",),
+    keywords=("machine learning", "scikit-learn", "gpu", "rapids", "clustering"),
+    complexity="low",
+    supported_workloads={"analytics": 0.85, "recommendation": 0.70, "mlops": 0.70},
 )
 CATALOG = [NIM, NEMO, RIVA, MONAI, RAPIDS]
 
@@ -136,6 +155,34 @@ def test_profile_without_ai_evidence_returns_no_matches() -> None:
     )
 
     assert results == []
+
+
+def test_structured_analytics_profile_admits_rapids_family_without_literal_keywords() -> None:
+    """P2: perfil analytics/tabular/producao deve admitir RAPIDS/cuDF/cuML."""
+
+    results = match_technologies(
+        sector="Pricing optimization",
+        description="Processes millions of prices per day for pricing decisions.",
+        ai_context=StartupAIContext(
+            ai_workload_type="analytics",
+            deployment_stage="production",
+            gpu_need="unknown",
+            has_operational_signal=True,
+        ),
+        evidence_signals=[],
+        technologies=[RAPIDS, CUDF, CUML, NIM],
+    )
+
+    slugs = [result.technology.slug for result in results]
+    assert "rapids" in slugs
+    assert "cudf" in slugs
+    assert "cuml" in slugs
+    assert "nvidia-nim" not in slugs
+    assert all(result.matched_keywords == () for result in results)
+    assert all(
+        "workload estruturado: analytics" in result.signal_origins
+        for result in results
+    )
 
 
 def test_match_found_only_in_evidence_text_is_traceable() -> None:
@@ -379,6 +426,41 @@ def test_technical_source_increases_confidence_over_generic_website() -> None:
                 text="generative ai inference api deployment microservice",
                 confidence_score=0.9,
                 source_url="https://acme.ai/product",
+                evidence_type="website",
+            )
+        ],
+        technologies=[NIM],
+    )
+
+    assert technical[0].confidence > generic[0].confidence
+
+
+def test_technical_evidence_type_counts_as_high_quality_source() -> None:
+    """Evidence type technical tem peso alto mesmo fora de /docs."""
+
+    technical = match_technologies(
+        sector=None,
+        description=None,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=uuid4(),
+                text="generative ai inference api deployment microservice",
+                confidence_score=0.9,
+                source_url="https://jobs.lever.co/acme/data-engineer",
+                evidence_type="technical",
+            )
+        ],
+        technologies=[NIM],
+    )
+    generic = match_technologies(
+        sector=None,
+        description=None,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=uuid4(),
+                text="generative ai inference api deployment microservice",
+                confidence_score=0.9,
+                source_url="https://acme.ai/about",
                 evidence_type="website",
             )
         ],
@@ -763,8 +845,8 @@ def test_compute_nivel_exploratoria_when_below_moderada_thresholds() -> None:
     assert _compute_nivel(score=0.30, confidence=0.15) == NIVEL_EXPLORATORIA
 
 
-def test_compute_nivel_exploratoria_when_score_high_but_confidence_low() -> None:
-    assert _compute_nivel(score=0.70, confidence=0.20) == NIVEL_EXPLORATORIA
+def test_compute_nivel_hipotese_prioritaria_when_score_high_but_confidence_low() -> None:
+    assert _compute_nivel(score=0.70, confidence=0.20) == NIVEL_HIPOTESE
 
 
 def test_compute_nivel_moderada_when_confidence_meets_but_score_below_forte() -> None:

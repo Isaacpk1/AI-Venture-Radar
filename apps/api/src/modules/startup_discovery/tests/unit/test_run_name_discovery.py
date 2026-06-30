@@ -274,6 +274,46 @@ async def test_name_hub_low_confidence_candidate_rejected_not_submitted():
 
 
 @pytest.mark.anyio
+async def test_name_hub_rejects_consultancy_candidate_before_enrichment():
+    run_repo = FakeDiscoveryRunRepository()
+    cand_repo = FakeCandidateRepository()
+    submitter = FakeUrlSubmitter()
+    items = [
+        DiscoveredCandidateItem(
+            name="inQuesti Consultoria",
+            description="Consultoria de dados e servicos de analytics para empresas.",
+            rank=1,
+        ),
+        DiscoveredCandidateItem(
+            name="Produto AI",
+            description="Plataforma SaaS de inteligencia artificial para operacoes.",
+            rank=2,
+        ),
+    ]
+    enricher = FakeEnricher(confidence=0.90)
+
+    use_case = RunStartupDiscovery(
+        uow_factory=make_uow_factory(run_repo, cand_repo),
+        extractors={},
+        name_extractors=_name_hub_extractors(items),
+        url_ingestion_submitter=submitter,
+        candidate_enricher=enricher,
+        max_per_run=20,
+    )
+
+    view = await use_case.execute()
+
+    assert view.jobs_submitted == 1
+    assert submitter.submitted == ["https://produtoai.com"]
+    rejected = [
+        c for c in cand_repo.candidates.values() if c.status == CandidateStatus.REJECTED
+    ]
+    assert len(rejected) == 1
+    assert rejected[0].name == "inQuesti Consultoria"
+    assert rejected[0].rejection_reason == "consultancy_or_service_provider"
+
+
+@pytest.mark.anyio
 async def test_name_hub_failure_falls_back_gracefully():
     run_repo = FakeDiscoveryRunRepository()
     cand_repo = FakeCandidateRepository()

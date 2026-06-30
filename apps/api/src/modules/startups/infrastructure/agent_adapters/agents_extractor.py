@@ -88,6 +88,12 @@ class AgentsExtractor(ExtractionPort):
         # em StartupAIProfile.field_confidence.
         main_confidence = {k: v for k, v in r.field_confidence.items() if k in _MAIN_FIELD_NAMES}
         ai_profile_confidence = {k: v for k, v in r.field_confidence.items() if k not in _MAIN_FIELD_NAMES}
+        main_evidence_ids = {
+            k: v for k, v in r.field_evidence_ids.items() if k in _MAIN_FIELD_NAMES
+        }
+        ai_profile_evidence_ids = {
+            k: v for k, v in r.field_evidence_ids.items() if k not in _MAIN_FIELD_NAMES
+        }
 
         ai_profile = StartupAIProfile(
             ai_workload_type=_safe_enum(AiWorkloadType, r.ai_workload_type, AiWorkloadType.UNKNOWN),
@@ -101,7 +107,7 @@ class AgentsExtractor(ExtractionPort):
             current_tools=tuple(r.current_tools),
             business_goal=r.business_goal,
             field_confidence=ai_profile_confidence,
-            field_evidence_ids=r.field_evidence_ids,
+            field_evidence_ids=ai_profile_evidence_ids,
             extracted_at=datetime.now(UTC),
         )
 
@@ -114,4 +120,5 @@ class AgentsExtractor(ExtractionPort):
             description=r.description,
             ai_profile=ai_profile,
             field_confidence=main_confidence,
+            field_evidence_ids=main_evidence_ids,
         )

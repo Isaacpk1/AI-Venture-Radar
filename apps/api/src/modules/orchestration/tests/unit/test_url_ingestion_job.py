@@ -433,6 +433,68 @@ async def test_advance_uses_job_source_type_when_submitting_ingestion() -> None:
 
 
 @pytest.mark.anyio
+async def test_scraping_done_without_result_fails_job_instead_of_asserting() -> None:
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(
+        url="https://docs.nvidia.com/nim/",
+        source_type="nvidia_knowledge",
+    )
+    job.start_scraping(uuid4())
+    await repository.save(job)
+    ingestion_port = FakeIngestionPort()
+    use_case = _make_advance_use_case(
+        repository=repository,
+        scraping_port=FakeScrapingPort(
+            StepStatus(
+                is_done=True,
+                is_failed=False,
+                result_id=None,
+                error_message=None,
+            )
+        ),
+        ingestion_port=ingestion_port,
+    )
+
+    await use_case.execute(job_id=job.id)
+
+    saved = repository.items[job.id]
+    assert saved.status is UrlIngestionJobStatus.FAILED
+    assert saved.error_message == "Scraping concluiu sem scraping_result_id."
+    assert ingestion_port.submissions == []
+
+
+@pytest.mark.anyio
+async def test_ingestion_done_without_result_fails_job_instead_of_asserting() -> None:
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(
+        url="https://docs.nvidia.com/nim/",
+        source_type="nvidia_knowledge",
+    )
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=uuid4(), ingestion_job_id=uuid4())
+    await repository.save(job)
+    embeddings_port = FakeEmbeddingsPort()
+    use_case = _make_advance_use_case(
+        repository=repository,
+        ingestion_port=FakeIngestionPort(
+            status=StepStatus(
+                is_done=True,
+                is_failed=False,
+                result_id=None,
+                error_message=None,
+            )
+        ),
+        embeddings_port=embeddings_port,
+    )
+
+    await use_case.execute(job_id=job.id)
+
+    saved = repository.items[job.id]
+    assert saved.status is UrlIngestionJobStatus.FAILED
+    assert saved.error_message == "Ingestion concluiu sem document_id."
+
+
+@pytest.mark.anyio
 async def test_scraping_rejection_schedules_enrichment_instead_of_stopping_silently() -> None:
     startup_id = uuid4()
     repository = FakeUrlIngestionJobRepository()
@@ -485,9 +547,7 @@ async def test_scraping_rejection_schedules_enrichment_instead_of_stopping_silen
     assert saved.startup_id == startup_id
     assert startups_port.created == [("Kunumi", "https://www.kunumi.com/")]
     assert [item.url for item in enrichment_jobs] == [
-        "https://www.kunumi.com/product",
-        "https://www.kunumi.com/products",
-        "https://www.kunumi.com/solution",
+        "https://www.kunumi.com/sobre",
         "https://www.crunchbase.com/organization/kunumi",
     ]
     assert dispatcher.dispatched_job_ids == [item.id for item in enrichment_jobs]
@@ -690,10 +750,10 @@ async def test_analyzing_schedules_enrichment_jobs_when_profile_is_incomplete() 
         item for item in repository.items.values() if item.parent_job_id == job.id
     ]
     assert [item.url for item in enrichment_jobs] == [
-        "https://acme.example.com/product",
-        "https://acme.example.com/products",
-        "https://acme.example.com/solution",
-        "https://acme.example.com/solutions",
+        "https://acme.example.com/sobre",
+        "https://acme.example.com/about",
+        "https://acme.example.com/blog",
+        "https://acme.example.com/carreiras",
     ]
     assert {item.startup_id for item in enrichment_jobs} == {startup_id}
     assert {item.enrichment_round for item in enrichment_jobs} == {1}
@@ -749,10 +809,10 @@ async def test_analyzing_prefers_external_search_candidates_when_configured() ->
         item for item in repository.items.values() if item.parent_job_id == job.id
     ]
     assert [item.url for item in enrichment_jobs] == [
-        "https://acme.example.com/product",
-        "https://acme.example.com/products",
-        "https://acme.example.com/solution",
+        "https://acme.example.com/sobre",
         "https://www.linkedin.com/company/acme-ai",
+        "https://news.example.com/acme-seed",
+        "https://acme.example.com/team",
     ]
     assert planner.calls[0]["missing_signals"] == [
         "founders",
@@ -762,7 +822,7 @@ async def test_analyzing_prefers_external_search_candidates_when_configured() ->
     ]
     assert (
         executor.calls[0][0]
-        == '"Acme AI" Brasil startup artificial intelligence AI machine learning product'
+        == '"Acme AI" startup IA notícia lançamento investimento rodada'
     )
 
 
@@ -811,14 +871,12 @@ async def test_analyzing_uses_deterministic_queries_when_planner_is_empty() -> N
         item for item in repository.items.values() if item.parent_job_id == job.id
     ]
     assert [item.url for item in enrichment_jobs] == [
-        "https://acme.example.com/product",
-        "https://acme.example.com/products",
-        "https://acme.example.com/solution",
+        "https://acme.example.com/sobre",
         "https://www.crunchbase.com/organization/acme-ai",
     ]
     assert (
         executor.calls[0][0]
-        == '"Acme AI" Brasil startup artificial intelligence AI machine learning product'
+        == '"Acme AI" startup IA notícia lançamento investimento rodada'
     )
     assert executor.calls[0][2] == 5
 

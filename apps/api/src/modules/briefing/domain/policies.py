@@ -155,26 +155,51 @@ def _unknown(value: str | None) -> bool:
     return value is None or value.strip().lower() in {"", "unknown", "desconhecida"}
 
 
+def _confidence_suffix(
+    field_confidence: dict[str, float] | None,
+    field_name: str,
+) -> str:
+    if not field_confidence or field_name not in field_confidence:
+        return ""
+    return f" (confianca {field_confidence[field_name]:.0%})"
+
+
 def _profile_found_items(ai_profile: StartupAIProfileItem | None) -> list[str]:
     if ai_profile is None:
         return []
 
+    confidence = ai_profile.field_confidence or {}
     fields = [
-        ("Workload de IA", ai_profile.ai_workload_type),
-        ("Tipo de modelo", ai_profile.model_type),
-        ("Modalidade de dados", ai_profile.data_modality),
-        ("Estagio de deploy", ai_profile.deployment_stage),
-        ("Ambiente de infra", ai_profile.infra_environment),
-        ("Necessidade de GPU", ai_profile.gpu_need),
-        ("Latencia", ai_profile.latency_requirement),
+        ("Workload de IA", "ai_workload_type", ai_profile.ai_workload_type),
+        ("Tipo de modelo", "model_type", ai_profile.model_type),
+        ("Modalidade de dados", "data_modality", ai_profile.data_modality),
+        ("Estagio de deploy", "deployment_stage", ai_profile.deployment_stage),
+        ("Ambiente de infra", "infra_environment", ai_profile.infra_environment),
+        ("Necessidade de GPU", "gpu_need", ai_profile.gpu_need),
+        ("Latencia", "latency_requirement", ai_profile.latency_requirement),
     ]
-    items = [f"{label}: {value}" for label, value in fields if not _unknown(value)]
+    items = [
+        f"{label}: {value}{_confidence_suffix(confidence, field_name)}"
+        for label, field_name, value in fields
+        if not _unknown(value)
+    ]
     if ai_profile.scale_signal:
-        items.append(f"Sinal de escala: {ai_profile.scale_signal}")
+        items.append(
+            "Sinal de escala: "
+            f"{ai_profile.scale_signal}{_confidence_suffix(confidence, 'scale_signal')}"
+        )
     if ai_profile.current_tools:
-        items.append(f"Ferramentas atuais: {', '.join(ai_profile.current_tools)}")
+        items.append(
+            "Ferramentas atuais: "
+            f"{', '.join(ai_profile.current_tools)}"
+            f"{_confidence_suffix(confidence, 'current_tools')}"
+        )
     if ai_profile.business_goal:
-        items.append(f"Objetivo de negocio: {ai_profile.business_goal}")
+        items.append(
+            "Objetivo de negocio: "
+            f"{ai_profile.business_goal}"
+            f"{_confidence_suffix(confidence, 'business_goal')}"
+        )
     return items
 
 

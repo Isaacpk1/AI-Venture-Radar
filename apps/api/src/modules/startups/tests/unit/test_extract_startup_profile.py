@@ -248,6 +248,46 @@ async def test_extract_startup_profile_populates_ai_profile_evidence_ids() -> No
 
 
 @pytest.mark.anyio
+async def test_extract_startup_profile_preserves_agent_ai_profile_evidence_ids() -> None:
+    """Quando o agente aponta uma evidencia especifica, o use case preserva."""
+
+    uow = _make_uow()
+    startup = Startup(name="Aprix")
+    await uow.startup_repository.save(startup)
+    ev1 = StartupEvidence(
+        startup_id=startup.id,
+        scraping_result_id=uuid4(),
+        source_url="https://aprix.ai/product",
+        title="Product",
+        notes="Analytics platform.",
+    )
+    ev2 = StartupEvidence(
+        startup_id=startup.id,
+        scraping_result_id=uuid4(),
+        source_url="https://aprix.ai/jobs",
+        title="Data Engineer",
+        notes="Tabular ML in production.",
+    )
+    await uow.evidence_repository.save(ev1)
+    await uow.evidence_repository.save(ev2)
+
+    profile = StartupAIProfile(
+        ai_workload_type=AiWorkloadType.ANALYTICS,
+        field_confidence={"ai_workload_type": 0.9},
+        field_evidence_ids={"ai_workload_type": [str(ev2.id), "not-a-real-id"]},
+    )
+    outcome = ExtractionOutcome(ai_profile=profile)
+    extractor = FakeExtractionPort(outcome)
+
+    use_case = ExtractStartupProfile(lambda: uow, extractor)
+    await use_case.execute(ExtractStartupProfileInput(startup_id=startup.id))
+
+    saved = uow.startup_repository.items[startup.id]
+    assert saved.ai_profile is not None
+    assert saved.ai_profile.field_evidence_ids["ai_workload_type"] == [str(ev2.id)]
+
+
+@pytest.mark.anyio
 async def test_extract_startup_profile_no_ai_profile_leaves_existing_intact() -> None:
     """Quando o outcome nao tem ai_profile, o campo existente nao e apagado."""
 
@@ -350,3 +390,168 @@ async def test_extract_startup_profile_populates_field_evidence_ids_for_extracte
     assert set(saved.field_evidence_ids["founders"]) == all_ids
     assert set(saved.field_evidence_ids["customers"]) == all_ids
     assert "sector" not in saved.field_evidence_ids
+
+
+@pytest.mark.anyio
+async def test_extract_startup_profile_preserves_agent_main_field_evidence_ids() -> None:
+    """Auditoria de campos basicos respeita IDs especificos retornados."""
+
+    uow = _make_uow()
+    startup = Startup(name="Acme AI")
+    await uow.startup_repository.save(startup)
+    ev1 = StartupEvidence(
+        startup_id=startup.id,
+        scraping_result_id=uuid4(),
+        source_url="https://acme.ai",
+        title="Acme AI",
+        notes="Founded by Ana Silva.",
+    )
+    ev2 = StartupEvidence(
+        startup_id=startup.id,
+        scraping_result_id=uuid4(),
+        source_url="https://acme.ai/customers",
+        title="Customers",
+        notes="Customer: Empresa X.",
+    )
+    await uow.evidence_repository.save(ev1)
+    await uow.evidence_repository.save(ev2)
+
+    outcome = ExtractionOutcome(
+        founders=["Ana Silva"],
+        customers=["Empresa X"],
+        field_evidence_ids={
+            "founders": [str(ev1.id)],
+            "customers": [str(ev2.id), "not-a-real-id"],
+        },
+    )
+    extractor = FakeExtractionPort(outcome)
+
+    use_case = ExtractStartupProfile(lambda: uow, extractor)
+    await use_case.execute(ExtractStartupProfileInput(startup_id=startup.id))
+
+    saved = uow.startup_repository.items[startup.id]
+    assert saved.field_evidence_ids["founders"] == [str(ev1.id)]
+    assert saved.field_evidence_ids["customers"] == [str(ev2.id)]
+
+
+@pytest.mark.anyio
+async def test_extract_startup_profile_computes_main_confidence_when_llm_returns_empty() -> None:
+    """Quando o LLM retorna field_confidence vazio, o codigo computa deterministicamente."""
+
+    uow = _make_uow()
+    startup = Startup(name="Acme AI")
+    await uow.startup_repository.save(startup)
+    evidence = StartupEvidence(
+        startup_id=startup.id,
+        scraping_result_id=uuid4(),
+        source_url="https://acme.ai",
+        title="Acme AI",
+        notes="Founded by Ana Silva.",
+    )
+    await uow.evidence_repository.save(evidence)
+
+    # field_confidence vazio — simula comportamento real do LLM com with_structured_output
+    outcome = ExtractionOutcome(
+        founders=["Ana Silva"],
+        sector="AI Infrastructure",
+        field_confidence={},  # LLM nao preencheu
+    )
+    extractor = FakeExtractionPort(outcome)
+
+    use_case = ExtractStartupProfile(lambda: uow, extractor)
+    await use_case.execute(ExtractStartupProfileInput(startup_id=startup.id))
+
+    saved = uow.startup_repository.items[startup.id]
+    # O codigo deve ter computado confianca deterministicamente
+    assert "founders" in saved.field_confidence
+    assert "sector" in saved.field_confidence
+    assert 0.0 < saved.field_confidence["founders"] <= 1.0
+    assert 0.0 < saved.field_confidence["sector"] <= 1.0
+    # Campos nao extraidos nao devem aparecer
+    assert "customers" not in saved.field_confidence
+
+
+@pytest.mark.anyio
+async def test_extract_startup_profile_ai_profile_evidence_ids_when_confidence_empty() -> None:
+    """Perfil de IA recebe evidence_ids mesmo quando field_confidence e vazio."""
+
+    uow = _make_uow()
+    startup = Startup(name="VoiceBot AI")
+    await uow.startup_repository.save(startup)
+    ev = StartupEvidence(
+        startup_id=startup.id,
+        scraping_result_id=uuid4(),
+        source_url="https://voicebot.ai/product",
+        title="Product",
+        notes="Speech AI for customer service.",
+    )
+    await uow.evidence_repository.save(ev)
+
+    profile = StartupAIProfile(
+        ai_workload_type=AiWorkloadType.SPEECH,
+        deployment_stage=AiDeploymentStage.PRODUCTION,
+        gpu_need=AiGpuNeed.HIGH,
+        field_confidence={},  # LLM nao preencheu
+    )
+    outcome = ExtractionOutcome(ai_profile=profile)
+    extractor = FakeExtractionPort(outcome)
+
+    use_case = ExtractStartupProfile(lambda: uow, extractor)
+    await use_case.execute(ExtractStartupProfileInput(startup_id=startup.id))
+
+    saved = uow.startup_repository.items[startup.id]
+    assert saved.ai_profile is not None
+    # evidence_ids deve ser populado para campos com valores nao-unknown
+    assert "ai_workload_type" in saved.ai_profile.field_evidence_ids
+    assert "deployment_stage" in saved.ai_profile.field_evidence_ids
+    assert "gpu_need" in saved.ai_profile.field_evidence_ids
+    # Campo unknown nao deve aparecer
+    assert "model_type" not in saved.ai_profile.field_evidence_ids
+    # field_confidence tambem deve ter sido computado deterministicamente
+    assert "ai_workload_type" in saved.ai_profile.field_confidence
+    assert saved.ai_profile.field_confidence["ai_workload_type"] > 0
+
+
+@pytest.mark.anyio
+async def test_extract_startup_profile_confidence_scales_with_evidence_count() -> None:
+    """Confianca deterministica aumenta com mais evidencias."""
+
+    uow_one = _make_uow()
+    uow_three = _make_uow()
+    startup_one = Startup(name="Startup One")
+    startup_three = Startup(name="Startup Three")
+    await uow_one.startup_repository.save(startup_one)
+    await uow_three.startup_repository.save(startup_three)
+
+    # 1 evidencia
+    ev1 = StartupEvidence(
+        startup_id=startup_one.id,
+        scraping_result_id=uuid4(),
+        source_url="https://one.ai",
+        title="One",
+        notes="Founders: Alice.",
+    )
+    await uow_one.evidence_repository.save(ev1)
+
+    # 3 evidencias
+    for i in range(3):
+        ev = StartupEvidence(
+            startup_id=startup_three.id,
+            scraping_result_id=uuid4(),
+            source_url=f"https://three.ai/page{i}",
+            title=f"Page {i}",
+            notes="Founders: Bob.",
+        )
+        await uow_three.evidence_repository.save(ev)
+
+    outcome = ExtractionOutcome(founders=["Alice"], field_confidence={})
+    use_case_one = ExtractStartupProfile(lambda: uow_one, FakeExtractionPort(outcome))
+    await use_case_one.execute(ExtractStartupProfileInput(startup_id=startup_one.id))
+
+    outcome3 = ExtractionOutcome(founders=["Bob"], field_confidence={})
+    use_case_three = ExtractStartupProfile(lambda: uow_three, FakeExtractionPort(outcome3))
+    await use_case_three.execute(ExtractStartupProfileInput(startup_id=startup_three.id))
+
+    conf_one = uow_one.startup_repository.items[startup_one.id].field_confidence["founders"]
+    conf_three = uow_three.startup_repository.items[startup_three.id].field_confidence["founders"]
+    assert conf_three > conf_one

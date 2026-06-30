@@ -51,6 +51,7 @@ class ExtractionOutcome:
     ai_profile: StartupAIProfile | None = None
     # Confianca por campo basico (founders, sector, etc.) reportada pelo LLM.
     field_confidence: dict[str, float] = field(default_factory=dict)
+    field_evidence_ids: dict[str, list[str]] = field(default_factory=dict)
 
 
 class ExtractionPort(ABC):

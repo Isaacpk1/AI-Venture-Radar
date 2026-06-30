@@ -56,22 +56,28 @@ MAX_ENRICHMENT_URLS_PER_ROUND = 4
 MAX_ENRICHMENT_SEARCH_QUERIES = 3
 MAX_ENRICHMENT_SEARCH_RESULTS_PER_QUERY = 5
 
-# Paths that commonly reveal tech stack, team, and traction — ordered by signal value.
+# Paths that commonly reveal tech stack, team, and traction.
+# Ordenado por PROBABILIDADE DE EXISTIR primeiro (about/sobre/blog/carreiras
+# existem em quase todo site; /product e /solution costumam ser 404 — foi a
+# causa real da "parede de 404" observada na rodada das 12 startups). Como o
+# slot same-domain agora e' reduzido quando a busca esta disponivel, a 1a
+# entrada precisa ser a de maior chance de existir.
 ENRICHMENT_PATHS = (
+    "sobre",
+    "about",
+    "blog",
+    "carreiras",
+    "careers",
+    "vagas",
+    "trabalhe-conosco",
+    "jobs",
+    "technology",
+    "engineering",
+    "solucoes",
+    "solutions",
     "product",
     "products",
-    "solution",
-    "solutions",
     "platform",
-    "technology",
-    "careers",
-    "jobs",
-    "carreiras",
-    "trabalhe-conosco",
-    "engineering",
-    "blog",
-    "about",
-    "sobre",
     "team",
     "customers",
     "case-studies",
@@ -92,6 +98,8 @@ TRUSTED_ENRICHMENT_HOSTS = {
     "gupy.io",
     "boards.greenhouse.io",
     "jobs.lever.co",
+    "github.com",
+    "www.github.com",
 }
 AI_EVIDENCE_TERMS = (
     " ai ",
@@ -115,6 +123,13 @@ AI_EVIDENCE_TERMS = (
     "foundation model",
     "agentic",
     "automation with ai",
+    "pytorch",
+    "tensorflow",
+    "cuda",
+    "triton",
+    "vllm",
+    "requirements.txt",
+    "package.json",
 )
 BLOCKED_ENRICHMENT_HOSTS = {
     # Redes sociais — conteudo fragmentado, sem informacao estruturada de empresa
@@ -144,6 +159,41 @@ BLOCKED_ENRICHMENT_HOSTS = {
     # SEO farms / diretórios de baixa qualidade
     "yellowpages.com",
     "yelp.com",
+}
+# Imprensa independente e ecossistema de inovacao BR — fonte PRIMARIA de
+# enriquecimento. Noticia tem prosa real sobre produto, escala, funding e
+# direcao de time (validado manualmente: foi o que fez Driva/NeuralMind
+# funcionarem, enquanto home institucional + LinkedIn nao funcionaram).
+# Pontuada ACIMA dos diretorios (f6s/wellfound), que retornam conteudo fino.
+NEWS_ENRICHMENT_HOSTS = {
+    # Imprensa de tecnologia / negocios / startups
+    "exame.com",
+    "braziljournal.com",
+    "neofeed.com.br",
+    "startups.com.br",
+    "itforum.com.br",
+    "baguete.com.br",
+    "mobiletime.com.br",
+    "diariodocomercio.com.br",
+    "abcdacomunicacao.com.br",
+    "economiasa.com.br",
+    "tiinside.com.br",
+    "convergenciadigital.com.br",
+    "panoramamercantil.com.br",
+    "revistapegn.globo.com",
+    "valor.globo.com",
+    "meioemensagem.com.br",
+    "revistaempreende.com.br",
+    "revistaempresarios.net",
+    "channel360.com.br",
+    "revistasegurancaeletronica.com.br",
+    # Ecossistema de inovacao / hubs / aceleradoras
+    "sanpedrovalley.org.br",
+    "bhtec.org.br",
+    "distrito.me",
+    "startse.com",
+    "brasilinovador.com.br",
+    "aiotbrasil.com.br",
 }
 
 logger = get_logger(__name__)
@@ -187,19 +237,24 @@ def _domain_to_brand(hostname: str) -> str:
 def _clean_page_title(title: str) -> str:
     """Remove generic page-type fragments from an HTML title.
 
-    'About us - Aprix Pricing'  -> 'Aprix Pricing'
-    'Home | Econodata'          -> 'Econodata'
-    'NeuralMind – AI solutions' -> 'NeuralMind'
+    'About us - Aprix Pricing'              -> 'Aprix Pricing'
+    'Home | Econodata'                       -> 'Econodata'
+    'NeuralMind – AI solutions'              -> 'NeuralMind'
+    'Quem Somos - Morada.ai • Morada.ai'    -> 'Morada.ai'
     """
-    for sep in (" - ", " | ", " – ", " — ", " • ", " / ", " \\ "):
-        if sep in title:
-            parts = [p.strip() for p in title.split(sep)]
-            meaningful = [
-                p for p in parts if p and not _GENERIC_PAGE_FRAGMENT_RE.match(p)
-            ]
-            if meaningful:
-                # Prefer the shortest non-generic part (usually the brand).
-                return min(meaningful, key=len)
+    for _ in range(3):  # up to 3 passes for compound titles
+        prev = title
+        for sep in (" - ", " | ", " – ", " — ", " • ", " / ", " \\ "):
+            if sep in title:
+                parts = [p.strip() for p in title.split(sep)]
+                meaningful = [
+                    p for p in parts if p and not _GENERIC_PAGE_FRAGMENT_RE.match(p)
+                ]
+                if meaningful:
+                    title = min(meaningful, key=len)
+                break  # only one separator per pass; restart from top
+        if title == prev:
+            break
     return title.strip()
 
 
@@ -209,9 +264,15 @@ def _derive_startup_name(*, title: str | None, url: str) -> str:
 
     if title:
         cleaned = _clean_page_title(title)
-        # Fall back to domain-derived name when the cleaned title is still
-        # a hostname (nothing meaningful was in the title).
+        # Fall back to domain-derived name when the cleaned title is the hostname.
         if cleaned.lower() in (hostname.lower(), hostname.lower().removeprefix("www.")):
+            return brand_from_domain
+        # Fall back when cleaned title starts with the domain brand followed by a
+        # descriptor word — e.g. "Aprix Pricing" from domain "aprix.ai" -> "Aprix".
+        if (
+            brand_from_domain
+            and cleaned.lower().startswith(brand_from_domain.lower() + " ")
+        ):
             return brand_from_domain
         return cleaned
 
@@ -237,6 +298,26 @@ def _same_domain_candidate_urls(source_url: str) -> list[str]:
 
 def _hostname(url: str) -> str:
     return urlparse(url).netloc.lower().removeprefix("www.")
+
+
+def _is_news_host(host: str) -> bool:
+    """Imprensa independente / hub de inovacao / fonte institucional publica.
+
+    Inclui a allowlist curada (``NEWS_ENRICHMENT_HOSTS``) e dominios
+    governamentais/academicos (.gov.br, .edu.br, universidades), que publicam
+    releases substantivos sobre startups (ex.: parana.pr.gov.br, unicamp.br).
+    """
+    if host in NEWS_ENRICHMENT_HOSTS:
+        return True
+    if any(host == h or host.endswith(f".{h}") for h in NEWS_ENRICHMENT_HOSTS):
+        return True
+    return (
+        host.endswith(".gov.br")
+        or host.endswith(".edu.br")
+        or host.endswith(".ac.uk")
+        or host.endswith(".unicamp.br")
+        or host.endswith(".usp.br")
+    )
 
 
 def _startup_terms(name: str) -> list[str]:
@@ -276,11 +357,22 @@ def _score_external_candidate(
         searchable_text = " ".join([url, title or "", snippet or ""])
         return base_score + (20 if _has_ai_evidence_signal(searchable_text) else 0)
 
+    # Noticia independente / fonte institucional: fonte PRIMARIA. Pontuada
+    # acima dos diretorios (90) para vencer o slot limitado de enriquecimento.
+    # Exige o nome da startup no texto, para nao puxar indices/home de portal.
+    if _is_news_host(host):
+        searchable_text = " ".join([url, title or "", snippet or ""])
+        terms = _startup_terms(startup_name)
+        if terms and any(term in searchable_text.lower() for term in terms):
+            return 95 + (20 if _has_ai_evidence_signal(searchable_text) else 0)
+        return -1
+
     is_trusted = (
         host in TRUSTED_ENRICHMENT_HOSTS
         or host.endswith(".gupy.io")
         or host.endswith(".greenhouse.io")
         or host.endswith(".lever.co")
+        or host.endswith("github.com")
         or host.endswith(".linkedin.com")
     )
     if is_trusted:
@@ -291,6 +383,11 @@ def _score_external_candidate(
         ):
             return -1
         searchable_text = " ".join([url, title or "", snippet or ""])
+        if host.endswith("github.com"):
+            terms = _startup_terms(startup_name)
+            searchable_text_lower = searchable_text.lower()
+            if not terms or not any(term in searchable_text_lower for term in terms):
+                return -1
         return 90 + (20 if _has_ai_evidence_signal(searchable_text) else 0)
 
     terms = _startup_terms(startup_name)
@@ -313,12 +410,21 @@ def _is_weak_source_failure(reason: str | None) -> bool:
 def _deterministic_enrichment_queries(
     *, startup_name: str, missing_signals: list[str]
 ) -> list[str]:
+    """Queries de enriquecimento, NOTICIA-FIRST (ordem importa).
+
+    A primeira query preenche os primeiros slots; por isso a busca de
+    noticia/lancamento/investimento vem antes (foi a fonte que funcionou no
+    teste manual: Driva via abcdacomunicacao, NeuralMind via bhtec). GitHub
+    e funding vem em seguida; o portugues vem primeiro porque o alvo sao
+    startups brasileiras.
+    """
     missing_text = " ".join(missing_signals)
     return [
-        f'"{startup_name}" Brasil startup artificial intelligence AI machine learning product',
-        f'"{startup_name}" Brazil generative AI LLM startup {missing_text}',
-        f'"{startup_name}" Brasil fundadores funding clientes',
-        f'"{startup_name}" Crunchbase LinkedIn company funding Brazil',
+        f'"{startup_name}" startup IA notícia lançamento investimento rodada',
+        f'"{startup_name}" Brasil inteligência artificial produto clientes',
+        f'"{startup_name}" GitHub Python PyTorch machine learning modelo',
+        f'"{startup_name}" startup fundadores funding clientes {missing_text}',
+        f'"{startup_name}" Brazil generative AI LLM startup',
     ]
 
 
@@ -395,7 +501,22 @@ class AdvanceUrlIngestionJob:
                 if not status.is_done:
                     raise UrlIngestionStillProcessingError("Scraping em andamento.")
 
-                assert status.result_id is not None
+                if status.result_id is None:
+                    reason = (
+                        status.error_message
+                        or "Scraping concluiu sem scraping_result_id."
+                    )
+                    logger.warning(
+                        "scraping finished without result, failing url ingestion job",
+                        extra={"reason": reason},
+                    )
+                    await self._try_schedule_enrichment_after_scraping_failure(
+                        job,
+                        reason=reason,
+                    )
+                    job.fail(reason)
+                    await self._save(job)
+                    return
                 ingestion_job_id = await self._ingestion_port.submit(
                     status.result_id,
                     source_type=job.source_type,
@@ -421,7 +542,18 @@ class AdvanceUrlIngestionJob:
                 if not status.is_done:
                     raise UrlIngestionStillProcessingError("Ingestion em andamento.")
 
-                assert status.result_id is not None
+                if status.result_id is None:
+                    reason = (
+                        status.error_message
+                        or "Ingestion concluiu sem document_id."
+                    )
+                    logger.warning(
+                        "ingestion finished without result, failing url ingestion job",
+                        extra={"reason": reason},
+                    )
+                    job.fail(reason)
+                    await self._save(job)
+                    return
                 embedding_job_id = await self._embeddings_port.submit(
                     status.result_id
                 )
@@ -651,12 +783,16 @@ class AdvanceUrlIngestionJob:
             ]
             if url
         }
-        same_domain_limit = (
-            MAX_ENRICHMENT_URLS_PER_ROUND - 1
-            if self._search_planner_port is not None
+        # Quando a busca esta disponivel, os paths same-domain sao apenas um
+        # palpite (e em geral 404 — a "parede de 404" das 12 startups). Por
+        # isso reservamos s o' 1 slot para o palpite same-domain de maior chance
+        # (about/sobre, ja' reordenados) e deixamos os 3 restantes para a busca
+        # noticia-first. Sem busca, mantem o fallback same-domain completo.
+        search_available = (
+            self._search_planner_port is not None
             and self._search_executor_port is not None
-            else MAX_ENRICHMENT_URLS_PER_ROUND
         )
+        same_domain_limit = 1 if search_available else MAX_ENRICHMENT_URLS_PER_ROUND
         candidates = self._same_domain_enrichment_urls(
             profile_website_url=profile.website_url,
             job_url=job.url,

@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from apps.api.src.modules.recommendations.application.dto import (
+    AIProfileSnapshot,
     EvidenceSnapshot,
     GenerateRecommendationsInput,
     GroundedJustification,
@@ -38,6 +39,15 @@ NIM_SNAPSHOT = NvidiaTechnologySnapshot(
     category="model_serving",
     use_cases=("servir LLMs em producao",),
     keywords=("llm", "generative ai", "inference", "api", "deployment", "microservice"),
+)
+RAPIDS_SNAPSHOT = NvidiaTechnologySnapshot(
+    slug="rapids",
+    name="RAPIDS",
+    category="data_science",
+    use_cases=("processar grandes volumes tabulares",),
+    keywords=("data science", "analytics", "dataframe", "gpu", "pandas", "spark"),
+    complexity="medium",
+    supported_workloads={"analytics": 0.95},
 )
 
 
@@ -222,6 +232,36 @@ async def test_generate_recommendations_tracks_evidence_ids() -> None:
 
     assert len(views) == 1
     assert views[0].evidence_ids == [evidence_id]
+
+
+@pytest.mark.anyio
+async def test_generate_recommendations_uses_profile_only_justification_for_workload_admission() -> None:
+    startup_id = uuid4()
+    repository = FakeRecommendationRepository()
+    uow = FakeUoW(repository)
+    profile_source = FakeProfileSource(
+        StartupProfileSnapshot(
+            sector="Pricing optimization",
+            description="Processes millions of prices per day.",
+            evidences=(),
+            ai_profile=AIProfileSnapshot(
+                ai_workload_type="analytics",
+                deployment_stage="production",
+                gpu_need="unknown",
+                has_operational_signal=True,
+            ),
+        )
+    )
+    catalog_source = FakeCatalogSource([RAPIDS_SNAPSHOT])
+
+    use_case = GenerateRecommendations(lambda: uow, profile_source, catalog_source)
+    views = await use_case.execute(GenerateRecommendationsInput(startup_id=startup_id))
+
+    assert len(views) == 1
+    assert views[0].technology_slug == "rapids"
+    assert views[0].matched_keywords == []
+    assert "perfil estruturado indica alinhamento" in views[0].justification
+    assert "ponto de entrada natural" not in views[0].justification
 
 
 @pytest.mark.anyio

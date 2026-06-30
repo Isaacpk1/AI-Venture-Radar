@@ -103,6 +103,9 @@ TECHNICAL_SOURCE_HINTS = (
     "developers",
     "github.com",
     "gitlab.com",
+    "gupy.io",
+    "greenhouse.io",
+    "lever.co",
     "changelog",
     "engineering",
     "architecture",
@@ -332,6 +335,8 @@ def _evidence_signal_score(
 
 def _evidence_type_value(signal: EvidenceSignal) -> float:
     evidence_type = (signal.evidence_type or "").lower()
+    if evidence_type == "technical":
+        return 0.90
     if evidence_type == "documentation":
         return 0.90
     if evidence_type == "blog":
@@ -689,19 +694,29 @@ def match_technologies(
 
         workload_aln = _workload_alignment(ai_context, technology)
         impl_viab = _implementation_viability(ai_context, technology)
-        # Admite por workload apenas quando: (1) alinhamento alto, (2) ao menos 1
-        # keyword positiva, (3) zero keywords bloqueadas por contexto negativo,
-        # (4) viabilidade de implementacao minima (descarta tech complexa pra startup
-        # sem GPU — o sinal semantico de workload nao basta quando a infra nao faz
-        # sentido).
+        # Admite por workload quando o perfil estruturado da startup tem
+        # alinhamento alto com a tecnologia, mesmo sem keywords literais.
+        # Isso deixa workload_alignment votar antes do corte de entrada sem
+        # multiplicar fit por confianca: recomendacoes profile-only entram com
+        # score/confianca mais baixos e aparecem como hipotese a qualificar.
         admitted_by_workload = (
-            workload_aln >= WORKLOAD_ADMISSION_THRESHOLD
-            and len(matched_keywords) >= 1
+            ai_context is not None
+            and ai_context.ai_workload_type != "unknown"
+            and workload_aln >= WORKLOAD_ADMISSION_THRESHOLD
+            and not (
+                technology.category == "healthcare_ai"
+                and len(matched_keywords) == 0
+            )
             and len(blocked_signals) == 0
             and impl_viab >= 0.30
         )
         if len(matched_keywords) < MIN_MATCHED_KEYWORDS and not admitted_by_workload:
             continue
+
+        if admitted_by_workload and not matched_keywords:
+            signal_origins.append(
+                f"workload estruturado: {ai_context.ai_workload_type}"
+            )
 
         keyword_prior = len(matched_keywords) / len(technology.keywords)
         evidence_sig = _evidence_signal_score(

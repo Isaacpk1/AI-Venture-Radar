@@ -147,6 +147,12 @@ class GenerateRecommendations(RecommendationGenerator):
             return candidates
 
         parts = [profile.sector or "", profile.description or ""]
+        if profile.ai_profile is not None:
+            parts += [
+                profile.ai_profile.ai_workload_type,
+                profile.ai_profile.deployment_stage,
+                profile.ai_profile.gpu_need,
+            ]
         parts += [
             f"{e.title or ''} {e.notes or ''}".strip()
             for e in profile.evidences
@@ -259,6 +265,14 @@ def _use_case(match: MatchResult) -> str:
 
 def _build_justification(match: MatchResult) -> str:
     if not match.matched_keywords:
+        if match.technology.slug != INCEPTION_SLUG:
+            origins = ", ".join(match.signal_origins) or "perfil estruturado de IA"
+            return (
+                f"O perfil estruturado indica alinhamento com {match.technology.name} "
+                f"({origins}), mas ainda faltam keywords literais ou evidencias "
+                "tecnicas diretas. Tratar como hipotese a qualificar antes de "
+                "propor implementacao."
+            )
         return (
             f"{match.technology.name} e o ponto de entrada natural no ecossistema NVIDIA "
             "para startups de IA. Nao foram identificados sinais especificos de fit "

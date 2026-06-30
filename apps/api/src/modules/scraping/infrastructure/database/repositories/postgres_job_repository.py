@@ -2,10 +2,11 @@
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.src.modules.scraping.domain.entities import ScrapingJob
+from apps.api.src.modules.scraping.domain.enums import JobStatus
 from apps.api.src.modules.scraping.domain.repositories import ScrapingJobRepository
 from apps.api.src.modules.scraping.infrastructure.database.mappers.scraping_job_mapper import (
     ScrapingJobMapper,
@@ -52,5 +53,12 @@ class PostgresScrapingJobRepository(ScrapingJobRepository):
                 ScrapingResultModel.job_id == job_id
             )
         )
+        if result_id is None and model.status == JobStatus.COMPLETED.value:
+            result_id = await self.session.scalar(
+                select(ScrapingResultModel.id)
+                .where(ScrapingResultModel.url == model.url)
+                .order_by(desc(ScrapingResultModel.created_at))
+                .limit(1)
+            )
 
         return ScrapingJobMapper.to_entity(model, result_id=result_id)

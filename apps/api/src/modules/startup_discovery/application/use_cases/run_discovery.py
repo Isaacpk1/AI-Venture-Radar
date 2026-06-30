@@ -47,11 +47,53 @@ from apps.api.src.shared.logging import get_logger
 logger = get_logger(__name__)
 
 AUTO_SUBMIT_CONFIDENCE: float = 0.75
+CONSULTANCY_TERMS = (
+    "consultoria",
+    "consulting",
+    "consultancy",
+    "agencia",
+    "agência",
+    "agency",
+    "servicos de dados",
+    "serviços de dados",
+    "data services",
+    "prestador de servico",
+    "prestador de serviço",
+    "service provider",
+    "software house",
+    "outsourcing",
+    "desenvolvimento sob demanda",
+)
+PRODUCT_TERMS = (
+    "produto",
+    "product",
+    "plataforma",
+    "platform",
+    "saas",
+    "app",
+    "api",
+    "agent",
+    "agente",
+)
 
 
 def _normalize_name(name: str) -> str:
     name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
     return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def _normalize_text(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    return text.lower()
+
+
+def _is_consultancy_candidate(*parts: str | None) -> bool:
+    text = _normalize_text(" ".join(part for part in parts if part))
+    if not text:
+        return False
+    has_consultancy_signal = any(term in text for term in CONSULTANCY_TERMS)
+    has_product_signal = any(term in text for term in PRODUCT_TERMS)
+    return has_consultancy_signal and not has_product_signal
 
 
 class RunStartupDiscovery:
@@ -136,10 +178,22 @@ class RunStartupDiscovery:
                     for item in discovered
                 ]
                 for candidate in candidates:
+                    if _is_consultancy_candidate(
+                        candidate.name,
+                        candidate.category,
+                        candidate.description,
+                    ):
+                        candidate.reject("consultancy_or_service_provider")
+                for candidate in candidates:
                     await self._save_candidate(candidate)
 
                 if self._enricher is not None:
-                    enriched = await self._enricher.enrich_batch(candidates)
+                    enrichable_candidates = [
+                        candidate
+                        for candidate in candidates
+                        if candidate.status is CandidateStatus.DISCOVERED
+                    ]
+                    enriched = await self._enricher.enrich_batch(enrichable_candidates)
                     for candidate in enriched:
                         if candidate.status == CandidateStatus.ENRICHED:
                             total_candidates_enriched += 1
@@ -214,6 +268,21 @@ class RunStartupDiscovery:
                 )
 
                 for candidate in url_candidates:
+                    if _is_consultancy_candidate(
+                        candidate.website_url,
+                        candidate.name,
+                        candidate.short_description,
+                        candidate.declared_sector,
+                    ):
+                        logger.info(
+                            "startup discovery candidate skipped as consultancy",
+                            extra={
+                                "hub": hub.name,
+                                "url": candidate.website_url,
+                                "startup_name": candidate.name,
+                            },
+                        )
+                        continue
                     try:
                         job_id = await self._submitter.submit(candidate.website_url)
                         submission = DiscoverySubmission(
