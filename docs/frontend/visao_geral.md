@@ -1,63 +1,89 @@
-# Módulo Frontend — Visão Geral
+# Modulo Frontend - Visao Geral
 
-## 1. Importância
+Atualizado em 01/07/2026.
 
-O `frontend` opera o pipeline e apresenta o resultado para o usuário de negócio
-ou técnico. Ele não executa regra de negócio: envia comandos ao FastAPI por um
-BFF leve (`/api/radar`), faz polling dos jobs e apresenta o estado retornado pela
-API. O FastAPI continua sendo a fonte da verdade; o browser nunca acessa
-Redis/Qdrant/workers/banco diretamente.
+## 1. Papel no produto
 
-## 2. Fluxo de tela principal
+O frontend opera o pipeline e apresenta o resultado para usuarios de negocio e
+tecnicos. Ele nao executa regra de dominio: envia comandos ao FastAPI por um BFF
+leve (`/api/radar`), faz polling e renderiza o estado retornado pela API.
+
+O browser nunca acessa Redis, Qdrant, workers ou banco diretamente.
+
+## 2. Telas
+
+| Rota | Uso |
+|---|---|
+| `/` | entrada e resumo da plataforma |
+| `/analyze` | envio de URL para analise |
+| `/jobs` | historico global de jobs |
+| `/jobs/[jobId]` | status, auditoria e links de resultado |
+| `/startups` | portfolio paginado de startups |
+| `/startups/[startupId]` | perfil, evidencias, recomendacoes e briefing |
+| `/dashboard` | metricas, graficos e comparacao |
+| `/knowledge` | chat sobre NVIDIA Knowledge |
+| `/discovery` | disparo/acompanhamento de discovery |
+
+## 3. Fluxo principal
 
 ```txt
-Usuário informa URL em /analyze
-  -> POST /api/radar/url-ingestion-jobs (BFF) -> POST /url-ingestion/jobs (FastAPI)
+usuario informa URL em /analyze
+  -> POST /api/radar/url-ingestion-jobs
+  -> BFF chama POST /url-ingestion/jobs
   -> redireciona para /jobs/{jobId}
-  -> TanStack Query consulta o job a cada 3s enquanto não for terminal
-  -> completed -> link para /startups/{startupId}
-  -> failed    -> mostra error_message e ação para nova submissão
+  -> TanStack Query faz polling
+  -> completed: link para /startups/{startupId}
+  -> failed: mostra error_message
 ```
 
-Telas: `/`, `/analyze`, `/jobs`, `/jobs/[jobId]`, `/startups`,
-`/startups/[startupId]`, `/knowledge`, `/dashboard`.
+## 4. Auditoria de job
 
-## 3. Estrutura de pastas
+A tela de job mostra:
+
+- status e familia de status;
+- etapa atual do pipeline;
+- tempo estimado/tempo decorrido quando disponivel;
+- quantidade de recomendacoes e briefing gerado;
+- sinais de enriquecimento (`parent_job_id`, `enrichment_round`);
+- IDs tecnicos para debugging;
+- link para Langfuse quando `NEXT_PUBLIC_LANGFUSE_HOST` esta configurado.
+
+## 5. Stack
+
+```txt
+Next.js App Router     paginas + BFF
+React + TypeScript     componentes e tipos
+TanStack Query         polling/cache/retry
+Tailwind CSS           estilos
+react-markdown         briefing, justificativas e chat
+Vitest + Testing Library  testes de UI
+```
+
+## 6. Estrutura
 
 ```txt
 apps/web/
-  app/              páginas (App Router) + api/radar/ (BFF leve)
-  components/       ui/, markdown-content.tsx
-  features/         analysis/, startups/, jobs/, knowledge/, dashboard/ (hooks/tipos/telas)
-  lib/api/          radar-server.ts (cliente BFF), radar-client.ts, radar-types.ts, env.ts
-  providers/        query-provider.tsx
-  styles/ public/
+  app/              paginas e api/radar
+  components/       UI compartilhada e markdown
+  features/         analysis, jobs, startups, dashboard, knowledge, discovery
+  lib/api/          cliente BFF, tipos e env
+  providers/        QueryClientProvider
 ```
 
-`components/` não conhece URLs do FastAPI; chamadas HTTP e tipos vivem em
-`features/` e `lib/api/`.
+## 7. Historico
 
-## 4. Stack
-
-```txt
-Next.js (App Router)    páginas + BFF
-React 19 + TypeScript   componentes e tipos
-TanStack Query          polling/cache/retry de estado remoto
-Tailwind CSS            estilo
-react-markdown + remark-gfm   briefing/justificativa/chat com links clicáveis
-SVG/HTML em React       gráficos do dashboard (sem chart lib)
-Vitest + Testing Library  32 testes
-```
-
-## 5. Histórico de versões
-
-| Versão | Status | Entrega |
+| Versao | Status | Entrega |
 |---|---|---|
-| V1 | Entregue | Fundação Next.js e jornada URL -> job |
-| V2 | Entregue | Resultado da startup: evidências, recomendações, briefing |
-| V3 | Entregue | Portfólio paginado, histórico de jobs, badge de fit, evidência clicável, chatbot, export PDF |
-| V4 | Entregue | Dashboard (gráficos), comparação de startups, fila em lote |
-| V5 | Entregue | Revisão humana simples (pending/approved/rejected) sem auth completa |
+| V1 | Entregue | Fundacao Next.js e jornada URL -> job |
+| V2 | Entregue | Resultado da startup |
+| V3 | Entregue | Portfolio, jobs, transparencia, chatbot e PDF |
+| V4 | Entregue | Dashboard, comparacao e lote |
+| V5 | Entregue | Revisao humana simples |
+| V5.1 | Entregue | Painel de auditoria de job e link Langfuse |
 
-**Versão atual: V5.** Detalhes em `versoes/`; futuro (auth real, tipos de
-openapi.json) em `roadmap.md`.
+## 8. Roadmap
+
+- auth real, se o projeto sair do modo demo;
+- tipos gerados automaticamente a partir de OpenAPI;
+- filtros e historico mais ricos para discovery;
+- metricas operacionais mais visiveis para jobs/enrichment.

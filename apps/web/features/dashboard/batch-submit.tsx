@@ -37,10 +37,10 @@ export function BatchSubmit() {
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-      <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
+      <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">
         Fila de Análise em Lote
       </h2>
-      <p className="text-xs text-gray-400 mb-3">
+      <p className="text-xs text-gray-600 mb-3">
         Cole as URLs das startups separadas por linha ou vírgula. Cada URL gera um job de análise
         independente.
       </p>
@@ -50,7 +50,7 @@ export function BatchSubmit() {
         onChange={(e) => setRaw(e.target.value)}
         rows={5}
         placeholder={`https://startup1.com.br\nhttps://startup2.io\nhttps://startup3.com`}
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-green-500 mb-3"
+        className="w-full rounded-lg border border-gray-400 px-3 py-2 text-sm font-mono text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-green-600 mb-3"
       />
 
       <div className="flex items-center gap-3 mb-4">
@@ -62,13 +62,13 @@ export function BatchSubmit() {
           {loading ? "Enviando..." : `Analisar ${urls.length} URL${urls.length !== 1 ? "s" : ""}`}
         </button>
         {urls.length > 0 && !loading && (
-          <span className="text-xs text-gray-400">{urls.length} URL{urls.length !== 1 ? "s" : ""} detectada{urls.length !== 1 ? "s" : ""}</span>
+          <span className="text-xs text-gray-600">{urls.length} URL{urls.length !== 1 ? "s" : ""} detectada{urls.length !== 1 ? "s" : ""}</span>
         )}
       </div>
 
       {results.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-medium text-gray-500 mb-2">Resultados:</p>
+          <p className="text-xs font-medium text-gray-700 mb-2">Resultados:</p>
           {results.map((r, i) => (
             <div
               key={i}

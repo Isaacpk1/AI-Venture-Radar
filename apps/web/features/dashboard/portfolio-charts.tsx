@@ -39,7 +39,7 @@ function MaturityPieChart() {
   });
 
   if (isLoading || !data) {
-    return <div className="h-64 flex items-center justify-center text-gray-400 text-sm">Carregando...</div>;
+    return <div className="h-64 flex items-center justify-center text-gray-600 text-sm">Carregando...</div>;
   }
 
   const slices: { name: MaturityKey; value: number }[] = [
@@ -51,7 +51,7 @@ function MaturityPieChart() {
 
   if (slices.length === 0) {
     return (
-      <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
+      <div className="h-64 flex items-center justify-center text-gray-600 text-sm">
         Nenhuma startup classificada ainda.
       </div>
     );
@@ -68,10 +68,10 @@ function MaturityPieChart() {
 
   return (
     <div data-testid="maturity-pie">
-      <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-1">
+      <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-1">
         Distribuição por Maturidade em IA
       </h2>
-      <p className="text-xs text-gray-400 mb-4">Total: {total} startup{total !== 1 ? "s" : ""}</p>
+      <p className="text-xs text-gray-600 mb-4">Total: {total} startup{total !== 1 ? "s" : ""}</p>
       <div className="flex items-center gap-6">
         <svg viewBox="0 0 160 160" className="w-40 h-40 flex-shrink-0" aria-hidden>
           {rendered.map((s) => (
@@ -90,9 +90,9 @@ function MaturityPieChart() {
                 className="inline-block w-3 h-3 rounded-sm flex-shrink-0"
                 style={{ background: MATURITY_COLORS[s.name] }}
               />
-              <span className="text-gray-700">{s.name}</span>
+              <span className="text-gray-800">{s.name}</span>
               <span className="font-semibold text-gray-900">{s.value}</span>
-              <span className="text-gray-400">({((s.value / total) * 100).toFixed(0)}%)</span>
+              <span className="text-gray-600">({((s.value / total) * 100).toFixed(0)}%)</span>
             </li>
           ))}
         </ul>
@@ -108,12 +108,12 @@ function TechnologyBarChart() {
   });
 
   if (isLoading || !data) {
-    return <div className="h-64 flex items-center justify-center text-gray-400 text-sm">Carregando...</div>;
+    return <div className="h-64 flex items-center justify-center text-gray-600 text-sm">Carregando...</div>;
   }
 
   if (data.items.length === 0) {
     return (
-      <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
+      <div className="h-64 flex items-center justify-center text-gray-600 text-sm">
         Nenhuma recomendação gerada ainda.
       </div>
     );
@@ -123,14 +123,14 @@ function TechnologyBarChart() {
 
   return (
     <div data-testid="tech-bar">
-      <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-1">
+      <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-1">
         Tecnologias NVIDIA Mais Recomendadas
       </h2>
-      <p className="text-xs text-gray-400 mb-4">Top {data.items.length} por número de startups</p>
+      <p className="text-xs text-gray-600 mb-4">Top {data.items.length} por número de startups</p>
       <ol className="flex flex-col gap-2">
         {data.items.map((item) => (
           <li key={item.technology_slug} className="flex items-center gap-2 text-xs">
-            <span className="w-36 truncate text-right text-gray-700 flex-shrink-0">
+            <span className="w-36 truncate text-right text-gray-800 flex-shrink-0">
               {item.technology_name}
             </span>
             <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">

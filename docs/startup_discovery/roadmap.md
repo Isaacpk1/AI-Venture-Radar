@@ -1,41 +1,45 @@
-﻿# Roadmap do Modulo Startup Discovery
+# Roadmap do Modulo Startup Discovery
 
-Criado em 26/06/2026 para documentar o modulo `startup_discovery`, que saiu da secao de ideias do scraping e virou modulo proprio.
-
----
+Atualizado em 01/07/2026.
 
 ## Objetivo
 
 ```txt
-hubs publicos -> extrair URLs de startups -> criar url_ingestion_jobs
+hubs publicos -> candidatos -> url_ingestion_jobs -> pipeline completo
 ```
 
-O modulo nao substitui scraping, ingestion ou orchestration. Ele so descobre URLs candidatas e delega a analise completa para o fluxo ja existente.
+O modulo deve aumentar cobertura sem virar crawler amplo, caro ou pouco
+auditavel.
 
----
+## Entregue
 
-## Estado Atual - V1 Entregue
+### V1 - hubs publicos por URL
 
-Rotas:
+- `POST /startup-discovery/runs`
+- `GET /startup-discovery/runs/{run_id}`
+- tabela `startup_discovery_runs`
+- extratores `httpx` + BeautifulSoup;
+- best-effort por hub;
+- submissao para `url_ingestion_jobs`.
 
-```txt
-POST /startup-discovery/runs
-GET  /startup-discovery/runs/{run_id}
-```
+### V2 - discovery por nome + enriquecimento
 
-Persistencia:
+- `HubSource.extraction_mode = "url" | "name"`;
+- 100 Open Startups como fonte por nome;
+- `startup_discovery_candidates`;
+- enriquecimento por Tavily quando `TAVILY_API_KEY` existe;
+- auto-submit quando a confianca do site oficial passa do limiar;
+- `GET /startup-discovery/runs/{run_id}/candidates`.
 
-```txt
-startup_discovery_runs
-```
+### V2.1 - catalogo de fontes
 
-Migration:
+- `DISCOVERY_SOURCE_CATALOG`;
+- `docs/startup_discovery/source_catalog.md`;
+- testes garantindo que fontes `planned` nao entram no runtime.
 
-```txt
-c9d3e7f0a4b8_create_startup_discovery_runs.py
-```
+## Fontes
 
-Hubs implementados:
+Implementadas:
 
 ```txt
 InovAtiva Brasil
@@ -43,40 +47,36 @@ Abstartups
 100 Open Startups
 ```
 
-Configuracao:
+Planejadas:
 
 ```txt
-STARTUP_DISCOVERY_MAX_PER_RUN=20
+Distrito
+Latitud
+Startups.com.br
+Endeavor Brasil
+Cubo Itau
+BrazilLAB
+Sebrae Startups
 ```
 
-Comportamento:
+## Proximas evolucoes
 
-- extratores usam `httpx` + BeautifulSoup;
-- links duplicados sao normalizados por URL;
-- falha em um hub e best-effort, desde que outros hubs entreguem URLs;
-- URLs descobertas sao submetidas ao fluxo de `url_ingestion_jobs` via adapter de orchestration;
-- o run registra `hubs_processed`, `urls_found`, `jobs_submitted`, erro e URLs submetidas.
+1. Persistir descartes:
+   - URL duplicada;
+   - rede social pessoal;
+   - diretorio generico;
+   - consultoria sem produto;
+   - baixa confianca de site oficial.
+2. Criar score antes de submeter candidatos.
+3. Promover uma fonte planejada por vez, sempre com extrator e teste.
+4. Melhorar tela `/discovery` com historico, falhas por hub e candidatos.
+5. Rodar scheduler semanal somente apos metricas basicas ficarem visiveis.
 
----
+## Fora de escopo
 
-## Fora Do Escopo Da V1
+- crawling amplo sem hub de origem;
+- importar resultados de busca como verdade final;
+- bases pagas sem contrato;
+- discovery substituindo scraping, evidence validation ou revisao humana.
 
-```txt
-crawler continuo
-API paga de busca
-Tavily/SearchExecutor
-rankeamento sofisticado de hubs
-extratores para todos os 14 hubs listados no brainstorm original
-```
-
----
-
-## Proximas Evolucoes
-
-1. Expandir gradualmente para mais hubs gratuitos.
-2. Persistir ou relatar URLs descartadas por duplicidade/erro.
-3. Adicionar filtros simples por hub quando a lista crescer.
-4. Integrar com a chain de enriquecimento por busca quando uma startup conhecida precisar de fontes melhores.
-5. Rodar discovery recorrente por cron/scheduler com guardrails e metricas.
-
-Documento de desenho: `docs/startup_discovery/cron_discovery_hubs.md`.
+Documento operacional: `docs/startup_discovery/cron_discovery_hubs.md`.
