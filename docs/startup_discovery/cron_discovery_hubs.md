@@ -75,6 +75,15 @@ Esses campos ficam persistidos em `startup_discovery_submissions`, ligados ao
 
 ## 4. O que entra no cron
 
+O catalogo versionado de fontes fica em:
+
+```txt
+docs/startup_discovery/source_catalog.md
+```
+
+Importante: o catalogo inclui fontes planejadas. O runtime atual usa somente
+fontes registradas em `HUB_SOURCES`, que possuem extrator implementado.
+
 Fontes prioritarias:
 
 | Prioridade | Hub/fonte | Motivo |
@@ -86,6 +95,8 @@ Fontes prioritarias:
 | Media | Latitud | startups e founders LATAM/Brasil |
 | Media | Startups.com.br | noticias e perfis |
 | Media | Endeavor Brasil | empresas com tracao |
+| Baixa | BrazilLAB | bom sinal para govtechs e casos B2G/B2B |
+| Baixa | Sebrae Startups | cobertura regional e programas de aceleracao |
 | Baixa | Cubo/Itaú, hubs corporativos | bom sinal, mas pode ter paginas menos estruturadas |
 
 Fora do escopo inicial:
