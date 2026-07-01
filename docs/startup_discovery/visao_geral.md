@@ -1,53 +1,83 @@
-# Módulo Startup Discovery — Visão Geral
+# Modulo Startup Discovery - Visao Geral
 
-## 1. Importância
+Atualizado em 01/07/2026.
 
-O `startup_discovery` alimenta o topo do funil: em vez de depender de uma URL
-avulsa, descobre startups automaticamente em hubs públicos e as injeta no
-pipeline de análise. É o que permite escalar o radar de "uma startup por vez"
-para "um lote descoberto sozinho".
+## 1. Papel no produto
 
-## 2. Fluxo
+O modulo `startup_discovery` alimenta o topo do funil. Em vez de depender apenas
+de URLs digitadas manualmente, ele consulta hubs publicos, cria candidatos e
+submete URLs confiaveis para o pipeline de `url_ingestion_jobs`.
+
+O discovery nao classifica startups, nao gera recomendacoes e nao cria verdade
+final. Ele so descobre candidatos rastreaveis.
+
+## 2. Fontes que rodam hoje
+
+As fontes executadas ficam em `HUB_SOURCES`:
+
+| Fonte | Modo | Extrator |
+|---|---|---|
+| InovAtiva Brasil | url | `inovativa` |
+| Abstartups | url | `abstartups` |
+| 100 Open Startups | name | `open_startups` |
+
+O catalogo mais amplo fica em `DISCOVERY_SOURCE_CATALOG` e em
+`docs/startup_discovery/source_catalog.md`. Fontes `planned` aparecem na
+documentacao, mas nao rodam ate terem extrator e teste.
+
+## 3. Fluxo
 
 ```txt
 POST /startup-discovery/runs
   -> cria DiscoveryRun
-  -> consulta hubs públicos (InovAtiva Brasil, Abstartups, 100 Open Startups)
-  -> extrai URLs (best-effort por hub; falha de um não cancela os outros)
-  -> limita por STARTUP_DISCOVERY_MAX_PER_RUN (default 20)
-  -> cria url_ingestion_jobs (source_type=startup_evidence)
-  -> registra urls_found / jobs_submitted / status
-GET /startup-discovery/runs/{id}
+  -> percorre HUB_SOURCES
+  -> modo url: extrai URLs/perfis diretamente
+  -> modo name: extrai nomes/ranking/categoria
+  -> salva candidatos quando necessario
+  -> enriquece candidatos por Tavily quando configurado
+  -> auto-submete candidatos confiaveis como url_ingestion_jobs
+  -> registra metricas do run
 ```
 
-Run síncrono: fetches de hub são I/O de rede barato (timeout 30s por hub).
+Consulta:
 
-## 3. Estrutura de pastas
+```txt
+GET /startup-discovery/runs/{run_id}
+GET /startup-discovery/runs/{run_id}/candidates
+```
+
+## 4. Guardrails
+
+- limite por rodada via `STARTUP_DISCOVERY_MAX_PER_RUN`;
+- falha de um hub nao derruba os demais;
+- consultorias/prestadores sao rejeitados quando ha sinal forte de servico sem
+  sinal de produto;
+- fontes planejadas nao entram no runtime;
+- URLs descobertas sempre passam pelo pipeline normal antes de virarem resultado
+  executivo.
+
+## 5. Estrutura
 
 ```txt
 startup_discovery/
-  presentation/     POST/GET runs
-  application/      use_cases (RunStartupDiscovery, GetDiscoveryRun), ports (HubLinkExtractor)
-  domain/           DiscoveryRun, hub_registry (HUB_SOURCES), exceções
-  infrastructure/   hub_extractors/ (base + 3 concretos), orchestration_adapters/
-  factories/
-  tests/
+  presentation/     rotas REST
+  application/      RunStartupDiscovery, GetDiscoveryRun, ports
+  domain/           DiscoveryRun, StartupDiscoveryCandidate, hub_registry
+  infrastructure/   hub_extractors/, enrichment/, orchestration_adapters/
+  factories/        composicao de extratores e adapters
+  tests/            unitarios do run, name discovery, scheduler, registry
 ```
 
-## 4. Stack
+## 6. Testes recentes
 
 ```txt
-httpx              fetch dos hubs (30s timeout, follow_redirects)
-BeautifulSoup      extração de links/perfis
-(reuso) orchestration   submissão como url_ingestion_jobs
+apps/api/src/modules/startup_discovery/tests/unit: 25 passed
 ```
 
-## 5. Histórico de versões
+## 7. Proximos passos
 
-| Versão | Status | Entrega |
-|---|---|---|
-| V1 | Entregue | Descoberta em 3 hubs públicos; DiscoveryRun no Postgres; rotas REST |
-
-**Versão atual: V1.** Limitação: seletores CSS estimados (constantes no topo de
-cada extrator, fáceis de ajustar). Futuro (mais hubs, agendamento) em
-`roadmap.md`.
+1. Promover novas fontes do catalogo uma por vez.
+2. Persistir URLs descartadas e motivo.
+3. Melhorar ranking de candidatos antes da submissao.
+4. Expor historico de discovery no frontend com filtros.
+5. Rodar scheduler/cron apenas com guardrails de volume.

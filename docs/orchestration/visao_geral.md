@@ -1,59 +1,86 @@
-# Módulo Orchestration — Visão Geral
+# Modulo Orchestration - Visao Geral
 
-## 1. Importância
+Atualizado em 01/07/2026.
 
-O `orchestration` coordena a jornada inteira do produto, principalmente a partir
-de uma URL bruta. É ele que transforma "uma URL" em "um briefing", encadeando
-scraping → ingestion → embeddings → startup → recomendações → briefing sem
-operação manual entre etapas. Também cuida do enriquecimento automático quando os
-sinais são fracos e da limpeza de vetores órfãos.
+## 1. Papel no produto
 
-## 2. Fluxo (url_ingestion_jobs)
+O modulo `orchestration` coordena a jornada inteira. Ele transforma uma URL
+bruta em scraping, documento, embeddings, startup, recomendacoes e briefing, sem
+operacao manual entre etapas.
+
+Ele tambem controla enriquecimento automatico quando a fonte inicial e fraca,
+falha ou deixa lacunas importantes.
+
+## 2. Url ingestion jobs
+
+Estados principais:
 
 ```txt
 PENDING -> SCRAPING -> INGESTING -> EMBEDDING -> ANALYZING -> COMPLETED | FAILED
 ```
 
-Na etapa `ANALYZING` (uma passagem síncrona):
+Na fase `ANALYZING`:
 
 ```txt
-cria/reusa startup -> anexa evidência -> try_extract + try_classify
--> agenda enriquecimento se faltam sinais -> recommendations.generate()
--> briefing.generate() -> salva startup_id/recommendation_count/briefing_id
+cria/reusa startup
+anexa evidencia
+extrai perfil estruturado
+classifica maturidade de IA
+gera recomendacoes
+gera briefing
+atualiza startup_id, recommendation_count e briefing_id
 ```
 
-Gate por `source_type`: só `startup_evidence` entra em ANALYZING; fontes curadas
-(`nvidia_knowledge`) completam após o embedding. A fila `url_ingestion` é o
-próprio loop de polling (reentrega Dramatiq até estado terminal).
+Fontes `nvidia_knowledge` completam apos embeddings. Elas nao entram em
+`ANALYZING`, porque alimentam RAG e nao representam startups.
 
-## 3. Estrutura de pastas
+## 3. Enriquecimento
+
+Quando necessario, a orchestration cria jobs filhos:
+
+```txt
+job pai
+  -> links internos extraidos do HTML aprovado
+  -> buscas externas via Tavily/Search Planner quando disponivel
+  -> filtros de qualidade
+  -> jobs filhos com parent_job_id e enrichment_round
+```
+
+O objetivo e melhorar evidencia, nao gerar conclusao automatica sem lastro.
+
+## 4. Estrutura
 
 ```txt
 orchestration/
-  presentation/     POST/GET analysis/jobs, url-ingestion/jobs, /advance
-  application/      use_cases (AdvanceUrlIngestionJob), ports
-  domain/           AnalysisJob, UrlIngestionJob (status + parent_job_id/enrichment_round), exceções
-  infrastructure/   startups_adapters/, agents_adapters/ (enriquecimento), queue/
-  factories/        importa Recommendations/Briefing/Startups/Embeddings/AgentsFactory
-  tests/
+  presentation/     rotas de analysis/jobs e url-ingestion/jobs
+  application/      AdvanceUrlIngestionJob e ports
+  domain/           AnalysisJob, UrlIngestionJob, status e regras
+  infrastructure/   adapters para startups, queue, scraping, embeddings
+  factories/        composicao concreta
+  tests/            unitarios e integracao
 ```
 
-## 4. Stack
+## 5. Stack
 
 ```txt
-Dramatiq + Redis    fila url_ingestion como loop de polling
-Tavily (reuso)      busca externa para enriquecimento (opcional)
+Dramatiq + Redis    fila e polling assincrono
+PostgreSQL          estado dos jobs
+Tavily opcional     busca externa para enrichment
+Langfuse opcional   tracing de chamadas LLM via modulos semanticos
 ```
 
-## 5. Histórico de versões
+## 6. Historico
 
-| Versão | Status | Entrega |
+| Versao | Status | Entrega |
 |---|---|---|
-| V1 | Entregue | analysis_jobs a partir de startup_id (recommendations -> briefing) |
-| V2 | Entregue | URL bruta ponta a ponta: scraping ... -> briefing; worker automático; jornada completa |
-| V2.1 | Entregue | Enriquecimento por URLs do mesmo domínio |
-| V2.2 | Entregue | Busca externa Tavily opcional + resgate de fonte fraca |
+| V1 | Entregue | `analysis_jobs` por startup_id |
+| V2 | Entregue | URL bruta ponta a ponta |
+| V2.1 | Entregue | Enriquecimento por URLs do mesmo dominio |
+| V2.2 | Entregue | Tavily opcional e resgate de fonte fraca |
 
-**Versão atual: V2.2.** Também: histórico global de jobs, limpeza de vetores
-órfãos. Detalhes em `versoes/`; futuro (V3 retry por etapa, V4 notificações) em
-`roadmap.md`.
+## 7. Roadmap
+
+- retry por etapa com politica explicita;
+- retomada administrativa de jobs falhados;
+- metricas de enrichment no frontend;
+- notificacoes quando uma analise terminar.

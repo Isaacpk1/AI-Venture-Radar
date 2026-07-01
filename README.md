@@ -36,17 +36,17 @@ Componentes principais:
 | Busca vetorial | Qdrant |
 | Agentes e LLM | LangGraph, LangChain, Gemini |
 | RAG | Qdrant, PostgreSQL/ParadeDB, Cohere rerank opcional |
-| Observabilidade | Langfuse opcional |
+| Observabilidade | Logging estruturado + Langfuse opcional |
 | Frontend | Next.js, React, TypeScript, TanStack Query, Tailwind CSS |
 | Testes | Pytest, Vitest, Testing Library |
 
 Documentos de referencia:
 
+- [Indice completo da documentacao](docs/README.md)
 - [Arquitetura geral](docs/geral/arquitetura_monolito_modular_workers.md)
 - [Fluxo total do produto](docs/geral/fluxo_total.md)
 - [Stack e uso de tecnologias](docs/geral/stack_e_onde_e_usado.md)
 - [Estado atual e roadmap](docs/geral/estado_atual_e_roadmap_futuro.md)
-- [Indice completo da documentacao](docs/README.md)
 
 ## Estrutura do repositorio
 
@@ -167,6 +167,7 @@ Frontend:
 
 - `/analyze` para enviar URLs e acompanhar analises
 - `/jobs` para historico de jobs
+- `/jobs/[jobId]` para status e auditoria tecnica da analise
 - `/startups` para portfolio de startups
 - `/dashboard` para comparacao e metricas
 - `/knowledge` para consulta ao conhecimento NVIDIA
@@ -194,6 +195,10 @@ Alguns testes de integracao dependem dos servicos locais em Docker e de variavei
 ## Documentacao
 
 A documentacao tecnica fica em [docs/](docs/README.md). A pasta `docs/geral/` explica a visao de sistema, enquanto cada pasta de modulo contem `visao_geral.md`, `roadmap.md` e historico em `versoes/`.
+
+O discovery possui um catalogo separado para fontes planejadas em
+[docs/startup_discovery/source_catalog.md](docs/startup_discovery/source_catalog.md).
+Somente fontes com extrator implementado entram no runtime.
 
 Para entender o projeto rapidamente, leia nesta ordem:
 

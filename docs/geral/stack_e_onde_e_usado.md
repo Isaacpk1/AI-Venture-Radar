@@ -1,171 +1,98 @@
-# Stack e Onde Cada Tecnologia é Usada
+# Stack e Onde Cada Tecnologia e Usada
 
-Este documento lista cada tecnologia do projeto e onde ela entra na arquitetura.
-"Em uso" significa import real no código; "Candidata" significa registrada em
-algum `docs/<modulo>/roadmap.md` mas ainda não implementada.
+Atualizado em 01/07/2026.
 
-Regra de leitura (do PRE-DECISION CHECKLIST do `CLAUDE.md`):
+Este documento lista as principais tecnologias do projeto e onde elas entram.
+"Em uso" significa que existe uso real no codigo. "Planejada" significa que a
+tecnologia aparece no roadmap, mas nao deve ser vendida como entregue.
 
-```txt
-domain/         nunca importa tecnologia de infraestrutura
-application/    nunca importa framework externo (só tipos/portas próprias)
-infrastructure/ é onde toda tecnologia concreta realmente vive
-factories/      é o único lugar que escolhe a implementação concreta de cada porta
-graphs/         (só em agents) usa LangGraph; importa application/+domain/, nunca infra de outro módulo
-```
+## 1. Infraestrutura transversal
 
----
-
-## 1. Transversal / infraestrutura
-
-| Tecnologia | Camada | Status | Por quê |
+| Tecnologia | Status | Onde | Uso |
 |---|---|---|---|
-| Python 3.13 | runtime da API e workers | Em uso | Linguagem base |
-| FastAPI | `presentation/` de todos os módulos | Em uso | Framework HTTP; nunca em domain/application |
-| Pydantic / Pydantic Settings | schemas, settings, saída de LLM | Em uso | Validação estrutural; `config/settings.py` centraliza env vars |
-| SQLAlchemy (async) | `infrastructure/database/` | Em uso | ORM confinado à infra para manter domain puro |
-| PostgreSQL | toda tabela do projeto | Em uso | Fonte da verdade: status, auditoria, relacionamentos |
-| Alembic | migrations na raiz | Em uso | Versionamento de schema, uma migration por entrega |
-| Qdrant | `infrastructure/qdrant/` (embeddings) | Em uso | Busca por similaridade; todo vetor referencia ID do Postgres |
-| Redis | broker do Dramatiq | Em uso | Fila assíncrona compartilhada por todos os workers |
-| Dramatiq | toda fila assíncrona (5 workers) | Em uso | Mensagens carregam só job_id/run_id; retry/backoff nativo |
-| Langfuse (self-hosted v3) | `shared/observability/` | Em uso (opcional) | Tracing de chamadas LLM (custo/latência) sem reescrever prompts |
-| Docker Compose | `infra/docker-compose.yml` | Em uso | Postgres/Redis/Qdrant/Langfuse locais; sem Dockerfile de API ainda |
-| Pytest | `apps/api/.../tests/` | Em uso | ~617 testes coletados no backend |
-
----
+| Python 3.13 | Em uso | API e workers | runtime backend |
+| FastAPI | Em uso | `presentation/` | rotas HTTP |
+| Pydantic | Em uso | DTOs, settings, saidas LLM | validacao estrutural |
+| SQLAlchemy async | Em uso | `infrastructure/database/` | persistencia |
+| PostgreSQL | Em uso | banco relacional | fonte da verdade |
+| Alembic | Em uso | migrations | versionamento de schema |
+| Redis | Em uso | Dramatiq broker | filas |
+| Dramatiq | Em uso | workers | tarefas assincronas |
+| Qdrant | Em uso | embeddings/RAG | busca vetorial |
+| Langfuse | Opcional | `shared/observability/` | tracing de LLM |
+| Docker Compose | Em uso | `infra/` | dependencias locais |
 
 ## 2. Scraping
 
-| Tecnologia | Camada | Status | Por quê |
-|---|---|---|---|
-| BeautifulSoup | `infrastructure/scrapers/` | Em uso | Páginas estáticas (1ª tentativa) |
-| Playwright | `infrastructure/scrapers/` | Em uso | Páginas com JavaScript pesado |
-| Trafilatura | `infrastructure/scrapers/` | Em uso | Isola conteúdo principal em páginas densas |
-| httpx (Gemini via HTTP) | `infrastructure/semantic_validators/` | Em uso | Validação semântica leve sem trazer LangChain |
-| Firecrawl | — | Candidata | Fallback pago para páginas que esgotam BS4/Playwright/Trafilatura |
+| Tecnologia | Status | Uso |
+|---|---|---|
+| BeautifulSoup | Em uso | paginas HTML estaticas |
+| Playwright | Em uso | paginas com JavaScript |
+| Trafilatura | Em uso | extracao de texto principal |
+| httpx | Em uso | fetch HTTP e integracoes |
+| Firecrawl | Planejada | fallback pago ainda nao implementado |
 
----
+## 3. IA, agentes e RAG
 
-## 3. Ingestion
+| Tecnologia | Status | Uso |
+|---|---|---|
+| LangGraph | Em uso | grafos de agentes |
+| LangChain | Em uso | integracao com modelos/tools |
+| Gemini | Em uso/opcional | LLM e embeddings |
+| Cohere Rerank | Opcional | reranking RAG |
+| Ragas | Opt-in | avaliacao de qualidade com custo de API |
+| pg_search / ParadeDB | Em uso | BM25 lexical no Postgres |
+| Tavily | Opcional | busca externa para enrichment/discovery por nome |
 
-| Tecnologia | Camada | Status | Por quê |
-|---|---|---|---|
-| (sem lib externa) | `application/text_chunker.py`, `text_cleaner.py` | Em uso | Split manual por parágrafo/sentença/palavra |
-| `langchain_text_splitters` | mesmo contrato | Candidata | Chunking estrutural sem lib nova (LangChain já é dependência) |
+## 4. Modulos de dominio
 
----
+| Modulo | Tecnologias principais |
+|---|---|
+| ingestion | regras proprias de limpeza/chunking |
+| embeddings | Gemini embeddings, Qdrant, cache por hash |
+| startups | rapidfuzz para dedup, JSONB para `ai_profile` |
+| nvidia_knowledge | catalogo estatico + registry de fontes oficiais |
+| recommendations | regex com word-boundary, RAG grounding, score composto |
+| briefing | Markdown, Playwright/Jinja2 para PDF |
+| startup_discovery | httpx, BeautifulSoup, Tavily opcional |
 
-## 4. Embeddings
+## 5. Frontend
 
-| Tecnologia | Camada | Status | Por quê |
-|---|---|---|---|
-| `langchain_google_genai` (`GoogleGenerativeAIEmbeddings`) | `infrastructure/gemini/` | Em uso | Implementa `EmbeddingService`; modelo `models/gemini-embedding-001` |
-| `qdrant-client` (`AsyncQdrantClient`) | `infrastructure/qdrant/` | Em uso | Upsert/busca; cria coleção idempotente na 1ª chamada |
-| hash SHA-256 (stdlib) | `infrastructure/` | Em uso | Cache por content_hash para não rechamar Gemini em texto idêntico |
+| Tecnologia | Status | Uso |
+|---|---|---|
+| Next.js App Router | Em uso | paginas e BFF `/api/radar` |
+| React + TypeScript | Em uso | UI e tipos |
+| TanStack Query | Em uso | polling e cache |
+| Tailwind CSS | Em uso | estilos |
+| react-markdown + remark-gfm | Em uso | briefing, justificativas e chat |
+| Vitest + Testing Library | Em uso | testes |
 
----
-
-## 5. Agents
-
-| Tecnologia | Camada | Status | Por quê |
-|---|---|---|---|
-| LangGraph | `graphs/` (8 grafos) | Em uso | Orquestra os nodes de cada agente |
-| LangChain (`ChatGoogleGenerativeAI`) | `infrastructure/llm/` | Em uso | Integra o Gemini aos nodes |
-| Pydantic | saída de todo LLM client | Em uso | Resposta do LLM validada estruturalmente |
-| PostgreSQL (checkpoints) | `infrastructure/checkpoints/` | Em uso | Estado do LangGraph por thread_id (human-in-the-loop) |
-| Tavily | `infrastructure/search_adapters/` | Em uso (opcional) | Search Planner Agent → URLs externas quando `TAVILY_API_KEY` existe |
-
----
-
-## 6. RAG
-
-| Tecnologia | Camada | Status | Por quê |
-|---|---|---|---|
-| `pg_search` (ParadeDB, BM25 nativo) | imagem `paradedb/paradedb:latest-pg16` + repo lexical | Em uso | Substituiu `to_tsvector`/`ts_rank`; melhora context_recall sem carregar chunks na memória |
-| Cohere (`AsyncClient.rerank`) | `infrastructure/reranking/` | Em uso | Reordena candidatos; degrada graciosamente sem `COHERE_API_KEY` |
-| Ragas | `tests/integration/test_ragas_quality_baseline.py` | Em uso (opt-in `RUN_RAGAS_EVAL=1`) | Mede faithfulness/relevancy/precision/recall |
-
----
-
-## 7. NVIDIA Knowledge
-
-| Tecnologia | Camada | Status | Por quê |
-|---|---|---|---|
-| catálogo estático em código | `infrastructure/static_catalog/` | Em uso | 18 tecnologias/programas; dado não muda o suficiente para virar tabela |
-| health-check HTTP HEAD | `infrastructure/` | Candidata | Detectar fontes do registry fora do ar antes de reingerir |
-
----
-
-## 8. Startups
-
-| Tecnologia | Camada | Status | Por quê |
-|---|---|---|---|
-| (sem lib externa) | `application/use_cases/`, `domain/` | Em uso | Modelo relacional + casos de uso simples |
-| `rapidfuzz` | `domain/policies.py` (dedup) | Em uso | Dedup por nome/website antes de criar Startup; limiar 92 calibrado |
-| JSONB (`ai_profile`) | `infrastructure/database/` | Em uso | StartupAIProfile estruturado (workload, deploy, GPU, etc.) |
-
----
-
-## 9. Recommendations
-
-| Tecnologia | Camada | Status | Por quê |
-|---|---|---|---|
-| `re` (regex, stdlib) | `domain/policies.py::_contains_term()` | Em uso | Word-boundary matching (fix do bug de substring "agent" em "agentes") |
-| `rag.public.question_answerer` (reuso) | `infrastructure/rag_adapters/` | Em uso | Fundamenta justificativa em conteúdo NVIDIA real (citações) |
-| `rag.public.retriever` (reuso) | `infrastructure/rag_adapters/` | Em uso | Prefiltro semântico de candidatos antes do keyword matching |
-
----
-
-## 10. Briefing
-
-| Tecnologia | Camada | Status | Por quê |
-|---|---|---|---|
-| string/Markdown puro | `domain/policies.py::build_briefing_markdown()` | Em uso | Saída determinística, sem template engine |
-| Playwright + Jinja2 + `markdown` | `infrastructure/rendering/` | Em uso | Export PDF a partir do mesmo Markdown; trocou weasyprint para evitar deps nativas |
-
----
-
-## 11. Orchestration
-
-| Tecnologia | Camada | Status | Por quê |
-|---|---|---|---|
-| Dramatiq + Redis | `infrastructure/queue/` | Em uso | A fila `url_ingestion` é o próprio loop de polling |
-| URLs same-domain + fila | `application/use_cases/advance_url_ingestion_job.py` | Em uso | 1ª fatia da chain de enriquecimento |
-| Tavily + Search Planner (reuso) | adapters de enriquecimento | Em uso (opcional) | Busca URLs externas quando `TAVILY_API_KEY` existe |
-
----
-
-## 12. Frontend
-
-| Tecnologia | Camada | Status | Por quê |
-|---|---|---|---|
-| Next.js (App Router) | `apps/web/app/` | Em uso | Páginas + BFF (`app/api/radar/`) que encaminha ao FastAPI |
-| React 19 + TypeScript | `apps/web/features/`, `lib/api/` | Em uso | Componentes e tipos alinhados ao contrato HTTP |
-| TanStack Query | `providers/query-provider.tsx` | Em uso | Polling de jobs sem reimplementar cache/retry |
-| Tailwind CSS | toda `apps/web/` | Em uso | Utilitários de CSS, sem framework de componentes |
-| Vitest + Testing Library | `apps/web/**/*.test.tsx` | Em uso | 32 testes de frontend |
-| SVG/HTML em React | `features/dashboard/portfolio-charts.tsx` | Em uso | Gráficos do dashboard sem dependência de chart lib |
-| `react-markdown` + `remark-gfm` | `components/markdown-content.tsx` | Em uso | Briefing/justificativa/chat com links clicáveis na tela |
-
----
-
-## 13. Chaves de API externas (todas opcionais)
+## 6. Variaveis externas principais
 
 ```txt
-GEMINI_API_KEY       LLM: agentes, classificação, extração, embeddings, prosa, RAG answer
-COHERE_API_KEY       reranking do RAG
-TAVILY_API_KEY       busca externa para enriquecimento
-LANGFUSE_*           tracing/observabilidade de LLM
-FIRECRAWL_API_KEY    previsto; client real ainda não implementado
+DATABASE_URL
+REDIS_URL
+QDRANT_URL
+GEMINI_API_KEY
+COHERE_API_KEY
+TAVILY_API_KEY
+LANGFUSE_PUBLIC_KEY
+LANGFUSE_SECRET_KEY
+LANGFUSE_HOST
+NEXT_PUBLIC_LANGFUSE_HOST
+FIRECRAWL_API_KEY
 ```
 
-Sem qualquer uma delas o sistema continua funcionando, com degradação graciosa.
+Todas as chaves externas sao opcionais para o modo demo. Sem elas, partes
+semanticas ficam limitadas ou usam fallback.
 
----
+## 7. Regra arquitetural
 
-## Como manter este arquivo
-
-Quando uma tecnologia "Candidata" de um `docs/<modulo>/roadmap.md` for
-implementada, troque só a coluna Status para "Em uso" — a explicação detalhada
-continua no roadmap do módulo.
+```txt
+domain/         nao importa infraestrutura
+application/    fala por portas e contratos publicos
+infrastructure/ implementa tecnologia concreta
+factories/      conectam portas a implementacoes
+workers/        carregam IDs e chamam use cases
+frontend/       chama API/BFF, nunca banco/fila direto
+```
