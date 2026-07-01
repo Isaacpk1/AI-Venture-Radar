@@ -19,6 +19,7 @@ from apps.api.src.modules.orchestration.application.ports import (
     IngestionPort,
     RecommendationsPort,
     ScrapingPort,
+    StartupExtractionAttempt,
     StartupProfileSnapshot,
     StartupsPort,
     StepStatus,
@@ -133,11 +134,16 @@ class FakeDispatcher(UrlIngestionTaskDispatcher):
 
 
 class FakeScrapingPort(ScrapingPort):
-    def __init__(self, status: StepStatus | None = None) -> None:
+    def __init__(
+        self,
+        status: StepStatus | None = None,
+        html: str | None = None,
+    ) -> None:
         self.submitted_urls: list[str] = []
         self.submitted_source_types: list[str] = []
         self.job_id = uuid4()
         self.status = status
+        self._html = html
 
     async def submit(self, url: str, *, source_type: str = "startup_evidence") -> UUID:
         self.submitted_urls.append(url)
@@ -147,6 +153,9 @@ class FakeScrapingPort(ScrapingPort):
     async def get_status(self, job_id: UUID) -> StepStatus:
         assert self.status is not None
         return self.status
+
+    async def get_html(self, result_id: UUID) -> str | None:
+        return self._html
 
 
 class FakeIngestionPort(IngestionPort):
@@ -214,6 +223,7 @@ class FakeStartupsPort(StartupsPort):
         *,
         startup_id: UUID | None = None,
         profile: StartupProfileSnapshot | None = None,
+        extraction_attempt: StartupExtractionAttempt | None = None,
     ) -> None:
         self.created: list[tuple[str, str]] = []
         self.attached: list[tuple[UUID, UUID, str, str | None, str | None]] = []
@@ -221,6 +231,9 @@ class FakeStartupsPort(StartupsPort):
         self.try_classify_calls: list[UUID] = []
         self._startup_id = startup_id or uuid4()
         self._profile = profile
+        self._extraction_attempt = extraction_attempt or StartupExtractionAttempt(
+            succeeded=True
+        )
 
     async def create_startup(self, *, name: str, website_url: str) -> UUID:
         self.created.append((name, website_url))
@@ -239,8 +252,9 @@ class FakeStartupsPort(StartupsPort):
             (startup_id, scraping_result_id, source_url, title, notes)
         )
 
-    async def try_extract(self, startup_id: UUID) -> None:
+    async def try_extract(self, startup_id: UUID) -> StartupExtractionAttempt:
         self.try_extract_calls.append(startup_id)
+        return self._extraction_attempt
 
     async def try_classify(self, startup_id: UUID) -> None:
         self.try_classify_calls.append(startup_id)
@@ -255,6 +269,9 @@ class FakeStartupsPort(StartupsPort):
             funding_stage="seed",
             customers=["Contoso"],
             evidence_urls=[],
+            ai_workload_type="nlp",
+            deployment_stage="production",
+            gpu_need="high",
         )
 
 
@@ -432,6 +449,68 @@ async def test_advance_uses_job_source_type_when_submitting_ingestion() -> None:
 
 
 @pytest.mark.anyio
+async def test_scraping_done_without_result_fails_job_instead_of_asserting() -> None:
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(
+        url="https://docs.nvidia.com/nim/",
+        source_type="nvidia_knowledge",
+    )
+    job.start_scraping(uuid4())
+    await repository.save(job)
+    ingestion_port = FakeIngestionPort()
+    use_case = _make_advance_use_case(
+        repository=repository,
+        scraping_port=FakeScrapingPort(
+            StepStatus(
+                is_done=True,
+                is_failed=False,
+                result_id=None,
+                error_message=None,
+            )
+        ),
+        ingestion_port=ingestion_port,
+    )
+
+    await use_case.execute(job_id=job.id)
+
+    saved = repository.items[job.id]
+    assert saved.status is UrlIngestionJobStatus.FAILED
+    assert saved.error_message == "Scraping concluiu sem scraping_result_id."
+    assert ingestion_port.submissions == []
+
+
+@pytest.mark.anyio
+async def test_ingestion_done_without_result_fails_job_instead_of_asserting() -> None:
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(
+        url="https://docs.nvidia.com/nim/",
+        source_type="nvidia_knowledge",
+    )
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=uuid4(), ingestion_job_id=uuid4())
+    await repository.save(job)
+    embeddings_port = FakeEmbeddingsPort()
+    use_case = _make_advance_use_case(
+        repository=repository,
+        ingestion_port=FakeIngestionPort(
+            status=StepStatus(
+                is_done=True,
+                is_failed=False,
+                result_id=None,
+                error_message=None,
+            )
+        ),
+        embeddings_port=embeddings_port,
+    )
+
+    await use_case.execute(job_id=job.id)
+
+    saved = repository.items[job.id]
+    assert saved.status is UrlIngestionJobStatus.FAILED
+    assert saved.error_message == "Ingestion concluiu sem document_id."
+
+
+@pytest.mark.anyio
 async def test_scraping_rejection_schedules_enrichment_instead_of_stopping_silently() -> None:
     startup_id = uuid4()
     repository = FakeUrlIngestionJobRepository()
@@ -482,10 +561,10 @@ async def test_scraping_rejection_schedules_enrichment_instead_of_stopping_silen
     ]
     assert saved.status is UrlIngestionJobStatus.FAILED
     assert saved.startup_id == startup_id
-    assert startups_port.created == [("kunumi.com", "https://www.kunumi.com/")]
+    assert startups_port.created == [("Kunumi", "https://www.kunumi.com/")]
     assert [item.url for item in enrichment_jobs] == [
+        "https://www.kunumi.com/sobre",
         "https://www.crunchbase.com/organization/kunumi",
-        "https://www.kunumi.com/about",
     ]
     assert dispatcher.dispatched_job_ids == [item.id for item in enrichment_jobs]
 
@@ -681,18 +760,64 @@ async def test_analyzing_schedules_enrichment_jobs_when_profile_is_incomplete() 
         task_dispatcher=dispatcher,
     )
 
-    await use_case.execute(job_id=job.id)
+    with pytest.raises(UrlIngestionStillProcessingError):
+        await use_case.execute(job_id=job.id)
 
     enrichment_jobs = [
         item for item in repository.items.values() if item.parent_job_id == job.id
     ]
     assert [item.url for item in enrichment_jobs] == [
+        "https://acme.example.com/sobre",
         "https://acme.example.com/about",
-        "https://acme.example.com/team",
+        "https://acme.example.com/blog",
+        "https://acme.example.com/carreiras",
     ]
     assert {item.startup_id for item in enrichment_jobs} == {startup_id}
     assert {item.enrichment_round for item in enrichment_jobs} == {1}
     assert dispatcher.dispatched_job_ids == [item.id for item in enrichment_jobs]
+    assert repository.items[job.id].status is UrlIngestionJobStatus.ANALYZING
+
+
+@pytest.mark.anyio
+async def test_analyzing_defers_recommendations_when_enrichment_is_scheduled() -> None:
+    startup_id = uuid4()
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(url="https://acme.example.com", startup_id=startup_id)
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=uuid4(), ingestion_job_id=uuid4())
+    job.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    job.start_analyzing()
+    await repository.save(job)
+    recommendations_port = FakeRecommendationsPort(count=2)
+    briefing_port = FakeBriefingPort()
+    startups_port = FakeStartupsPort(
+        startup_id=startup_id,
+        profile=StartupProfileSnapshot(
+            name="Acme AI",
+            website_url="https://acme.example.com",
+            founders=[],
+            funding_stage=None,
+            customers=[],
+            evidence_urls=["https://acme.example.com"],
+        ),
+    )
+    use_case = _make_advance_use_case(
+        repository=repository,
+        ingestion_port=FakeIngestionPort(
+            content=DocumentContentView(title="Acme AI", clean_text="conteudo")
+        ),
+        startups_port=startups_port,
+        recommendations_port=recommendations_port,
+        briefing_port=briefing_port,
+    )
+
+    with pytest.raises(UrlIngestionStillProcessingError):
+        await use_case.execute(job_id=job.id)
+
+    assert recommendations_port.calls == []
+    assert briefing_port.calls == []
+    assert repository.items[job.id].status is UrlIngestionJobStatus.ANALYZING
+    assert repository.items[job.id].recommendations_done is False
 
 
 @pytest.mark.anyio
@@ -738,21 +863,30 @@ async def test_analyzing_prefers_external_search_candidates_when_configured() ->
         search_executor_port=executor,
     )
 
-    await use_case.execute(job_id=job.id)
+    with pytest.raises(UrlIngestionStillProcessingError):
+        await use_case.execute(job_id=job.id)
 
     enrichment_jobs = [
         item for item in repository.items.values() if item.parent_job_id == job.id
     ]
     assert [item.url for item in enrichment_jobs] == [
+        "https://acme.example.com/sobre",
         "https://www.linkedin.com/company/acme-ai",
         "https://news.example.com/acme-seed",
+        "https://acme.example.com/team",
     ]
     assert planner.calls[0]["missing_signals"] == [
+        "ai_workload_type",
+        "deployment_stage",
+        "gpu_need",
         "founders",
         "funding_stage",
         "customers",
     ]
-    assert executor.calls[0][0] == "acme founders funding customers"
+    assert (
+        executor.calls[0][0]
+        == '"Acme AI" startup IA notícia lançamento investimento rodada'
+    )
 
 
 @pytest.mark.anyio
@@ -794,16 +928,20 @@ async def test_analyzing_uses_deterministic_queries_when_planner_is_empty() -> N
         search_executor_port=executor,
     )
 
-    await use_case.execute(job_id=job.id)
+    with pytest.raises(UrlIngestionStillProcessingError):
+        await use_case.execute(job_id=job.id)
 
     enrichment_jobs = [
         item for item in repository.items.values() if item.parent_job_id == job.id
     ]
     assert [item.url for item in enrichment_jobs] == [
+        "https://acme.example.com/sobre",
         "https://www.crunchbase.com/organization/acme-ai",
-        "https://acme.example.com/about",
     ]
-    assert executor.calls[0][0] == '"Acme AI" founders funding customers'
+    assert (
+        executor.calls[0][0]
+        == '"Acme AI" startup IA notícia lançamento investimento rodada'
+    )
     assert executor.calls[0][2] == 5
 
 
@@ -836,13 +974,14 @@ async def test_analyzing_does_not_schedule_enrichment_when_profile_is_complete()
 
 
 @pytest.mark.anyio
-async def test_analyzing_does_not_schedule_enrichment_after_first_round() -> None:
+async def test_enrichment_child_requeues_parent_without_scheduling_new_children() -> None:
     startup_id = uuid4()
+    parent_job_id = uuid4()
     repository = FakeUrlIngestionJobRepository()
     job = UrlIngestionJob(
         url="https://acme.example.com/about",
         startup_id=startup_id,
-        parent_job_id=uuid4(),
+        parent_job_id=parent_job_id,
         enrichment_round=1,
     )
     job.start_scraping(uuid4())
@@ -873,7 +1012,284 @@ async def test_analyzing_does_not_schedule_enrichment_after_first_round() -> Non
 
     await use_case.execute(job_id=job.id)
 
-    assert dispatcher.dispatched_job_ids == []
+    assert dispatcher.dispatched_job_ids == [parent_job_id]
+    assert [
+        item for item in repository.items.values() if item.parent_job_id == job.id
+    ] == []
+
+
+@pytest.mark.anyio
+async def test_parent_job_waits_for_active_enrichment_children_before_final_analysis() -> None:
+    startup_id = uuid4()
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(
+        url="https://acme.example.com",
+        startup_id=startup_id,
+    )
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=uuid4(), ingestion_job_id=uuid4())
+    job.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    job.start_analyzing()
+    job.mark_evidence_attached()
+    await repository.save(job)
+    active_child = UrlIngestionJob(
+        url="https://acme.example.com/about",
+        startup_id=startup_id,
+        parent_job_id=job.id,
+        enrichment_round=1,
+    )
+    await repository.save(active_child)
+    startups_port = FakeStartupsPort(startup_id=startup_id)
+    recommendations_port = FakeRecommendationsPort(count=2)
+    briefing_port = FakeBriefingPort()
+    use_case = _make_advance_use_case(
+        repository=repository,
+        ingestion_port=FakeIngestionPort(
+            content=DocumentContentView(title="Acme AI", clean_text="conteudo")
+        ),
+        startups_port=startups_port,
+        recommendations_port=recommendations_port,
+        briefing_port=briefing_port,
+    )
+
+    with pytest.raises(UrlIngestionStillProcessingError):
+        await use_case.execute(job_id=job.id)
+
+    assert startups_port.try_extract_calls == []
+    assert startups_port.try_classify_calls == []
+    assert recommendations_port.calls == []
+    assert briefing_port.calls == []
+    assert repository.items[job.id].status is UrlIngestionJobStatus.ANALYZING
+
+
+@pytest.mark.anyio
+async def test_parent_job_completes_collected_enrichment_child_before_final_analysis() -> None:
+    startup_id = uuid4()
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(
+        url="https://acme.example.com",
+        startup_id=startup_id,
+    )
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=uuid4(), ingestion_job_id=uuid4())
+    job.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    job.start_analyzing()
+    job.mark_evidence_attached()
+    await repository.save(job)
+    collected_child = UrlIngestionJob(
+        url="https://acme.example.com/about",
+        startup_id=startup_id,
+        parent_job_id=job.id,
+        enrichment_round=1,
+    )
+    collected_child.start_scraping(uuid4())
+    collected_child.start_ingesting(
+        scraping_result_id=uuid4(), ingestion_job_id=uuid4()
+    )
+    collected_child.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    collected_child.start_analyzing()
+    collected_child.mark_evidence_attached()
+    await repository.save(collected_child)
+    startups_port = FakeStartupsPort(startup_id=startup_id)
+    recommendations_port = FakeRecommendationsPort(count=2)
+    briefing_port = FakeBriefingPort()
+    use_case = _make_advance_use_case(
+        repository=repository,
+        ingestion_port=FakeIngestionPort(
+            content=DocumentContentView(title="Acme AI", clean_text="conteudo")
+        ),
+        startups_port=startups_port,
+        recommendations_port=recommendations_port,
+        briefing_port=briefing_port,
+    )
+
+    await use_case.execute(job_id=job.id)
+
+    assert repository.items[collected_child.id].status is UrlIngestionJobStatus.COMPLETED
+    assert repository.items[job.id].status is UrlIngestionJobStatus.COMPLETED
+    assert recommendations_port.calls == [startup_id]
+    assert briefing_port.calls == [startup_id]
+
+
+@pytest.mark.anyio
+async def test_parent_job_runs_consolidated_analysis_when_enrichment_children_are_terminal() -> None:
+    startup_id = uuid4()
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(
+        url="https://acme.example.com",
+        startup_id=startup_id,
+    )
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=uuid4(), ingestion_job_id=uuid4())
+    job.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    job.start_analyzing()
+    job.mark_evidence_attached()
+    await repository.save(job)
+    completed_child = UrlIngestionJob(
+        url="https://acme.example.com/about",
+        startup_id=startup_id,
+        parent_job_id=job.id,
+        enrichment_round=1,
+    )
+    completed_child.start_scraping(uuid4())
+    completed_child.start_ingesting(
+        scraping_result_id=uuid4(), ingestion_job_id=uuid4()
+    )
+    completed_child.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    completed_child.start_analyzing()
+    completed_child.complete()
+    await repository.save(completed_child)
+    startups_port = FakeStartupsPort(startup_id=startup_id)
+    recommendations_port = FakeRecommendationsPort(count=2)
+    briefing_port = FakeBriefingPort()
+    use_case = _make_advance_use_case(
+        repository=repository,
+        ingestion_port=FakeIngestionPort(
+            content=DocumentContentView(title="Acme AI", clean_text="conteudo")
+        ),
+        startups_port=startups_port,
+        recommendations_port=recommendations_port,
+        briefing_port=briefing_port,
+    )
+
+    await use_case.execute(job_id=job.id)
+
+    assert startups_port.try_extract_calls == [startup_id]
+    assert startups_port.try_classify_calls == [startup_id]
+    assert recommendations_port.calls == [startup_id]
+    assert briefing_port.calls == [startup_id]
+    assert repository.items[job.id].status is UrlIngestionJobStatus.COMPLETED
+
+
+@pytest.mark.anyio
+async def test_parent_job_fails_without_recommendations_when_profile_stays_unstructured() -> None:
+    startup_id = uuid4()
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(
+        url="https://acme.example.com",
+        startup_id=startup_id,
+    )
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=uuid4(), ingestion_job_id=uuid4())
+    job.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    job.start_analyzing()
+    job.mark_evidence_attached()
+    await repository.save(job)
+    completed_child = UrlIngestionJob(
+        url="https://acme.example.com/about",
+        startup_id=startup_id,
+        parent_job_id=job.id,
+        enrichment_round=1,
+    )
+    completed_child.start_scraping(uuid4())
+    completed_child.start_ingesting(
+        scraping_result_id=uuid4(), ingestion_job_id=uuid4()
+    )
+    completed_child.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    completed_child.start_analyzing()
+    completed_child.complete()
+    await repository.save(completed_child)
+    startups_port = FakeStartupsPort(
+        startup_id=startup_id,
+        profile=StartupProfileSnapshot(
+            name="Acme AI",
+            website_url="https://acme.example.com",
+            founders=[],
+            funding_stage=None,
+            customers=[],
+            evidence_urls=["https://acme.example.com"],
+            ai_workload_type="unknown",
+            deployment_stage="unknown",
+            gpu_need="unknown",
+        ),
+        extraction_attempt=StartupExtractionAttempt(
+            succeeded=False,
+            timed_out=True,
+            error_message="timeout after 120s",
+        ),
+    )
+    recommendations_port = FakeRecommendationsPort(count=2)
+    briefing_port = FakeBriefingPort()
+    use_case = _make_advance_use_case(
+        repository=repository,
+        ingestion_port=FakeIngestionPort(
+            content=DocumentContentView(title="Acme AI", clean_text="conteudo")
+        ),
+        startups_port=startups_port,
+        recommendations_port=recommendations_port,
+        briefing_port=briefing_port,
+    )
+
+    await use_case.execute(job_id=job.id)
+
+    saved = repository.items[job.id]
+    assert saved.status is UrlIngestionJobStatus.FAILED
+    assert "Perfil estruturado de IA incompleto" in (saved.error_message or "")
+    assert "ai_workload_type" in (saved.error_message or "")
+    assert recommendations_port.calls == []
+    assert briefing_port.calls == []
+
+
+@pytest.mark.anyio
+async def test_parent_job_allows_recommendations_when_profile_has_minimum_ai_signal() -> None:
+    startup_id = uuid4()
+    repository = FakeUrlIngestionJobRepository()
+    job = UrlIngestionJob(
+        url="https://acme.example.com",
+        startup_id=startup_id,
+    )
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=uuid4(), ingestion_job_id=uuid4())
+    job.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    job.start_analyzing()
+    job.mark_evidence_attached()
+    await repository.save(job)
+    completed_child = UrlIngestionJob(
+        url="https://acme.example.com/about",
+        startup_id=startup_id,
+        parent_job_id=job.id,
+        enrichment_round=1,
+    )
+    completed_child.start_scraping(uuid4())
+    completed_child.start_ingesting(
+        scraping_result_id=uuid4(), ingestion_job_id=uuid4()
+    )
+    completed_child.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    completed_child.start_analyzing()
+    completed_child.complete()
+    await repository.save(completed_child)
+    startups_port = FakeStartupsPort(
+        startup_id=startup_id,
+        profile=StartupProfileSnapshot(
+            name="Acme AI",
+            website_url="https://acme.example.com",
+            founders=[],
+            funding_stage=None,
+            customers=[],
+            evidence_urls=["https://acme.example.com"],
+            ai_workload_type="analytics",
+            deployment_stage="production",
+            gpu_need="unknown",
+        ),
+        extraction_attempt=StartupExtractionAttempt(succeeded=True),
+    )
+    recommendations_port = FakeRecommendationsPort(count=2)
+    briefing_port = FakeBriefingPort()
+    use_case = _make_advance_use_case(
+        repository=repository,
+        ingestion_port=FakeIngestionPort(
+            content=DocumentContentView(title="Acme AI", clean_text="conteudo")
+        ),
+        startups_port=startups_port,
+        recommendations_port=recommendations_port,
+        briefing_port=briefing_port,
+    )
+
+    await use_case.execute(job_id=job.id)
+
+    assert repository.items[job.id].status is UrlIngestionJobStatus.COMPLETED
+    assert recommendations_port.calls == [startup_id]
+    assert briefing_port.calls == [startup_id]
 
 
 @pytest.mark.anyio
@@ -900,7 +1316,7 @@ async def test_analyzing_uses_hostname_when_document_has_no_title() -> None:
     await use_case.execute(job_id=job.id)
 
     assert startups_port.created == [
-        ("acme.example.com", "https://www.acme.example.com/about")
+        ("Example", "https://www.acme.example.com/about")
     ]
 
 
@@ -1156,3 +1572,143 @@ async def test_analyzing_retry_after_briefing_failure_skips_recommendations() ->
     # briefing chamado uma vez
     assert len(briefing_port.calls) == 1
     assert repository.items[job.id].status is UrlIngestionJobStatus.COMPLETED
+
+
+# ---------------------------------------------------------------------------
+# P0d — extração de links reais do HTML da home
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_analyzing_uses_real_links_from_html_instead_of_fixed_paths() -> None:
+    """P0d: quando há HTML da home, usa links reais extraídos em vez de ENRICHMENT_PATHS.
+
+    O HTML contém /plataforma (link real que NÃO está em ENRICHMENT_PATHS).
+    O job deve usar esse link como candidato de enriquecimento.
+    """
+    scraping_result_id = uuid4()
+    repository = FakeUrlIngestionJobRepository()
+
+    # Job já está em ANALYZING — o execute() entra diretamente nesse branch.
+    job = UrlIngestionJob(url="https://acme.example.com")
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=scraping_result_id, ingestion_job_id=uuid4())
+    job.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    job.start_analyzing()
+    await repository.save(job)
+
+    html_with_real_links = (
+        '<a href="/plataforma">Nossa Plataforma</a>'
+        '<a href="/sobre">Sobre nós</a>'
+        '<a href="https://other.example.com/page">Externo</a>'
+        '<a href="/login">Login</a>'  # deve ser ignorado
+    )
+
+    scraping_port = FakeScrapingPort(
+        status=StepStatus(is_done=True, is_failed=False, result_id=scraping_result_id, error_message=None),
+        html=html_with_real_links,
+    )
+
+    use_case = _make_advance_use_case(
+        repository=repository,
+        scraping_port=scraping_port,
+        ingestion_port=FakeIngestionPort(
+            content=DocumentContentView(title="Acme", clean_text="conteudo")
+        ),
+        startups_port=FakeStartupsPort(
+            profile=StartupProfileSnapshot(
+                name="Acme",
+                website_url="https://acme.example.com",
+                founders=[],        # sinal ausente → enriquecimento acionado
+                funding_stage=None,  # sinal ausente
+                customers=[],       # sinal ausente
+                evidence_urls=[],
+            )
+        ),
+    )
+
+    # Uma única chamada: o job já está em ANALYZING e completa (com enriquecimento agendado).
+    with pytest.raises(UrlIngestionStillProcessingError):
+        await use_case.execute(job_id=job.id)
+
+    enrichment_jobs = [
+        j for j in repository.items.values()
+        if j.id != job.id and j.enrichment_round == 1
+    ]
+    enrichment_urls = {j.url for j in enrichment_jobs}
+
+    assert enrichment_urls, "Esperava ao menos 1 job de enriquecimento agendado"
+
+    # /plataforma é um link REAL do HTML e não está em ENRICHMENT_PATHS — confirma
+    # que foram usados os links extraídos, não os paths fixos.
+    assert any("plataforma" in u for u in enrichment_urls), (
+        f"Link real /plataforma deveria aparecer; obteve: {enrichment_urls}"
+    )
+    # /login é segmento bloqueado — não deve aparecer
+    assert not any("login" in u for u in enrichment_urls), (
+        f"Segmento /login não deveria ser candidato: {enrichment_urls}"
+    )
+    # Link externo (other.example.com) não deve aparecer
+    assert not any("other.example.com" in u for u in enrichment_urls), (
+        f"Link externo não deveria ser candidato: {enrichment_urls}"
+    )
+
+
+@pytest.mark.anyio
+async def test_analyzing_falls_back_to_fixed_paths_when_html_is_none() -> None:
+    """P0d: quando get_html retorna None, usa ENRICHMENT_PATHS como fallback."""
+    scraping_result_id = uuid4()
+    repository = FakeUrlIngestionJobRepository()
+
+    # Job já está em ANALYZING — o execute() entra diretamente nesse branch.
+    job = UrlIngestionJob(url="https://acme.example.com")
+    job.start_scraping(uuid4())
+    job.start_ingesting(scraping_result_id=scraping_result_id, ingestion_job_id=uuid4())
+    job.start_embedding(document_id=uuid4(), embedding_job_id=uuid4())
+    job.start_analyzing()
+    await repository.save(job)
+
+    scraping_port = FakeScrapingPort(
+        status=StepStatus(is_done=True, is_failed=False, result_id=scraping_result_id, error_message=None),
+        html=None,  # HTML indisponível → fallback para ENRICHMENT_PATHS
+    )
+
+    use_case = _make_advance_use_case(
+        repository=repository,
+        scraping_port=scraping_port,
+        ingestion_port=FakeIngestionPort(
+            content=DocumentContentView(title="Acme", clean_text="conteudo")
+        ),
+        startups_port=FakeStartupsPort(
+            profile=StartupProfileSnapshot(
+                name="Acme",
+                website_url="https://acme.example.com",
+                founders=[],        # sinal ausente → enriquecimento acionado
+                funding_stage=None,  # sinal ausente
+                customers=[],       # sinal ausente
+                evidence_urls=[],
+            )
+        ),
+    )
+
+    # Uma única chamada: o job já está em ANALYZING e completa (com enriquecimento agendado).
+    with pytest.raises(UrlIngestionStillProcessingError):
+        await use_case.execute(job_id=job.id)
+
+    enrichment_jobs = [
+        j for j in repository.items.values()
+        if j.id != job.id and j.enrichment_round == 1
+    ]
+    enrichment_urls = {j.url for j in enrichment_jobs}
+
+    assert enrichment_urls, "Esperava ao menos 1 job de enriquecimento agendado"
+
+    # Fallback: pelo menos 1 dos paths fixos de ENRICHMENT_PATHS deve aparecer.
+    # /plataforma NÃO está em ENRICHMENT_PATHS, logo não pode aparecer aqui.
+    assert any(
+        "sobre" in u or "about" in u or "blog" in u
+        for u in enrichment_urls
+    ), f"Sem HTML, esperava paths fixos (sobre/about/blog); obteve: {enrichment_urls}"
+    assert not any("plataforma" in u for u in enrichment_urls), (
+        f"/plataforma só aparece via HTML extraction, não deve estar aqui: {enrichment_urls}"
+    )

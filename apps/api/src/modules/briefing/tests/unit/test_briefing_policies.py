@@ -107,9 +107,10 @@ def test_build_briefing_markdown_includes_all_sections() -> None:
     assert "[Acme launches LLM chatbot](https://example.com/news)" in content
     assert "## Matriz de Recomendacoes" in content
     assert "| NVIDIA NIM | 80% | 80% | forte | medium |" in content
-    assert "## Recomendacoes Fortes" in content
+    assert "## Recomendacoes Acionaveis" in content
     assert "NVIDIA NIM" in content
-    assert "## Hipoteses Exploratorias" in content
+    assert "## Hipoteses a Qualificar" in content
+    assert "## O Que Coletar" in content
     assert "## Riscos" in content
     assert "Risco de exemplo." in content
     assert "## Perguntas de Qualificacao" in content
@@ -148,6 +149,32 @@ def test_build_briefing_markdown_includes_ai_profile_signals() -> None:
     assert "Nenhuma lacuna critica de perfil foi identificada." in content
 
 
+def test_build_briefing_markdown_includes_ai_profile_field_confidence() -> None:
+    profile = StartupAIProfileItem(
+        ai_workload_type="analytics",
+        data_modality="tabular",
+        deployment_stage="production",
+        field_confidence={
+            "ai_workload_type": 0.88,
+            "data_modality": 0.76,
+            "deployment_stage": 0.7,
+        },
+    )
+
+    content = build_briefing_markdown(
+        startup=STARTUP,
+        evidences=[EVIDENCE],
+        recommendations=[RECOMMENDATION],
+        risks=[],
+        next_actions=["Acao de exemplo."],
+        ai_profile=profile,
+    )
+
+    assert "Workload de IA: analytics (confianca 88%)" in content
+    assert "Modalidade de dados: tabular (confianca 76%)" in content
+    assert "Estagio de deploy: production (confianca 70%)" in content
+
+
 def test_build_briefing_markdown_separates_exploratory_recommendations() -> None:
     exploratory = RecommendationItem(
         technology_name="NVIDIA Riva",
@@ -167,10 +194,11 @@ def test_build_briefing_markdown_separates_exploratory_recommendations() -> None
         next_actions=["Validar voz."],
     )
 
-    assert "## Recomendacoes Fortes" in content
+    assert "## Recomendacoes Acionaveis" in content
     assert "Nenhuma recomendacao forte" in content
-    assert "## Hipoteses Exploratorias" in content
-    assert "Para elevar o nivel: evidencias concretas sobre ASR/TTS." in content
+    assert "## Hipoteses a Qualificar" in content
+    assert "## O Que Coletar" in content
+    assert "Para elevar ao nivel de hipotese: evidencias concretas sobre ASR/TTS." in content
     assert "Para NVIDIA Riva: validar evidencias concretas sobre ASR/TTS." in content
 
 
@@ -189,7 +217,7 @@ def test_build_briefing_markdown_includes_nvidia_context_when_provided() -> None
 
     assert "## Contexto NVIDIA" in content
     assert "NVIDIA NIM e NeMo aceleram atendimento via LLM." in content
-    assert content.index("## Hipoteses Exploratorias") < content.index(
+    assert content.index("## O Que Coletar") < content.index(
         "## Contexto NVIDIA"
     )
     assert content.index("## Contexto NVIDIA") < content.index("## Riscos")

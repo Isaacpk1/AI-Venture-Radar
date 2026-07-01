@@ -23,7 +23,12 @@ from uuid import UUID
 
 MIN_MATCHED_KEYWORDS = 2
 MIN_MATCH_SCORE = 0.20
-AI_NATIVE_MATURITY_BOOST = 0.05
+AI_NATIVE_MATURITY_BOOST = 0.15
+
+# Se o workload da startup tem alta afinidade com a tecnologia (>= limiar),
+# admite a recomendacao com apenas 1 keyword — o sinal de workload e
+# suficientemente forte para compensar a escassez de keywords literais.
+WORKLOAD_ADMISSION_THRESHOLD = 0.60
 
 # Limiares para classificar o nivel de cada recomendacao.
 # Forte: fit claro E qualidade de evidencia boa.
@@ -37,6 +42,15 @@ NIVEL_MODERADA_CONFIDENCE = 0.25
 NIVEL_FORTE = "forte"
 NIVEL_MODERADA = "moderada"
 NIVEL_EXPLORATORIA = "exploratoria"
+# Alta relevancia (score) mas confianca baixa: merece qualificacao prioritaria
+# em vez de ser descartada junto com hipoteses fracas.  Relevancia e confianca
+# sao eixos independentes — score alto com poucas evidencias e' sinal a
+# investigar, nao sinal a descartar.
+NIVEL_HIPOTESE = "hipotese_prioritaria"
+
+# Limiares para a hipotese_prioritaria: score forte mas confianca insuficiente.
+NIVEL_HIPOTESE_SCORE = NIVEL_FORTE_SCORE
+NIVEL_HIPOTESE_MAX_CONFIDENCE = NIVEL_FORTE_CONFIDENCE
 
 # Variantes frequentes nas paginas de startups. O catalogo conserva keywords
 # canonicas, enquanto a politica reconhece grafias e termos operacionais que
@@ -51,6 +65,103 @@ KEYWORD_ALIASES: dict[str, tuple[str, ...]] = {
     "throughput": ("throughput", "scaling"),
     "deployment": ("deployment", "deploy", "production"),
 }
+
+# Contextos que invertem o sentido de uma keyword. O caso real que motivou
+# isso foi "no training on your data": a palavra "training" aparecia, mas como
+# promessa de privacidade, nao como sinal de fine-tuning ou treino de modelo.
+KEYWORD_NEGATIVE_PATTERNS: dict[str, tuple[str, ...]] = {
+    "training": (
+        r"\bno\s+(?:own\s+)?(?:model\s+|data\s+)?training\b",
+        r"\bno\s+training\s+on\b",
+        r"\bdo(?:es)?\s+not\s+train\b",
+        r"\bwill\s+not\s+train\b",
+        r"\bnot\s+(?:used\s+to\s+)?train\b",
+        r"\bwithout\s+(?:own\s+|model\s+)?training\b",
+        r"\bnever\s+train\b",
+    ),
+    "fine tuning": (
+        r"\bno\s+fine[-\s]?tuning\b",
+        r"\bwithout\s+fine[-\s]?tuning\b",
+        r"\bnot\s+fine[-\s]?tun(?:e|ing)\b",
+    ),
+    "gpu": (
+        r"\bno\s+(?:own\s+)?gpu\b",
+        r"\bwithout\s+(?:own\s+)?gpu\b",
+        r"\bno\s+own\s+gpu\s+infrastructure\b",
+    ),
+    "infrastructure": (
+        r"\bno\s+own\s+gpu\s+infrastructure\b",
+        r"\bwithout\s+own\s+infrastructure\b",
+    ),
+}
+
+TECHNICAL_SOURCE_HINTS = (
+    "docs",
+    "documentation",
+    "api",
+    "developer",
+    "developers",
+    "github.com",
+    "gitlab.com",
+    "gupy.io",
+    "greenhouse.io",
+    "lever.co",
+    "changelog",
+    "engineering",
+    "architecture",
+    "sdk",
+)
+
+INDEPENDENT_SOURCE_HINTS = (
+    "techcrunch.com",
+    "startups.com.br",
+    "crunchbase.com",
+    "linkedin.com",
+    "distrito",
+    "latitud",
+    "abstartups",
+    "100openstartups",
+    "endeavor",
+    "exame.com",
+    "valor.globo.com",
+)
+
+TECHNICAL_CLAIM_TERMS = (
+    "fine tuning",
+    "fine-tune",
+    "training",
+    "inference",
+    "model serving",
+    "deployment",
+    "kubernetes",
+    "pytorch",
+    "onnx",
+    "cuda",
+    "triton",
+    "nvidia",
+    "gpu",
+    "embeddings",
+    "rag",
+    "retrieval",
+    "semantic search",
+)
+
+OPERATIONAL_CLAIM_TERMS = (
+    "production",
+    "customers",
+    "customer",
+    "case study",
+    "trusted by",
+    "enterprise",
+    "scale",
+    "funding",
+    "series",
+    "clientes",
+    "cliente",
+    "producao",
+    "produção",
+    "escala",
+)
 
 # Conversao de deployment_stage para score de maturidade (0-1).
 _MATURITY_SCORE: dict[str, float] = {
@@ -92,6 +203,40 @@ def _contains_term(text: str, term: str) -> bool:
     return re.search(rf"\b{re.escape(term)}\b", text) is not None
 
 
+def _contains_supported_term(text: str, keyword: str, term: str) -> tuple[bool, bool]:
+    """Retorna (hit_positivo, hit_bloqueado_por_contexto_negativo)."""
+
+    blocked = False
+    for match in re.finditer(rf"\b{re.escape(term)}\b", text):
+        window_start = max(0, match.start() - 80)
+        window_end = min(len(text), match.end() + 80)
+        window = text[window_start:window_end]
+        if any(
+            re.search(pattern, window)
+            for pattern in KEYWORD_NEGATIVE_PATTERNS.get(keyword, ())
+        ):
+            blocked = True
+            continue
+        return True, blocked
+    return False, blocked
+
+
+def _keyword_match_state(text: str, keyword: str) -> tuple[bool, bool]:
+    """Avalia a keyword canonica e aliases, preservando contexto negativo."""
+
+    hit = False
+    blocked = False
+    for term in (keyword, *KEYWORD_ALIASES.get(keyword, ())):
+        term_hit, term_blocked = _contains_supported_term(text, keyword, term)
+        hit = hit or term_hit
+        blocked = blocked or term_blocked
+    return hit, blocked
+
+
+def _has_any_term(text: str, terms: tuple[str, ...]) -> bool:
+    return any(_contains_term(text, term) for term in terms)
+
+
 @dataclass(frozen=True)
 class StartupAIContext:
     """Contexto de IA da startup no vocabulario deste modulo.
@@ -105,6 +250,8 @@ class StartupAIContext:
     deployment_stage: str = "unknown"
     gpu_need: str = "unknown"
     has_operational_signal: bool = False
+    profile_strength: float = 0.0
+    secondary_workloads: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -127,6 +274,8 @@ class EvidenceSignal:
     evidence_id: UUID
     text: str
     confidence_score: float = 0.5
+    source_url: str | None = None
+    evidence_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -158,15 +307,22 @@ def _workload_alignment(
     """
     if ai_context is None or not candidate.supported_workloads:
         return 0.40
-    if ai_context.ai_workload_type == "unknown":
+    workloads = [ai_context.ai_workload_type, *ai_context.secondary_workloads]
+    scores = [
+        candidate.supported_workloads.get(wl, 0.0)
+        for wl in workloads
+        if wl and wl != "unknown"
+    ]
+    if not scores:
         return 0.40
-    return candidate.supported_workloads.get(ai_context.ai_workload_type, 0.0)
+    return max(scores)
 
 
 def _evidence_signal_score(
     *,
     matched_evidence_ids: set[UUID],
     evidence_signals: list[EvidenceSignal],
+    profile_strength: float = 0.0,
 ) -> float:
     """Qualidade e profundidade do sinal de evidencia que suporta o match.
 
@@ -174,16 +330,116 @@ def _evidence_signal_score(
     Com evidencias: media do confidence_score + bonus de profundidade (max +0.15
     por cada evidencia adicional alem da primeira, cap em 0.95).
     """
+    # Admitida por perfil (sem evidencia casada por keyword): o perfil FOI
+    # extraido de fonte real (field_evidence_ids), entao o field_confidence do
+    # perfil vale como sinal de evidencia — escalado, com piso historico 0.20.
     if not matched_evidence_ids:
-        return 0.20
+        return max(0.20, round(0.9 * profile_strength, 2))
 
     matching = [s for s in evidence_signals if s.evidence_id in matched_evidence_ids]
     if not matching:
-        return 0.20
+        return max(0.20, round(0.9 * profile_strength, 2))
 
-    base = sum(s.confidence_score for s in matching) / len(matching)
+    base = sum(_source_quality(s) for s in matching) / len(matching)
     depth_bonus = min(0.15, 0.05 * (len(matched_evidence_ids) - 1))
     return min(0.95, base + depth_bonus)
+
+
+def _evidence_type_value(signal: EvidenceSignal) -> float:
+    evidence_type = (signal.evidence_type or "").lower()
+    if evidence_type == "technical":
+        return 0.90
+    if evidence_type == "documentation":
+        return 0.90
+    if evidence_type == "blog":
+        return 0.70
+    if evidence_type == "news":
+        return 0.75
+    if evidence_type == "website":
+        return 0.60
+    if evidence_type:
+        return 0.45
+    return signal.confidence_score
+
+
+def _is_technical_evidence(signal: EvidenceSignal) -> bool:
+    source = f"{signal.source_url or ''} {signal.evidence_type or ''}".lower()
+    return (
+        _has_any_term(source, TECHNICAL_SOURCE_HINTS)
+        or _has_any_term(signal.text, TECHNICAL_CLAIM_TERMS)
+    )
+
+
+def _is_independent_evidence(signal: EvidenceSignal) -> bool:
+    source = f"{signal.source_url or ''} {signal.evidence_type or ''}".lower()
+    return (
+        "news" in source
+        or _has_any_term(source, INDEPENDENT_SOURCE_HINTS)
+    )
+
+
+def _has_operational_evidence(signal: EvidenceSignal) -> bool:
+    return _has_any_term(signal.text, OPERATIONAL_CLAIM_TERMS)
+
+
+def _source_quality(signal: EvidenceSignal) -> float:
+    """Qualidade da fonte para recomendacao, nao apenas confianca do scraping."""
+
+    source_value = _evidence_type_value(signal)
+    source = f"{signal.source_url or ''} {signal.evidence_type or ''}".lower()
+
+    if _has_any_term(source, TECHNICAL_SOURCE_HINTS):
+        source_value = max(source_value, 0.90)
+    elif _has_any_term(source, INDEPENDENT_SOURCE_HINTS):
+        source_value = max(source_value, 0.75)
+
+    if _is_technical_evidence(signal):
+        source_value = min(1.0, source_value + 0.05)
+    if _is_independent_evidence(signal):
+        source_value = min(1.0, source_value + 0.05)
+
+    blended = 0.60 * signal.confidence_score + 0.40 * source_value
+    return min(1.0, max(0.0, blended))
+
+
+def _confidence_cap(
+    *,
+    matched_evidence_ids: set[UUID],
+    evidence_signals: list[EvidenceSignal],
+    ai_context: StartupAIContext | None,
+) -> float:
+    """Teto de confianca por tipo de evidencia disponivel."""
+
+    if not matched_evidence_ids:
+        return 0.45
+
+    matching = [s for s in evidence_signals if s.evidence_id in matched_evidence_ids]
+    if not matching:
+        return 0.45
+
+    has_technical = any(_is_technical_evidence(s) for s in matching)
+    has_independent = any(_is_independent_evidence(s) for s in matching)
+    has_operational = any(_has_operational_evidence(s) for s in matching) or (
+        ai_context is not None
+        and (
+            ai_context.deployment_stage in ("production", "scale")
+            or ai_context.has_operational_signal
+        )
+    )
+
+    if has_technical and has_operational:
+        return 0.90
+    if has_technical and has_independent:
+        return 0.82
+    if has_independent and len(matching) >= 2:
+        return 0.75
+    if has_technical:
+        return 0.68
+    if has_independent:
+        return 0.72
+    if len(matching) >= 2:
+        return 0.65
+    return 0.60
 
 
 def _startup_maturity_score(ai_context: StartupAIContext | None) -> float:
@@ -207,6 +463,64 @@ def _implementation_viability(
     gpu = ai_context.gpu_need
     complexity = candidate.complexity
     return _VIABILITY.get((gpu, complexity), 0.55)
+
+
+def _workload_admission_category_allowed(
+    ai_context: StartupAIContext | None,
+    candidate: TechnologyCandidate,
+    *,
+    matched_keyword_count: int,
+) -> bool:
+    """Evita que workload generico admita tecnologias de outra categoria.
+
+    O caminho por workload e deliberadamente mais permissivo que keywords, mas
+    ele nao pode transformar "analytics" ou "nlp" em sinal de speech,
+    cybersecurity ou healthcare sem evidencias textuais diretas.
+    """
+
+    if ai_context is None:
+        return False
+
+    workloads = {
+        workload
+        for workload in (ai_context.ai_workload_type, *ai_context.secondary_workloads)
+        if workload and workload != "unknown"
+    }
+    category = candidate.category
+
+    if category == "speech_ai":
+        return "speech" in workloads
+    if category == "cybersecurity":
+        return bool(workloads & {"cybersecurity", "security"})
+    if category == "healthcare_ai":
+        return matched_keyword_count > 0 and bool(
+            workloads & {"healthcare", "vision"}
+        )
+
+    if matched_keyword_count > 0:
+        return True
+
+    if "analytics" in workloads:
+        return category in {"data_science", "accelerated_computing"}
+    if "nlp" in workloads:
+        return category in {
+            "model_serving",
+            "model_training",
+            "model_optimization",
+            "mlops",
+            "ai_platform",
+        }
+    if "vision" in workloads:
+        return category in {
+            "computer_vision",
+            "model_serving",
+            "model_optimization",
+            "mlops",
+        }
+    if "speech" in workloads:
+        return category in {"speech_ai", "model_serving", "model_training"}
+
+    return False
 
 
 def _composite_score(
@@ -259,7 +573,7 @@ def _composite_confidence(
     if matched_evidence_ids:
         matching = [s for s in evidence_signals if s.evidence_id in matched_evidence_ids]
         source_quality = (
-            sum(s.confidence_score for s in matching) / len(matching)
+            sum(_source_quality(s) for s in matching) / len(matching)
             if matching
             else 0.0
         )
@@ -285,7 +599,7 @@ def _composite_confidence(
     else:
         operational_signal = 0.0
 
-    return (
+    raw_confidence = (
         0.25 * source_quality
         + 0.25 * signal_clarity
         + 0.20 * workload_proximity
@@ -293,16 +607,42 @@ def _composite_confidence(
         + 0.10 * operational_signal
     )
 
+    cap = _confidence_cap(
+        matched_evidence_ids=matched_evidence_ids,
+        evidence_signals=evidence_signals,
+        ai_context=ai_context,
+    )
+    evidence_conf = min(raw_confidence, cap)
+
+    # Caminho de perfil: quando a rec foi admitida por alinhamento de workload
+    # e o perfil esta bem extraido (field_confidence alto), credita isso como
+    # fundamentacao real — o perfil aponta para as fontes via field_evidence_ids.
+    profile_strength = ai_context.profile_strength if ai_context else 0.0
+    profile_conf = (
+        0.45 * workload_proximity
+        + 0.35 * profile_strength
+        + 0.20 * operational_signal
+    )
+    profile_conf = min(profile_conf, 0.78)  # perfil e prova indireta: teto < 1
+
+    return round(max(evidence_conf, profile_conf), 2)
+
 
 def _compute_nivel(score: float, confidence: float) -> str:
-    """Classifica o nivel da recomendacao a partir de score e confianca.
+    """Classifica o nivel da recomendacao numa matriz 2D: relevancia × confianca.
 
-    ``forte``      — score >= 0.60 E confidence >= 0.55: fit claro, evidencia boa.
-    ``moderada``   — score >= 0.38 E confidence >= 0.25: algum sinal relevante.
-    ``exploratoria`` — abaixo dos limiares, mas acima de MIN_MATCH_SCORE.
+    ``forte``              — score >= 0.60 E confidence >= 0.55
+    ``hipotese_prioritaria``— score >= 0.60 mas confidence < 0.55:
+                              relevancia alta, mas evidencias insuficientes —
+                              a recomendacao merece qualificacao prioritaria,
+                              nao pode ser agrupada com hipoteses fracas.
+    ``moderada``           — score >= 0.38 E confidence >= 0.25
+    ``exploratoria``       — abaixo dos limiares moderados
     """
-    if score >= NIVEL_FORTE_SCORE and confidence >= NIVEL_FORTE_CONFIDENCE:
-        return NIVEL_FORTE
+    if score >= NIVEL_FORTE_SCORE:
+        if confidence >= NIVEL_FORTE_CONFIDENCE:
+            return NIVEL_FORTE
+        return NIVEL_HIPOTESE
     if score >= NIVEL_MODERADA_SCORE and confidence >= NIVEL_MODERADA_CONFIDENCE:
         return NIVEL_MODERADA
     return NIVEL_EXPLORATORIA
@@ -315,6 +655,9 @@ def _compute_faltando(
     confidence: float,
     missing_signals: tuple[str, ...],
     evidence_count: int,
+    has_technical_evidence: bool = False,
+    has_independent_evidence: bool = False,
+    blocked_signals: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     """Gera lista de sinais ausentes que elevariam ao proximo nivel.
 
@@ -327,10 +670,18 @@ def _compute_faltando(
 
     items: list[str] = []
 
+    if blocked_signals:
+        blocked = ", ".join(blocked_signals[:2])
+        items.append(f"contexto negativo bloqueou sinais: {blocked}")
+
     if nivel == NIVEL_EXPLORATORIA:
         # Para subir a moderada: score >= 0.38 E confidence >= 0.25
         if score_breakdown.get("evidence_signal", 0.0) < 0.35:
             items.append("evidências concretas sobre uso da tecnologia")
+        if not has_technical_evidence:
+            items.append("fonte tecnica sobre workload, API, docs ou arquitetura")
+        if not has_independent_evidence and evidence_count > 0:
+            items.append("fonte independente validando a tese")
         if score_breakdown.get("keyword_prior", 0.0) < 0.40 and missing_signals:
             kws = ", ".join(missing_signals[:2])
             items.append(f"sinais ausentes: {kws}")
@@ -347,6 +698,10 @@ def _compute_faltando(
             items.append("workload da startup alinhado com a tecnologia")
         if score_breakdown.get("startup_maturity", 0.0) < 0.75:
             items.append("produto em produção ou em escala")
+        if not has_technical_evidence:
+            items.append("fonte tecnica sobre workload ou implementacao")
+        if not has_independent_evidence:
+            items.append("fonte independente confirmando o uso")
         if evidence_count < 2:
             items.append("mais evidências independentes sobre a tecnologia")
         elif confidence < NIVEL_FORTE_CONFIDENCE:
@@ -389,17 +744,19 @@ def match_technologies(
         matched_evidence_ids: set[UUID] = set()
         signal_origins: list[str] = []
         missing_signals: list[str] = []
+        blocked_signals: list[str] = []
 
         for keyword in technology.keywords:
-            search_terms = (keyword, *KEYWORD_ALIASES.get(keyword, ()))
-            hit_in_profile = any(
-                _contains_term(profile_text, term) for term in search_terms
+            hit_in_profile, blocked_in_profile = _keyword_match_state(
+                profile_text, keyword
             )
-            evidence_hits = [
-                signal.evidence_id
-                for signal in evidence_signals
-                if any(_contains_term(signal.text, term) for term in search_terms)
-            ]
+            evidence_hits: list[UUID] = []
+            blocked_in_evidence = False
+            for signal in evidence_signals:
+                hit, blocked = _keyword_match_state(signal.text, keyword)
+                if hit:
+                    evidence_hits.append(signal.evidence_id)
+                blocked_in_evidence = blocked_in_evidence or blocked
 
             if hit_in_profile or evidence_hits:
                 matched_keywords.append(keyword)
@@ -412,19 +769,50 @@ def match_technologies(
                 signal_origins.append(f"{keyword}: {', '.join(origin_parts)}")
             else:
                 missing_signals.append(keyword)
-
-        if len(matched_keywords) < MIN_MATCHED_KEYWORDS:
-            continue
-
-        keyword_prior = len(matched_keywords) / len(technology.keywords)
+                if blocked_in_profile or blocked_in_evidence:
+                    blocked_signals.append(keyword)
+                    signal_origins.append(
+                        f"{keyword}: bloqueado por contexto negativo"
+                    )
 
         workload_aln = _workload_alignment(ai_context, technology)
+        impl_viab = _implementation_viability(ai_context, technology)
+        # Admite por workload quando o perfil estruturado da startup tem
+        # alinhamento alto com a tecnologia, mesmo sem keywords literais.
+        # Isso deixa workload_alignment votar antes do corte de entrada sem
+        # multiplicar fit por confianca: recomendacoes profile-only entram com
+        # score/confianca mais baixos e aparecem como hipotese a qualificar.
+        admitted_by_workload = (
+            ai_context is not None
+            and ai_context.ai_workload_type != "unknown"
+            and workload_aln >= WORKLOAD_ADMISSION_THRESHOLD
+            and _workload_admission_category_allowed(
+                ai_context,
+                technology,
+                matched_keyword_count=len(matched_keywords),
+            )
+            and not (
+                technology.category == "healthcare_ai"
+                and len(matched_keywords) == 0
+            )
+            and len(blocked_signals) == 0
+            and impl_viab >= 0.30
+        )
+        if len(matched_keywords) < MIN_MATCHED_KEYWORDS and not admitted_by_workload:
+            continue
+
+        if admitted_by_workload and not matched_keywords:
+            signal_origins.append(
+                f"workload estruturado: {ai_context.ai_workload_type}"
+            )
+
+        keyword_prior = len(matched_keywords) / len(technology.keywords)
         evidence_sig = _evidence_signal_score(
             matched_evidence_ids=matched_evidence_ids,
             evidence_signals=evidence_signals,
+            profile_strength=(ai_context.profile_strength if ai_context else 0.0),
         )
         startup_mat = _startup_maturity_score(ai_context)
-        impl_viab = _implementation_viability(ai_context, technology)
 
         score = _composite_score(
             keyword_prior=keyword_prior,
@@ -455,12 +843,30 @@ def match_technologies(
         }
         nivel = _compute_nivel(score, confidence)
         missing_signals_tuple = tuple(missing_signals)
+        if (
+            nivel == NIVEL_FORTE
+            and not matched_evidence_ids
+            and missing_signals_tuple
+        ):
+            nivel = NIVEL_MODERADA
+        matching_evidences = [
+            signal
+            for signal in evidence_signals
+            if signal.evidence_id in matched_evidence_ids
+        ]
         faltando = _compute_faltando(
             nivel=nivel,
             score_breakdown=breakdown,
             confidence=round(confidence, 2),
             missing_signals=missing_signals_tuple,
             evidence_count=len(matched_evidence_ids),
+            has_technical_evidence=any(
+                _is_technical_evidence(signal) for signal in matching_evidences
+            ),
+            has_independent_evidence=any(
+                _is_independent_evidence(signal) for signal in matching_evidences
+            ),
+            blocked_signals=tuple(blocked_signals),
         )
 
         results.append(

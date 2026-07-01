@@ -24,6 +24,7 @@ class NvidiaTechnologyResponse(BaseModel):
     keywords: list[str]
     official_url: str
     complexity: str
+    supported_workloads: dict[str, float]
 
     @classmethod
     def from_view(cls, view: NvidiaTechnologyView) -> "NvidiaTechnologyResponse":
@@ -36,6 +37,7 @@ class NvidiaTechnologyResponse(BaseModel):
             keywords=view.keywords,
             official_url=view.official_url,
             complexity=view.complexity,
+            supported_workloads=view.supported_workloads,
         )
 
 

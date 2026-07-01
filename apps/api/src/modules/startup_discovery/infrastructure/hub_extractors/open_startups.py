@@ -1,61 +1,148 @@
-"""Extrator de links de startups do 100 Open Startups.
+"""Extrator de nomes de startups do 100 Open Startups (modo name).
 
-Estrategia: a pagina de ranking do 100 Open Startups
-(https://www.openstartups.net/site/startups/ranking.html) exibe uma tabela
-ou lista de startups ranqueadas. Cada entrada tem link para o perfil da
-startup na plataforma, que por sua vez tem o site oficial.
+O ranking do 100 Open Startups e carregado via JavaScript:
+  https://www.openstartups.net/site/ranking/data/rankings/categories/2025.js
 
-O site do 100 Open Startups tende a ter markup bem estruturado com links
-`<a>` nas linhas da tabela de ranking.
+O arquivo contem uma variavel JS:
+  var topCategories2025 = [ { "category": "TOP 10 Artificial Intelligence 2025",
+                               "startups": [{"name": "Noleak", "rank": 1}, ...] },
+                             ... ];
 
-Ajuste `_ROW_SELECTOR` e `_WEBSITE_SELECTOR` se o layout mudar.
+Estrategia:
+  1. Faz GET do arquivo JS (texto puro, sem renderizacao).
+  2. Remove o prefixo "var topCategories2025 = " e o sufixo ";".
+  3. Parse JSON.
+  4. Filtra categorias configuradas em OPEN_STARTUPS_CATEGORIES.
+  5. Retorna lista de DiscoveredCandidateItem (nome + categoria + rank).
+
+Sem fallback HTML — se o JS mudar de URL ou formato, o extrator falha
+explicitamente para que o problema seja identificado rapidamente.
+
+Ajuste OPEN_STARTUPS_JS_URL se o arquivo mudar de nome (ex: 2026.js).
 """
 
-from apps.api.src.modules.startup_discovery.infrastructure.hub_extractors.base import (
-    BaseHubLinkExtractor,
+import json
+import re
+
+import httpx
+
+from apps.api.src.modules.startup_discovery.application.dto import DiscoveredCandidateItem
+from apps.api.src.modules.startup_discovery.application.ports import HubNameExtractor
+from apps.api.src.modules.startup_discovery.domain.hub_registry import (
+    OPEN_STARTUPS_CATEGORIES,
 )
+from apps.api.src.shared.logging import get_logger
 
-_HUB_DOMAIN = "openstartups.net"
-_ROW_SELECTOR = "table tr a, .ranking-row a, .startup-row a, .ranking a[href*='startup']"
-_WEBSITE_SELECTOR = "a.website, a[rel='nofollow external'], .startup-website a, a[target='_blank']"
+logger = get_logger(__name__)
+
+_TIMEOUT = 20.0
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (compatible; NvidiaStartupRadar/1.0; +https://radar.example.com)"
+    ),
+    "Accept": "application/javascript, text/plain, */*",
+}
+_JS_VAR_RE = re.compile(r"^\s*var\s+\w+\s*=\s*", re.MULTILINE)
 
 
-class OpenStartupsExtractor(BaseHubLinkExtractor):
+class OpenStartupsExtractor(HubNameExtractor):
+    """Extrai nomes de startups do arquivo JS de categorias do 100 Open Startups."""
 
-    async def extract(self, listing_url: str, *, limit: int) -> list[str]:
-        soup = await self._fetch(listing_url)
+    async def extract(
+        self,
+        listing_url: str,
+        *,
+        limit: int,
+    ) -> list[DiscoveredCandidateItem]:
+        raw = await self._fetch_js(listing_url)
+        categories = self._parse_js(raw)
+        return self._select_candidates(categories, listing_url, limit)
 
-        # Tentativa 1: links externos diretos na listagem (alguns rankings
-        # tem o site da startup direto na linha da tabela)
-        external: list[str] = []
-        for tag in soup.find_all("a", href=True):
-            href: str = tag["href"]
-            if self._is_external(href, _HUB_DOMAIN) and "." in href.split("/")[-1]:
-                external.append(href)
-            if len(external) >= limit:
-                break
+    async def _fetch_js(self, url: str) -> str:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, headers=_HEADERS) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+        return response.text
 
-        if len(external) >= 3:
-            return self._normalize(external)[:limit]
+    def _parse_js(self, raw: str) -> list[dict]:
+        """Remove prefixo de variavel JS, parseia o JSON e retorna a lista de categorias.
 
-        # Tentativa 2: perfis internos -> extrair website de cada perfil
-        profile_links: list[str] = []
-        for tag in soup.select(_ROW_SELECTOR):
-            href = tag.get("href", "")
-            if href:
-                full = href if href.startswith("http") else f"https://{_HUB_DOMAIN}{href}"
-                profile_links.append(full)
+        O arquivo tem estrutura aninhada:
+          [{"name": "Ranking 100 Open Startups", "children": [<categorias>]}]
+        Retorna diretamente a lista de categorias (children do primeiro elemento).
+        """
+        text = _JS_VAR_RE.sub("", raw).strip().rstrip(";").strip()
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"Falha ao parsear JSON do arquivo JS do Open Startups: {exc}"
+            ) from exc
+        if not isinstance(data, list) or not data:
+            raise ValueError(
+                f"Esperava lista nao-vazia no JSON do Open Startups, recebi {type(data).__name__}"
+            )
+        # Suporta tanto lista plana de categorias quanto wrapper com children
+        first = data[0]
+        if isinstance(first, dict) and "children" in first and "name" not in first.get("startups", [""]):
+            categories = first.get("children", [])
+        else:
+            categories = data
+        return categories
 
-        websites: list[str] = []
-        for profile_url in profile_links[:limit]:
-            try:
-                detail = await self._fetch(profile_url)
-                for tag in detail.select(_WEBSITE_SELECTOR):
-                    href = tag.get("href", "")
-                    if self._is_external(href, _HUB_DOMAIN) and "linkedin" not in href:
-                        websites.append(href)
-                        break
-            except Exception:
+    def _select_candidates(
+        self,
+        categories: list[dict],
+        source_url: str,
+        limit: int,
+    ) -> list[DiscoveredCandidateItem]:
+        target_categories = {c.lower() for c in OPEN_STARTUPS_CATEGORIES}
+        candidates: list[DiscoveredCandidateItem] = []
+        seen_names: set[str] = set()
+
+        for entry in categories:
+            # Suporta tanto "category" (formato antigo) quanto "name" (formato atual)
+            category = str(entry.get("name") or entry.get("category") or "")
+            if category.lower() not in target_categories:
                 continue
 
-        return self._normalize(websites + external)[:limit]
+            # Suporta tanto "startups" (formato antigo) quanto "children" (formato atual)
+            startups = entry.get("children") or entry.get("startups") or []
+            if not isinstance(startups, list):
+                continue
+
+            for startup in startups:
+                if len(candidates) >= limit:
+                    return candidates
+
+                name = str(startup.get("name", "")).strip()
+                if not name or name.lower() in seen_names:
+                    continue
+
+                seen_names.add(name.lower())
+                rank_raw = startup.get("rank") or startup.get("position")
+                rank: int | None = None
+                try:
+                    rank = int(rank_raw) if rank_raw is not None else None
+                except (TypeError, ValueError):
+                    pass
+
+                candidates.append(
+                    DiscoveredCandidateItem(
+                        name=name,
+                        category=category,
+                        rank=rank,
+                        description=None,
+                    )
+                )
+
+                logger.debug(
+                    "open_startups candidate extracted",
+                    extra={"name": name, "category": category, "rank": rank},
+                )
+
+        logger.info(
+            "open_startups extraction completed",
+            extra={"total": len(candidates), "source_url": source_url},
+        )
+        return candidates

@@ -25,6 +25,7 @@ class NvidiaTechnologyView:
     keywords: list[str]
     official_url: str
     complexity: str
+    supported_workloads: dict[str, float]
 
 
 @dataclass(frozen=True)

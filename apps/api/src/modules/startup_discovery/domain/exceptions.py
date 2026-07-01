@@ -7,3 +7,11 @@ class DiscoveryRunNotFoundError(Exception):
 
 class InvalidDiscoveryRunTransitionError(Exception):
     """Transicao de status invalida para um DiscoveryRun."""
+
+
+class InvalidCandidateTransitionError(Exception):
+    """Transicao de status invalida para um StartupDiscoveryCandidate."""
+
+
+class CandidateNotFoundError(Exception):
+    """StartupDiscoveryCandidate nao encontrado pelo id informado."""

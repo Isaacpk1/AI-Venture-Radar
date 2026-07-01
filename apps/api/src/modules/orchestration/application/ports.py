@@ -51,6 +51,10 @@ class ScrapingPort(ABC):
     async def get_status(self, job_id: UUID) -> StepStatus:
         """Consulta o status; ``result_id`` e' o scraping_result_id quando concluido."""
 
+    @abstractmethod
+    async def get_html(self, result_id: UUID) -> str | None:
+        """Retorna o HTML bruto do resultado aprovado, ou None se nao encontrado (P0d)."""
+
 
 @dataclass(frozen=True)
 class DocumentContentView:
@@ -71,6 +75,19 @@ class StartupProfileSnapshot:
     funding_stage: str | None
     customers: list[str]
     evidence_urls: list[str]
+    ai_workload_type: str = "unknown"
+    deployment_stage: str = "unknown"
+    gpu_need: str = "unknown"
+
+
+@dataclass(frozen=True)
+class StartupExtractionAttempt:
+    """Status operacional da consolidacao estruturada no modulo startups."""
+
+    succeeded: bool
+    unavailable: bool = False
+    timed_out: bool = False
+    error_message: str | None = None
 
 
 class IngestionPort(ABC):
@@ -147,8 +164,8 @@ class StartupsPort(ABC):
         """Associa o conteudo ingerido como evidencia da startup."""
 
     @abstractmethod
-    async def try_extract(self, startup_id: UUID) -> None:
-        """Aciona a extracao estruturada; nao-op se o servico nao estiver disponivel."""
+    async def try_extract(self, startup_id: UUID) -> StartupExtractionAttempt:
+        """Aciona a extracao estruturada e retorna se ela completou."""
 
     @abstractmethod
     async def try_classify(self, startup_id: UUID) -> None:

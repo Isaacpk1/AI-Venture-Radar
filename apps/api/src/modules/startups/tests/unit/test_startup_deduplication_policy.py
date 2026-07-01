@@ -14,6 +14,7 @@ from apps.api.src.modules.startups.domain.entities import Startup
 from apps.api.src.modules.startups.domain.policies import (
     NAME_SIMILARITY_THRESHOLD,
     find_duplicate_startup,
+    infer_country_from_url,
     normalize_domain,
 )
 
@@ -101,6 +102,52 @@ def test_falls_back_to_name_when_domains_differ() -> None:
     assert match is existing[0]
 
 
+def test_matches_distinctive_brand_inside_article_title_and_url() -> None:
+    """Caso real: discovery achou primeiro uma noticia sobre NeuralMind.
+
+    Depois, ao encontrar o site oficial, deve reutilizar a startup existente
+    mesmo que o website_url salvo seja do publisher, nao da empresa.
+    """
+
+    existing = [
+        Startup(
+            name=(
+                "NeuralMind: Inteligencia artificial brasileira a servico "
+                "da inovacao e do impacto social"
+            ),
+            website_url=(
+                "https://bhtec.org.br/2025/10/10/"
+                "neuralmind-inteligencia-artificial-brasileira-a-servico-da-inovacao"
+            ),
+        )
+    ]
+
+    match = find_duplicate_startup(
+        name="NeuralMind",
+        website_url="https://neuralmind.ai",
+        existing=existing,
+    )
+
+    assert match is existing[0]
+
+
+def test_does_not_use_containment_for_short_ambiguous_names() -> None:
+    existing = [
+        Startup(
+            name="StoneAge Analytics",
+            website_url="https://stoneage.example.com",
+        )
+    ]
+
+    match = find_duplicate_startup(
+        name="Stone",
+        website_url="https://stone.example.com",
+        existing=existing,
+    )
+
+    assert match is None
+
+
 def test_no_match_when_nothing_similar_exists() -> None:
     existing = [Startup(name="Totally Unrelated Co")]
 
@@ -123,3 +170,19 @@ def test_no_match_when_nothing_similar_exists() -> None:
 )
 def test_normalize_domain(raw: str, expected: str) -> None:
     assert normalize_domain(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("https://startup.com.br", "BR"),
+        ("https://www.startup.ai.br/produto", "BR"),
+        ("startup.org.br", "BR"),
+        ("https://startup.com", None),
+        (None, None),
+    ],
+)
+def test_infer_country_from_url_uses_only_brazilian_domains(
+    raw: str | None, expected: str | None
+) -> None:
+    assert infer_country_from_url(raw) == expected

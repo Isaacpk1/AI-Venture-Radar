@@ -40,7 +40,7 @@ class RecommendationModel(Base):
         JSONB, nullable=False, default=list
     )
     nivel: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="exploratoria"
+        String(32), nullable=False, default="exploratoria"
     )
     faltando: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     review_status: Mapped[str] = mapped_column(

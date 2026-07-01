@@ -17,10 +17,16 @@ from apps.api.src.modules.recommendations.domain.policies import (
     TechnologyCandidate,
     _compute_nivel,
     _compute_faltando,
+    _composite_confidence,
+    _evidence_signal_score,
+    _workload_alignment,
     match_technologies,
+    MIN_MATCH_SCORE,
     NIVEL_FORTE,
+    NIVEL_HIPOTESE,
     NIVEL_MODERADA,
     NIVEL_EXPLORATORIA,
+    WORKLOAD_ADMISSION_THRESHOLD,
 )
 
 NIM = TechnologyCandidate(
@@ -67,6 +73,24 @@ RAPIDS = TechnologyCandidate(
     keywords=("data science", "analytics", "dataframe", "gpu", "pandas", "spark"),
     complexity="medium",
     supported_workloads={"analytics": 0.95, "recommendation": 0.75, "mlops": 0.60},
+)
+CUDF = TechnologyCandidate(
+    slug="cudf",
+    name="cuDF",
+    category="data_science",
+    use_cases=("acelerar processamento de dataframes",),
+    keywords=("dataframe", "pandas", "gpu", "rapids", "etl", "data science"),
+    complexity="low",
+    supported_workloads={"analytics": 0.95, "recommendation": 0.55, "mlops": 0.50},
+)
+CUML = TechnologyCandidate(
+    slug="cuml",
+    name="cuML",
+    category="data_science",
+    use_cases=("acelerar machine learning classico",),
+    keywords=("machine learning", "scikit-learn", "gpu", "rapids", "clustering"),
+    complexity="low",
+    supported_workloads={"analytics": 0.85, "recommendation": 0.70, "mlops": 0.70},
 )
 CATALOG = [NIM, NEMO, RIVA, MONAI, RAPIDS]
 
@@ -134,6 +158,76 @@ def test_profile_without_ai_evidence_returns_no_matches() -> None:
     )
 
     assert results == []
+
+
+def test_structured_analytics_profile_admits_rapids_family_without_literal_keywords() -> None:
+    """P2: perfil analytics/tabular/producao deve admitir RAPIDS/cuDF/cuML."""
+
+    results = match_technologies(
+        sector="Pricing optimization",
+        description="Processes millions of prices per day for pricing decisions.",
+        ai_context=StartupAIContext(
+            ai_workload_type="analytics",
+            deployment_stage="production",
+            gpu_need="unknown",
+            has_operational_signal=True,
+        ),
+        evidence_signals=[],
+        technologies=[RAPIDS, CUDF, CUML, NIM],
+    )
+
+    slugs = [result.technology.slug for result in results]
+    assert "rapids" in slugs
+    assert "cudf" in slugs
+    assert "cuml" in slugs
+    assert "nvidia-nim" not in slugs
+    assert all(result.matched_keywords == () for result in results)
+    assert all(
+        "workload estruturado: analytics" in result.signal_origins
+        for result in results
+    )
+
+
+def test_structured_analytics_profile_does_not_admit_non_data_categories_without_keywords() -> None:
+    """Analytics estruturado nao deve virar speech/training sem sinal textual."""
+
+    broad_riva = TechnologyCandidate(
+        slug="riva",
+        name="NVIDIA Riva",
+        category="speech_ai",
+        use_cases=("automatic speech recognition",),
+        keywords=RIVA.keywords,
+        complexity="medium",
+        supported_workloads={"analytics": 0.80, "nlp": 0.80, "speech": 0.99},
+    )
+    broad_nemo = TechnologyCandidate(
+        slug="nvidia-nemo",
+        name="NVIDIA NeMo",
+        category="model_training",
+        use_cases=("fine-tuning de modelos generativos",),
+        keywords=NEMO.keywords,
+        complexity="high",
+        supported_workloads={"analytics": 0.80, "nlp": 0.90},
+    )
+
+    results = match_technologies(
+        sector="B2B sales intelligence",
+        description="Processes company records and market data for sales teams.",
+        ai_context=StartupAIContext(
+            ai_workload_type="analytics",
+            deployment_stage="production",
+            gpu_need="unknown",
+            has_operational_signal=True,
+            profile_strength=0.75,
+        ),
+        evidence_signals=[],
+        technologies=[broad_riva, broad_nemo, RAPIDS],
+    )
+
+    slugs = [result.technology.slug for result in results]
+    assert "riva" not in slugs
+    assert "nvidia-nemo" not in slugs
+    assert "rapids" in slugs
 
 
 def test_match_found_only_in_evidence_text_is_traceable() -> None:
@@ -284,6 +378,43 @@ def test_word_boundary_still_matches_real_standalone_keywords() -> None:
     assert "llm" in results[0].matched_keywords
 
 
+def test_negative_training_context_does_not_create_nemo_match() -> None:
+    """Frases de privacidade sobre nao treinar modelos nao sao sinal de NeMo."""
+
+    results = match_technologies(
+        sector="saas",
+        description=(
+            "B2B SaaS powered by generative AI API. "
+            "No own model training and no own GPU infrastructure."
+        ),
+        ai_maturity_level="ai_enabled",
+        ai_context=StartupAIContext(ai_workload_type="nlp", gpu_need="low"),
+        evidence_signals=[],
+        technologies=[NEMO],
+    )
+
+    assert results == []
+
+
+def test_negative_training_context_is_reported_when_other_nemo_signals_match() -> None:
+    evidence_id = uuid4()
+    results = match_technologies(
+        sector=None,
+        description=None,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=evidence_id,
+                text="enterprise llm ai agent with no training on your data",
+            )
+        ],
+        technologies=[NEMO],
+    )
+
+    assert len(results) == 1
+    assert "training" not in results[0].matched_keywords
+    assert any("training" in item for item in results[0].faltando)
+
+
 def test_confidence_higher_with_strong_evidence_than_profile_only() -> None:
     """Match com evidencia de alta qualidade tem confianca maior que perfil puro."""
 
@@ -310,6 +441,78 @@ def test_confidence_higher_with_strong_evidence_than_profile_only() -> None:
     assert len(results_with_evidence) == 1
     assert len(results_profile_only) == 1
     assert results_with_evidence[0].confidence > results_profile_only[0].confidence
+
+
+def test_technical_source_increases_confidence_over_generic_website() -> None:
+    """Docs/API/blog tecnico valem mais que landing page para confianca."""
+
+    technical_id = uuid4()
+    generic_id = uuid4()
+    technical = match_technologies(
+        sector=None,
+        description=None,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=technical_id,
+                text="generative ai inference api deployment microservice",
+                confidence_score=0.9,
+                source_url="https://acme.ai/docs/api",
+                evidence_type="documentation",
+            )
+        ],
+        technologies=[NIM],
+    )
+    generic = match_technologies(
+        sector=None,
+        description=None,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=generic_id,
+                text="generative ai inference api deployment microservice",
+                confidence_score=0.9,
+                source_url="https://acme.ai/product",
+                evidence_type="website",
+            )
+        ],
+        technologies=[NIM],
+    )
+
+    assert technical[0].confidence > generic[0].confidence
+
+
+def test_technical_evidence_type_counts_as_high_quality_source() -> None:
+    """Evidence type technical tem peso alto mesmo fora de /docs."""
+
+    technical = match_technologies(
+        sector=None,
+        description=None,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=uuid4(),
+                text="generative ai inference api deployment microservice",
+                confidence_score=0.9,
+                source_url="https://jobs.lever.co/acme/data-engineer",
+                evidence_type="technical",
+            )
+        ],
+        technologies=[NIM],
+    )
+    generic = match_technologies(
+        sector=None,
+        description=None,
+        evidence_signals=[
+            EvidenceSignal(
+                evidence_id=uuid4(),
+                text="generative ai inference api deployment microservice",
+                confidence_score=0.9,
+                source_url="https://acme.ai/about",
+                evidence_type="website",
+            )
+        ],
+        technologies=[NIM],
+    )
+
+    assert technical[0].confidence > generic[0].confidence
 
 
 def test_confidence_is_lower_for_profile_only_match() -> None:
@@ -687,8 +890,8 @@ def test_compute_nivel_exploratoria_when_below_moderada_thresholds() -> None:
     assert _compute_nivel(score=0.30, confidence=0.15) == NIVEL_EXPLORATORIA
 
 
-def test_compute_nivel_exploratoria_when_score_high_but_confidence_low() -> None:
-    assert _compute_nivel(score=0.70, confidence=0.20) == NIVEL_EXPLORATORIA
+def test_compute_nivel_hipotese_prioritaria_when_score_high_but_confidence_low() -> None:
+    assert _compute_nivel(score=0.70, confidence=0.20) == NIVEL_HIPOTESE
 
 
 def test_compute_nivel_moderada_when_confidence_meets_but_score_below_forte() -> None:
@@ -817,3 +1020,225 @@ def test_no_ai_context_uses_neutral_defaults() -> None:
     # score = 0.35*0.40 + 0.25*0.20 + 0.15*0.50 + 0.15*1.0 + 0.10*0.60
     #       = 0.14 + 0.05 + 0.075 + 0.15 + 0.06 = 0.475 → 0.48
     assert 0.40 <= results[0].score <= 0.60
+
+
+def test_workload_admission_admits_with_one_keyword_when_alignment_strong() -> None:
+    """P2: uma startup com workload nlp + 1 keyword bate => NIM admitido."""
+
+    nlp_context = StartupAIContext(
+        ai_workload_type="nlp",
+        deployment_stage="production",
+        gpu_need="medium",
+        has_operational_signal=True,
+    )
+    # NIM tem supported_workloads={"nlp": 0.80} => workload_aln=0.80 >= threshold
+    # Startup so tem "llm" no setor (1 de 6 keywords) => sem a porta workload ficaria
+    # bloqueado por MIN_MATCHED_KEYWORDS=2; com a porta, deve ser admitido
+    results = match_technologies(
+        sector="llm platform",
+        description=None,
+        ai_context=nlp_context,
+        evidence_signals=[],
+        technologies=[NIM],
+    )
+
+    assert len(results) == 1
+    assert results[0].technology.slug == "nvidia-nim"
+    assert results[0].matched_keywords == ("llm",)
+    # Score com 1 keyword: keyword_prior=1/6=0.17, workload_aln=0.80
+    # score = 0.35*0.80 + 0.25*0.20 + 0.15*0.85 + 0.15*0.17 + 0.10*0.55 ≈ 0.50
+    assert results[0].score >= MIN_MATCH_SCORE
+
+
+def test_workload_admission_does_not_admit_with_zero_keywords() -> None:
+    """P2: mesmo com workload forte, zero keywords => nao admitido."""
+
+    nlp_context = StartupAIContext(
+        ai_workload_type="nlp",
+        deployment_stage="production",
+        gpu_need="medium",
+    )
+    # Startup sem nenhuma keyword do RIVA (speech/asr/tts/voice/translation/conversational ai)
+    results = match_technologies(
+        sector="data analytics platform",
+        description="financial reporting and dashboards",
+        ai_context=nlp_context,
+        evidence_signals=[],
+        technologies=[RIVA],
+    )
+
+    assert len(results) == 0
+
+
+def test_workload_admission_does_not_admit_when_alignment_below_threshold() -> None:
+    """P2: 1 keyword + workload_aln < 0.60 => nao admitido."""
+
+    analytics_context = StartupAIContext(
+        ai_workload_type="analytics",
+        deployment_stage="production",
+        gpu_need="low",
+    )
+    # NeMo tem supported_workloads={"analytics": nao definido -> 0.0} => nao atinge threshold
+    # Com 1 keyword "llm" no setor, nao deve ser admitido
+    results = match_technologies(
+        sector="llm platform",
+        description=None,
+        ai_context=analytics_context,
+        evidence_signals=[],
+        technologies=[NEMO],  # NEMO nao suporta analytics bem
+    )
+
+    # Sem keyword suficiente e sem alinhamento de workload => zero resultados
+    assert len(results) == 0
+
+
+# ---------------------------------------------------------------------------
+# Novos testes: perfil estruturado como evidencia (profile_strength)
+# ---------------------------------------------------------------------------
+
+
+def test_evidence_signal_score_credits_profile_strength_without_matched_evidence() -> None:
+    """Admitida so por perfil (sem evidencia casada): field_confidence alto do
+    perfil de IA deve elevar o evidence_signal acima do piso historico 0.20,
+    porque o perfil foi extraido de fonte real (field_evidence_ids)."""
+
+    score = _evidence_signal_score(
+        matched_evidence_ids=set(),
+        evidence_signals=[],
+        profile_strength=0.75,
+    )
+
+    assert score > 0.20
+    assert score == round(0.9 * 0.75, 2)
+
+
+def test_evidence_signal_score_keeps_floor_when_profile_strength_is_zero() -> None:
+    score = _evidence_signal_score(
+        matched_evidence_ids=set(),
+        evidence_signals=[],
+        profile_strength=0.0,
+    )
+
+    assert score == 0.20
+
+
+def test_composite_confidence_profile_path_beats_old_floor() -> None:
+    """Admitida por workload com perfil forte deve sair de ~0.29 para >= 0.55
+    (forte), creditando profile_strength como prova indireta."""
+
+    ai_context = StartupAIContext(
+        ai_workload_type="analytics",
+        deployment_stage="production",
+        gpu_need="unknown",
+        has_operational_signal=True,
+        profile_strength=0.75,
+    )
+
+    confidence = _composite_confidence(
+        evidence_signals=[],
+        matched_evidence_ids=set(),
+        keyword_prior=0.0,
+        workload_aln=0.95,
+        ai_context=ai_context,
+    )
+
+    assert confidence >= 0.55
+
+
+def test_profile_only_with_missing_signals_is_not_promoted_to_forte() -> None:
+    results = match_technologies(
+        sector="Pricing optimization",
+        description="Processes millions of prices per day for pricing decisions.",
+        ai_context=StartupAIContext(
+            ai_workload_type="analytics",
+            deployment_stage="production",
+            gpu_need="unknown",
+            has_operational_signal=True,
+            profile_strength=0.75,
+        ),
+        evidence_signals=[],
+        technologies=[RAPIDS],
+    )
+
+    assert len(results) == 1
+    assert results[0].matched_keywords == ()
+    assert results[0].evidence_ids == ()
+    assert results[0].missing_signals
+    assert results[0].nivel == NIVEL_MODERADA
+    assert results[0].faltando
+
+
+def test_composite_confidence_falls_back_to_evidence_path_without_profile() -> None:
+    """Sem profile_strength, o caminho de perfil nao deve superar o
+    comportamento historico de perfil-only (confianca baixa)."""
+
+    confidence = _composite_confidence(
+        evidence_signals=[],
+        matched_evidence_ids=set(),
+        keyword_prior=0.0,
+        workload_aln=0.40,
+        ai_context=None,
+    )
+
+    assert confidence < 0.30
+
+
+def test_workload_alignment_uses_secondary_workload_when_primary_does_not_align() -> None:
+    """Driva/Econodata: workload primario 'analytics' nao alinha com NIM, mas
+    o sinal secundario 'nlp' (copiloto/agente) detectado no texto deve fazer
+    NIM alinhar mesmo assim."""
+
+    ctx_primary_only = StartupAIContext(ai_workload_type="analytics")
+    ctx_with_secondary = StartupAIContext(
+        ai_workload_type="analytics", secondary_workloads=("nlp",)
+    )
+
+    score_primary_only = _workload_alignment(ctx_primary_only, NIM)
+    score_with_secondary = _workload_alignment(ctx_with_secondary, NIM)
+
+    assert score_with_secondary == NIM.supported_workloads["nlp"]
+    assert score_with_secondary > score_primary_only
+
+
+# ---------------------------------------------------------------------------
+# Novo teste: Morpheus nao dispara mais por workload "analytics"
+# ---------------------------------------------------------------------------
+
+
+def test_morpheus_is_not_recommended_for_analytics_profile_without_security_signal() -> None:
+    """Bug corrigido: Morpheus tinha supported_workloads={"analytics": 0.65},
+    causando falso-positivo em qualquer startup de analytics/dados, sem
+    nenhum sinal real de ciberseguranca. Agora so deve aparecer por keyword."""
+
+    morpheus = TechnologyCandidate(
+        slug="nvidia-morpheus",
+        name="NVIDIA Morpheus",
+        category="cybersecurity",
+        use_cases=("detectar ameacas de seguranca em tempo real",),
+        keywords=(
+            "cybersecurity",
+            "morpheus",
+            "threat detection",
+            "anomaly detection",
+            "security",
+            "incident response",
+        ),
+        complexity="high",
+        supported_workloads={},
+    )
+
+    results = match_technologies(
+        sector="Pricing optimization",
+        description="Processes millions of prices per day for pricing decisions.",
+        ai_context=StartupAIContext(
+            ai_workload_type="analytics",
+            deployment_stage="production",
+            gpu_need="unknown",
+            has_operational_signal=True,
+            profile_strength=0.75,
+        ),
+        evidence_signals=[],
+        technologies=[morpheus],
+    )
+
+    assert results == []

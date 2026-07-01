@@ -3,9 +3,10 @@
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.pool import NullPool
 
-from apps.api.src.database.relational.session import engine
+from apps.api.src.config.settings import get_settings
 from apps.api.src.modules.orchestration.domain.entities import UrlIngestionJob
 from apps.api.src.modules.orchestration.domain.enums import UrlIngestionJobStatus
 from apps.api.src.modules.orchestration.infrastructure.database.repositories.postgres_url_ingestion_job_repository import (
@@ -17,8 +18,13 @@ from apps.api.src.modules.startups.infrastructure.database.repositories.postgres
 )
 
 
+def _make_test_engine():
+    return create_async_engine(get_settings().database_url, poolclass=NullPool)
+
+
 @pytest.mark.anyio
 async def test_postgres_repository_persists_analysis_fields() -> None:
+    engine = _make_test_engine()
     async with engine.connect() as connection:
         transaction = await connection.begin()
         session = AsyncSession(bind=connection, expire_on_commit=False)
@@ -59,24 +65,31 @@ async def test_postgres_repository_persists_analysis_fields() -> None:
             assert updated.recommendation_count == 3
             assert updated.briefing_id == briefing_id
         finally:
-            await session.close()
             await transaction.rollback()
+            await session.close()
 
     await engine.dispose()
 
-
 @pytest.mark.anyio
 async def test_postgres_repository_list_page_filters_by_status_and_source_type() -> None:
+    engine = _make_test_engine()
     async with engine.connect() as connection:
         transaction = await connection.begin()
         session = AsyncSession(bind=connection, expire_on_commit=False)
 
         try:
             repository = PostgresUrlIngestionJobRepository(session)
+            test_source_type = f"test_startup_evidence_{uuid4()}"
 
-            matching = UrlIngestionJob(url="https://acme.example.com")
+            matching = UrlIngestionJob(
+                url=f"https://acme-{uuid4()}.example.com",
+                source_type=test_source_type,
+            )
             matching.start_scraping(uuid4())
-            other_status = UrlIngestionJob(url="https://beta.example.com")
+            other_status = UrlIngestionJob(
+                url=f"https://beta-{uuid4()}.example.com",
+                source_type=test_source_type,
+            )
             other_source = UrlIngestionJob(
                 url="https://docs.nvidia.com/nim/", source_type="nvidia_knowledge"
             )
@@ -88,20 +101,20 @@ async def test_postgres_repository_list_page_filters_by_status_and_source_type()
                 page=1,
                 page_size=10,
                 status=UrlIngestionJobStatus.SCRAPING,
-                source_type="startup_evidence",
+                source_type=test_source_type,
             )
 
             assert total == 1
             assert jobs[0].id == matching.id
         finally:
-            await session.close()
             await transaction.rollback()
+            await session.close()
 
     await engine.dispose()
 
-
 @pytest.mark.anyio
 async def test_postgres_repository_list_completed_by_url_excludes_other_status_and_url() -> None:
+    engine = _make_test_engine()
     async with engine.connect() as connection:
         transaction = await connection.begin()
         session = AsyncSession(bind=connection, expire_on_commit=False)
@@ -109,7 +122,7 @@ async def test_postgres_repository_list_completed_by_url_excludes_other_status_a
         try:
             repository = PostgresUrlIngestionJobRepository(session)
 
-            url = "https://acme.example.com"
+            url = f"https://acme-{uuid4()}.example.com"
             old_completed = UrlIngestionJob(url=url)
             old_completed.start_scraping(uuid4())
             old_completed.start_ingesting(
@@ -121,7 +134,9 @@ async def test_postgres_repository_list_completed_by_url_excludes_other_status_a
             still_running = UrlIngestionJob(url=url)
             still_running.start_scraping(uuid4())
 
-            other_url_completed = UrlIngestionJob(url="https://beta.example.com")
+            other_url_completed = UrlIngestionJob(
+                url=f"https://beta-{uuid4()}.example.com"
+            )
             other_url_completed.start_scraping(uuid4())
             other_url_completed.start_ingesting(
                 scraping_result_id=uuid4(), ingestion_job_id=uuid4()
@@ -138,7 +153,7 @@ async def test_postgres_repository_list_completed_by_url_excludes_other_status_a
 
             assert [job.id for job in results] == [old_completed.id]
         finally:
-            await session.close()
             await transaction.rollback()
+            await session.close()
 
     await engine.dispose()

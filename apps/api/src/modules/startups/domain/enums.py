@@ -8,6 +8,7 @@ class StartupEvidenceType(str, Enum):
     NEWS = "news"
     BLOG = "blog"
     DOCUMENTATION = "documentation"
+    TECHNICAL = "technical"
     OTHER = "other"
 
 

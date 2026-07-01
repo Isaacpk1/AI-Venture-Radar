@@ -23,6 +23,7 @@ from apps.api.src.modules.scraping.domain.exceptions import (
     MoreSourcesRequiredError,
     RecoverableScrapingError,
     ScrapingFailedError,
+    SemanticValidationError,
 )
 from apps.api.src.modules.scraping.domain.policies import (
     CIRCUIT_BREAKER_WINDOW_HOURS,
@@ -167,40 +168,58 @@ class ScrapingPipeline:
                         validation.to_summary()
                     )
                 ):
-                    assessment = await self.semantic_validator.validate(
-                        SemanticValidationInput(
-                            url=output.final_url,
-                            title=output.title,
-                            raw_text=output.raw_text,
-                            deterministic=validation,
+                    try:
+                        assessment = await self.semantic_validator.validate(
+                            SemanticValidationInput(
+                                url=output.final_url,
+                                title=output.title,
+                                raw_text=output.raw_text,
+                                deterministic=validation,
+                            )
                         )
-                    )
-                    semantic = self.semantic_confidence_service.calculate(assessment)
-                    attempt_warnings.add("semantic_reviewed")
-                    attempt_warnings.add(
-                        f"semantic_decision_{assessment.decision.value}"
-                    )
-                    semantic_metadata = {
-                        "semantic_reviewed": True,
-                        "semantic_decision": assessment.decision.value,
-                        "semantic_confidence": semantic.semantic_confidence,
-                        "semantic_reason": assessment.reason,
-                        "semantic_contradiction_detected": (
-                            assessment.contradiction_detected
-                        ),
-                    }
+                    except SemanticValidationError:
+                        # LLM indisponível (503/timeout persistente após retries).
+                        # Fallback determinístico: repondera qualidade sem evidência
+                        # (mesmo critério de fontes curadas). Conteúdo tecnicamente
+                        # sólido é aceito; genuinamente fraco continua rejeitado.
+                        attempt_warnings.add("llm_unavailable")
+                        fallback_score = round(
+                            validation.technical_score * 0.50
+                            + validation.text_score * 0.50,
+                            4,
+                        )
+                        if fallback_score >= 0.45:
+                            decision = ValidationDecision.ACCEPT
+                            semantic_metadata = {"llm_unavailable": True}
+                        assessment = None  # sinaliza que revisão foi pulada
 
-                    if (
-                        assessment.decision is SemanticReviewDecision.ACCEPTED
-                        and semantic.semantic_confidence >= 0.80
-                    ):
-                        decision = ValidationDecision.ACCEPT
-                        semantic_confidence_value = semantic.semantic_confidence
+                    if assessment is not None:
+                        semantic = self.semantic_confidence_service.calculate(assessment)
+                        attempt_warnings.add("semantic_reviewed")
+                        attempt_warnings.add(
+                            f"semantic_decision_{assessment.decision.value}"
+                        )
+                        semantic_metadata = {
+                            "semantic_reviewed": True,
+                            "semantic_decision": assessment.decision.value,
+                            "semantic_confidence": semantic.semantic_confidence,
+                            "semantic_reason": assessment.reason,
+                            "semantic_contradiction_detected": (
+                                assessment.contradiction_detected
+                            ),
+                        }
+
+                        if (
+                            assessment.decision is SemanticReviewDecision.ACCEPTED
+                            and semantic.semantic_confidence >= 0.80
+                        ):
+                            decision = ValidationDecision.ACCEPT
+                            semantic_confidence_value = semantic.semantic_confidence
 
                     # A revisao simples nao teve confianca suficiente, ou
                     # pediu explicitamente revisao de um agente. Investigamos
                     # mais a fundo antes de desistir do conteudo (v8).
-                    elif self.semantic_investigator is not None and (
+                    if assessment is not None and self.semantic_investigator is not None and (
                         assessment.decision
                         is SemanticReviewDecision.NEEDS_AGENT_REVIEW
                         or semantic.semantic_confidence < 0.80

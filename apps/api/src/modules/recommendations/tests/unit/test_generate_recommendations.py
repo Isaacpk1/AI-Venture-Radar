@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from apps.api.src.modules.recommendations.application.dto import (
+    AIProfileSnapshot,
     EvidenceSnapshot,
     GenerateRecommendationsInput,
     GroundedJustification,
@@ -38,6 +39,15 @@ NIM_SNAPSHOT = NvidiaTechnologySnapshot(
     category="model_serving",
     use_cases=("servir LLMs em producao",),
     keywords=("llm", "generative ai", "inference", "api", "deployment", "microservice"),
+)
+RAPIDS_SNAPSHOT = NvidiaTechnologySnapshot(
+    slug="rapids",
+    name="RAPIDS",
+    category="data_science",
+    use_cases=("processar grandes volumes tabulares",),
+    keywords=("data science", "analytics", "dataframe", "gpu", "pandas", "spark"),
+    complexity="medium",
+    supported_workloads={"analytics": 0.95},
 )
 
 
@@ -225,6 +235,36 @@ async def test_generate_recommendations_tracks_evidence_ids() -> None:
 
 
 @pytest.mark.anyio
+async def test_generate_recommendations_uses_profile_only_justification_for_workload_admission() -> None:
+    startup_id = uuid4()
+    repository = FakeRecommendationRepository()
+    uow = FakeUoW(repository)
+    profile_source = FakeProfileSource(
+        StartupProfileSnapshot(
+            sector="Pricing optimization",
+            description="Processes millions of prices per day.",
+            evidences=(),
+            ai_profile=AIProfileSnapshot(
+                ai_workload_type="analytics",
+                deployment_stage="production",
+                gpu_need="unknown",
+                has_operational_signal=True,
+            ),
+        )
+    )
+    catalog_source = FakeCatalogSource([RAPIDS_SNAPSHOT])
+
+    use_case = GenerateRecommendations(lambda: uow, profile_source, catalog_source)
+    views = await use_case.execute(GenerateRecommendationsInput(startup_id=startup_id))
+
+    assert len(views) == 1
+    assert views[0].technology_slug == "rapids"
+    assert views[0].matched_keywords == []
+    assert "perfil estruturado indica alinhamento" in views[0].justification
+    assert "ponto de entrada natural" not in views[0].justification
+
+
+@pytest.mark.anyio
 async def test_generate_recommendations_uses_grounded_justification_when_available() -> None:
     startup_id = uuid4()
     repository = FakeRecommendationRepository()
@@ -377,3 +417,63 @@ async def test_generate_recommendations_falls_back_to_template_when_grounder_ret
     assert len(views) == 1
     assert "Evidencias e perfil mencionam:" in views[0].justification
     assert grounder.calls == [("NVIDIA NIM", "servir LLMs em producao")]
+
+
+INCEPTION_SNAPSHOT = NvidiaTechnologySnapshot(
+    slug="nvidia-inception",
+    name="NVIDIA Inception",
+    category="startup_program",
+    use_cases=("programa de aceleração para startups de IA",),
+    keywords=("startup", "accelerator", "inception"),
+)
+
+
+@pytest.mark.anyio
+async def test_inception_floor_injected_when_no_matches() -> None:
+    """P4: quando nenhuma tecnologia e' recomendada, Inception e' injetado como floor."""
+
+    startup_id = uuid4()
+    repository = FakeRecommendationRepository()
+    uow = FakeUoW(repository)
+    profile_source = FakeProfileSource(
+        StartupProfileSnapshot(
+            sector="hr tech",
+            description="Payroll and onboarding platform for small businesses.",
+            evidences=(),
+        )
+    )
+    # Apenas Inception no catalogo — zero keywords batem com o perfil
+    catalog_source = FakeCatalogSource([INCEPTION_SNAPSHOT])
+
+    use_case = GenerateRecommendations(lambda: uow, profile_source, catalog_source)
+    views = await use_case.execute(GenerateRecommendationsInput(startup_id=startup_id))
+
+    assert len(views) == 1
+    assert views[0].technology_slug == "nvidia-inception"
+    assert views[0].score == 0.21
+    assert views[0].confidence == 0.10
+    assert "ponto de entrada" in views[0].justification
+
+
+@pytest.mark.anyio
+async def test_inception_floor_not_injected_when_matches_exist() -> None:
+    """P4: quando ha recomendacoes normais, o floor do Inception nao e injetado."""
+
+    startup_id = uuid4()
+    repository = FakeRecommendationRepository()
+    uow = FakeUoW(repository)
+    profile_source = FakeProfileSource(
+        StartupProfileSnapshot(
+            sector="LLM and generative AI",
+            description="Provides inference API with simple deployment as microservice.",
+            evidences=(),
+        )
+    )
+    catalog_source = FakeCatalogSource([NIM_SNAPSHOT, INCEPTION_SNAPSHOT])
+
+    use_case = GenerateRecommendations(lambda: uow, profile_source, catalog_source)
+    views = await use_case.execute(GenerateRecommendationsInput(startup_id=startup_id))
+
+    slugs = [v.technology_slug for v in views]
+    assert "nvidia-nim" in slugs
+    assert "nvidia-inception" not in slugs

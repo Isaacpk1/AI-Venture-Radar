@@ -77,3 +77,6 @@ extratores para todos os 14 hubs listados no brainstorm original
 2. Persistir ou relatar URLs descartadas por duplicidade/erro.
 3. Adicionar filtros simples por hub quando a lista crescer.
 4. Integrar com a chain de enriquecimento por busca quando uma startup conhecida precisar de fontes melhores.
+5. Rodar discovery recorrente por cron/scheduler com guardrails e metricas.
+
+Documento de desenho: `docs/startup_discovery/cron_discovery_hubs.md`.

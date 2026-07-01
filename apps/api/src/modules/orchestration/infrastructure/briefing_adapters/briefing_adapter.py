@@ -7,6 +7,7 @@ contratos publicos (``briefing/application/public/briefing_generator.py``,
 ``agents/application/public/briefing_agent.py``).
 """
 
+import asyncio
 from uuid import UUID
 
 from apps.api.src.modules.agents.application.dto import BriefingAgentInput
@@ -23,6 +24,11 @@ from apps.api.src.modules.orchestration.application.ports import BriefingPort
 from apps.api.src.modules.orchestration.domain.exceptions import (
     StartupProfileUnavailableError,
 )
+from apps.api.src.shared.logging import get_logger
+
+
+logger = get_logger(__name__)
+BRIEFING_AGENT_TIMEOUT_SECONDS = 45
 
 
 class BriefingModulePort(BriefingPort):
@@ -46,10 +52,19 @@ class BriefingModulePort(BriefingPort):
     async def generate(self, startup_id: UUID) -> UUID:
         try:
             if self._agent_service is not None:
-                result = await self._agent_service.generate(
-                    BriefingAgentInput(startup_id=startup_id)
-                )
-                return result.briefing_id
+                try:
+                    result = await asyncio.wait_for(
+                        self._agent_service.generate(
+                            BriefingAgentInput(startup_id=startup_id)
+                        ),
+                        timeout=BRIEFING_AGENT_TIMEOUT_SECONDS,
+                    )
+                    return result.briefing_id
+                except Exception as error:
+                    logger.warning(
+                        "briefing agent failed, falling back to deterministic generator",
+                        extra={"startup_id": str(startup_id), "reason": str(error)},
+                    )
 
             briefing = await self._generator.generate(startup_id)
         except BriefingStartupProfileUnavailableError as error:

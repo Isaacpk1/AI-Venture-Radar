@@ -57,6 +57,7 @@ class LangChainGeminiExtractionResponse(BaseModel):
     customers: list[str] = Field(default_factory=list, max_length=20)
     sector: str | None = Field(default=None, max_length=80)
     description: str | None = Field(default=None, max_length=500)
+    country: str | None = Field(default=None, max_length=40)
 
     # Perfil estruturado de IA
     ai_workload_type: AiWorkloadTypeLiteral = "unknown"
@@ -70,6 +71,7 @@ class LangChainGeminiExtractionResponse(BaseModel):
     current_tools: list[str] = Field(default_factory=list, max_length=20)
     business_goal: str | None = Field(default=None, max_length=300)
     field_confidence: dict[str, float] = Field(default_factory=dict)
+    field_evidence_ids: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class LangChainGeminiExtractor(ExtractionService):
@@ -133,6 +135,7 @@ class LangChainGeminiExtractor(ExtractionService):
             customers=parsed.customers,
             sector=parsed.sector,
             description=parsed.description,
+            country=parsed.country,
             ai_workload_type=parsed.ai_workload_type,
             model_type=parsed.model_type,
             data_modality=parsed.data_modality,
@@ -144,6 +147,7 @@ class LangChainGeminiExtractor(ExtractionService):
             current_tools=list(parsed.current_tools),
             business_goal=parsed.business_goal,
             field_confidence=dict(parsed.field_confidence),
+            field_evidence_ids=dict(parsed.field_evidence_ids),
         )
 
     def _build_messages(
@@ -162,7 +166,10 @@ class LangChainGeminiExtractor(ExtractionService):
                 "Voce e o Extraction Agent do AI Venture Radar. Sua tarefa e "
                 "extrair fatos estruturados APENAS quando explicitamente "
                 "mencionados nas evidencias. Nunca infira, deduza ou invente um "
-                "dado que nao esteja escrito no texto.\n\n"
+                "dado que nao esteja escrito no texto. O radar tem foco em "
+                "startups brasileiras; preserve sinais de Brasil quando "
+                "aparecerem nas evidencias, mas nao invente pais, clientes ou "
+                "fundadores por escopo.\n\n"
                 "CAMPOS BASICOS:\n"
                 "- founders: lista de fundadores mencionados.\n"
                 "- funding_stage: estagio de funding ('pre_seed','seed','series_a',"
@@ -170,7 +177,10 @@ class LangChainGeminiExtractor(ExtractionService):
                 "- funding_amount_usd: valor em USD ou null.\n"
                 "- customers: clientes mencionados.\n"
                 "- sector: rotulo curto de categoria em ingles (ex. 'Healthcare AI').\n"
-                "- description: 1-2 frases em ingles resumindo o produto.\n\n"
+                "- description: 1-2 frases em ingles resumindo o produto.\n"
+                "- country: codigo ISO-2 do pais sede da empresa se mencionado "
+                "ou claramente inferivel da evidencia (ex. 'BR' para "
+                "Brasil/cidades brasileiras); senao null. Nao invente.\n\n"
                 "PERFIL DE IA (sempre em ingles, baseado no que as evidencias "
                 "realmente descrevem — use 'unknown' quando sem evidencia):\n"
                 "- ai_workload_type: tipo de workload de IA principal "
@@ -194,7 +204,10 @@ class LangChainGeminiExtractor(ExtractionService):
                 "que voce preencheu com evidencia real — tanto campos basicos "
                 "(ex. {'founders': 0.9, 'sector': 0.8}) quanto campos de perfil de IA "
                 "(ex. {'ai_workload_type': 0.85}). "
-                "Nao inclua campos que ficaram vazios, null ou 'unknown'."
+                "Nao inclua campos que ficaram vazios, null ou 'unknown'.\n"
+                "- field_evidence_ids: dict com os nomes dos campos preenchidos "
+                "apontando para IDs de evidencia quando IDs forem fornecidos no "
+                "texto de entrada. Se nao houver IDs explicitos, devolva {}."
             )
         )
 

@@ -1,10 +1,63 @@
 """Validacao deterministica de sinais evidenciais do conteudo."""
 
 import re
+from urllib.parse import urlparse
 
 from apps.api.src.modules.scraping.application.dto import (
     ScrapingOutput,
     ValidationComponentResult,
+)
+
+
+NEWS_SOURCE_HOSTS = {
+    "exame.com",
+    "braziljournal.com",
+    "neofeed.com.br",
+    "startups.com.br",
+    "itforum.com.br",
+    "baguete.com.br",
+    "mobiletime.com.br",
+    "diariodocomercio.com.br",
+    "abcdacomunicacao.com.br",
+    "economiasa.com.br",
+    "tiinside.com.br",
+    "convergenciadigital.com.br",
+    "panoramamercantil.com.br",
+    "revistapegn.globo.com",
+    "valor.globo.com",
+    "meioemensagem.com.br",
+    "revistaempreende.com.br",
+    "revistaempresarios.net",
+    "channel360.com.br",
+    "revistasegurancaeletronica.com.br",
+    "sanpedrovalley.org.br",
+    "bhtec.org.br",
+    "distrito.me",
+    "startse.com",
+    "brasilinovador.com.br",
+    "aiotbrasil.com.br",
+}
+
+TECHNICAL_SOURCE_HINTS = (
+    "github.com",
+    "gitlab.com",
+    "docs.",
+    "/docs",
+    "documentation",
+    "developer",
+    "developers",
+    "api",
+    "engineering",
+    "careers",
+    "carreiras",
+    "jobs",
+    "vagas",
+    "trabalhe-conosco",
+    "gupy.io",
+    "greenhouse.io",
+    "lever.co",
+    "requirements.txt",
+    "package.json",
 )
 
 
@@ -103,6 +156,13 @@ class EvidenceValidator:
         if output.title:
             score += 0.05
 
+        if not matched_ai_terms and self._has_contextual_source_signal(output):
+            # Noticias independentes, releases publicos e paginas tecnicas/vagas
+            # sao fontes validas para enriquecer perfil (funding, clientes,
+            # stack, escala). Nao devem ser barradas so por nao venderem IA.
+            score = max(score, 0.75)
+            warnings.add("contextual_source_signal")
+
         return ValidationComponentResult(
             score=self._bounded(score),
             warnings=warnings,
@@ -116,6 +176,27 @@ class EvidenceValidator:
             for term in terms
             if re.search(rf"(?<!\w){re.escape(term)}(?!\w)", text)
         }
+
+    def _has_contextual_source_signal(self, output: ScrapingOutput) -> bool:
+        searchable_url = " ".join([output.source_url, output.final_url]).lower()
+        host = urlparse(output.final_url or output.source_url).netloc.lower()
+        host = host.removeprefix("www.")
+
+        if any(hint in searchable_url for hint in TECHNICAL_SOURCE_HINTS):
+            return True
+        if self._is_news_host(host):
+            return True
+        return False
+
+    def _is_news_host(self, host: str) -> bool:
+        if any(host == h or host.endswith(f".{h}") for h in NEWS_SOURCE_HOSTS):
+            return True
+        return (
+            host.endswith(".gov.br")
+            or host.endswith(".edu.br")
+            or host.endswith(".unicamp.br")
+            or host.endswith(".usp.br")
+        )
 
     @staticmethod
     def _bounded(score: float) -> float:

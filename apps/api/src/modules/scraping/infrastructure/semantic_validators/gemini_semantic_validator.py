@@ -1,7 +1,9 @@
 """Validacao semantica estruturada usando a API REST do Gemini."""
 
+import asyncio
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -13,6 +15,12 @@ from apps.api.src.modules.scraping.application.dto import (
 from apps.api.src.modules.scraping.application.ports import SemanticValidator
 from apps.api.src.modules.scraping.domain.enums import SemanticReviewDecision
 from apps.api.src.modules.scraping.domain.exceptions import SemanticValidationError
+
+# Códigos HTTP que indicam sobrecarga ou instabilidade temporária do Gemini —
+# tratados como transitórios: vale tentar de novo antes de desistir.
+_TRANSIENT_STATUS_CODES: frozenset[int] = frozenset({429, 500, 503, 504})
+
+SleepFn = Callable[[float], Coroutine[Any, Any, None]]
 
 
 class GeminiSemanticResponse(BaseModel):
@@ -45,7 +53,9 @@ class GeminiSemanticValidator(SemanticValidator):
         model: str,
         timeout_seconds: float = 30.0,
         max_text_characters: int = 20_000,
+        max_retries: int = 3,
         client_factory: GeminiClientFactory | None = None,
+        sleep_fn: SleepFn | None = None,
     ) -> None:
         if not api_key:
             raise ValueError("GEMINI_API_KEY e obrigatoria.")
@@ -56,7 +66,9 @@ class GeminiSemanticValidator(SemanticValidator):
         self.model = model
         self.timeout_seconds = timeout_seconds
         self.max_text_characters = max_text_characters
+        self.max_retries = max_retries
         self.client_factory = client_factory or self._create_default_client
+        self._sleep = sleep_fn or asyncio.sleep
 
     def _create_default_client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(timeout=self.timeout_seconds)
@@ -65,53 +77,76 @@ class GeminiSemanticValidator(SemanticValidator):
         self,
         semantic_input: SemanticValidationInput,
     ) -> SemanticAssessment:
-        """Chama Gemini e converte sua resposta validada para o DTO da aplicacao."""
+        """Chama Gemini com retry exponencial para erros transitórios.
 
-        try:
-            async with self.client_factory() as client:
-                response = await client.post(
-                    f"{self.api_base_url}/{self.model}:generateContent",
-                    headers={
-                        "x-goog-api-key": self.api_key,
-                        "Content-Type": "application/json",
-                    },
-                    json=self._build_request(semantic_input),
-                )
+        503/429/500/504 e TimeoutException são retentadas até max_retries
+        (backoff: 1 s, 2 s, 4 s, …). Erros permanentes (4xx não transitórios,
+        resposta malformada) levantam SemanticValidationError imediatamente.
+        """
+        last_error: Exception | None = None
+
+        for attempt in range(self.max_retries):
+            if attempt > 0:
+                await self._sleep(2 ** (attempt - 1))
+
+            try:
+                async with self.client_factory() as client:
+                    response = await client.post(
+                        f"{self.api_base_url}/{self.model}:generateContent",
+                        headers={
+                            "x-goog-api-key": self.api_key,
+                            "Content-Type": "application/json",
+                        },
+                        json=self._build_request(semantic_input),
+                    )
+
+                if response.status_code in _TRANSIENT_STATUS_CODES:
+                    last_error = httpx.HTTPStatusError(
+                        f"HTTP {response.status_code}",
+                        request=response.request,
+                        response=response,
+                    )
+                    continue
+
                 response.raise_for_status()
-        except httpx.TimeoutException as error:
-            raise SemanticValidationError(
-                f"Gemini excedeu o timeout de {self.timeout_seconds}s."
-            ) from error
-        except httpx.HTTPError as error:
-            raise SemanticValidationError(
-                f"Gemini nao conseguiu concluir a validacao: {error}."
-            ) from error
 
-        try:
-            content = response.json()
-            text = content["candidates"][0]["content"]["parts"][0]["text"]
-            parsed = GeminiSemanticResponse.model_validate_json(text)
-        except (
-            json.JSONDecodeError,
-            KeyError,
-            IndexError,
-            TypeError,
-            ValidationError,
-        ) as error:
-            raise SemanticValidationError(
-                "Gemini devolveu uma resposta semantica invalida."
-            ) from error
+            except httpx.TimeoutException as error:
+                last_error = error
+                continue
+            except httpx.HTTPError as error:
+                raise SemanticValidationError(
+                    f"Gemini nao conseguiu concluir a validacao: {error}."
+                ) from error
 
-        return SemanticAssessment(
-            startup_match_score=parsed.startup_match_score,
-            evidence_clarity_score=parsed.evidence_clarity_score,
-            source_reliability_score=parsed.source_reliability_score,
-            statement_specificity_score=parsed.statement_specificity_score,
-            context_completeness_score=parsed.context_completeness_score,
-            contradiction_detected=parsed.contradiction_detected,
-            decision=parsed.decision,
-            reason=parsed.reason,
-        )
+            try:
+                content = response.json()
+                text = content["candidates"][0]["content"]["parts"][0]["text"]
+                parsed = GeminiSemanticResponse.model_validate_json(text)
+            except (
+                json.JSONDecodeError,
+                KeyError,
+                IndexError,
+                TypeError,
+                ValidationError,
+            ) as error:
+                raise SemanticValidationError(
+                    "Gemini devolveu uma resposta semantica invalida."
+                ) from error
+
+            return SemanticAssessment(
+                startup_match_score=parsed.startup_match_score,
+                evidence_clarity_score=parsed.evidence_clarity_score,
+                source_reliability_score=parsed.source_reliability_score,
+                statement_specificity_score=parsed.statement_specificity_score,
+                context_completeness_score=parsed.context_completeness_score,
+                contradiction_detected=parsed.contradiction_detected,
+                decision=parsed.decision,
+                reason=parsed.reason,
+            )
+
+        raise SemanticValidationError(
+            f"Gemini indisponivel apos {self.max_retries} tentativas."
+        ) from last_error
 
     def _build_request(self, semantic_input: SemanticValidationInput) -> dict:
         """Monta prompt e schema sem incluir HTML ou contexto desnecessario."""

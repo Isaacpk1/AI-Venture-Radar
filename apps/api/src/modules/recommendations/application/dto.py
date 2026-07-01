@@ -51,6 +51,8 @@ class EvidenceSnapshot:
     title: str | None
     notes: str | None
     confidence_score: float = 0.5
+    source_url: str | None = None
+    evidence_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,7 @@ class AIProfileSnapshot:
     deployment_stage: str = "unknown"
     gpu_need: str = "unknown"
     has_operational_signal: bool = False
+    profile_strength: float = 0.0
 
 
 @dataclass(frozen=True)

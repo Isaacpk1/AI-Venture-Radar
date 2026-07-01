@@ -80,10 +80,12 @@ describe("JobStatusPanel", () => {
 
     renderWithClient(<JobStatusPanel jobId={JOB_ID} />);
 
-    // "Na fila" aparece 2x na tela (titulo + 1o item da timeline) - usar
+    // "Na fila" aparece mais de uma vez (titulo + timeline + auditoria) - usar
     // getAllByText em vez de findByText (que exige match unico).
-    expect(await screen.findAllByText("Na fila")).toHaveLength(2);
+    expect(await screen.findAllByText("Na fila")).toHaveLength(3);
     expect(screen.getByText("Coletando fonte")).toBeInTheDocument();
+    expect(screen.getByText("Auditoria do job")).toBeInTheDocument();
+    expect(screen.getByText("Familia do job")).toBeInTheDocument();
   });
 
   it("mostra a mensagem de erro para um job falho", async () => {
@@ -119,7 +121,7 @@ describe("JobStatusPanel", () => {
     renderWithClient(<JobStatusPanel jobId={JOB_ID} />);
 
     expect(await screen.findByText(/fonte inicial foi rejeitada/i)).toBeInTheDocument();
-    expect(screen.getAllByText("Indexando conhecimento")).toHaveLength(2);
+    expect(screen.getAllByText("Indexando conhecimento")).toHaveLength(3);
     expect(screen.queryByText("fonte inicial rejeitada")).not.toBeInTheDocument();
   });
 

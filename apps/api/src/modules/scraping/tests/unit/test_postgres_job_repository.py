@@ -73,6 +73,27 @@ async def test_get_by_id_restores_result_id() -> None:
 
 
 @pytest.mark.anyio
+async def test_get_by_id_restores_cached_completed_result_id_by_url() -> None:
+    """Jobs completados por cache usam resultado recente de outro job."""
+
+    job = ScrapingJob(url="https://example.com")
+    job.start()
+    job.complete(uuid4())
+    result_id = uuid4()
+    session = Mock()
+    session.get = AsyncMock(return_value=ScrapingJobMapper.to_model(job))
+    session.scalar = AsyncMock(side_effect=[None, result_id])
+    repository = PostgresScrapingJobRepository(session)
+
+    restored = await repository.get_by_id(job.id)
+
+    assert restored is not None
+    assert restored.id == job.id
+    assert restored.result_id == result_id
+    assert session.scalar.await_count == 2
+
+
+@pytest.mark.anyio
 async def test_get_by_id_returns_none_for_missing_job() -> None:
     """Consulta inexistente não deve tentar procurar resultado."""
 

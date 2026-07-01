@@ -80,6 +80,38 @@ async def test_classify_startup_persists_outcome() -> None:
 
 
 @pytest.mark.anyio
+async def test_classify_startup_compacts_evidence_texts() -> None:
+    uow = _make_uow()
+    startup = Startup(name="NeuralMind")
+    await uow.startup_repository.save(startup)
+    evidence = StartupEvidence(
+        startup_id=startup.id,
+        scraping_result_id=uuid4(),
+        source_url="https://example.com/news",
+        title="Menu\nNewsletter\nNeuralMind usa BERT",
+        notes=(
+            "Assine nossa newsletter\n"
+            "NeuralMind treina modelos BERT em portugues\n"
+            "NeuralMind treina modelos BERT em portugues"
+        ),
+    )
+    await uow.evidence_repository.save(evidence)
+
+    classifier = FakeClassifierPort(
+        ClassificationOutcome(level=AiMaturityLevel.AI_NATIVE, reason="core")
+    )
+
+    use_case = ClassifyStartup(lambda: uow, classifier)
+    await use_case.execute(ClassifyStartupInput(startup_id=startup.id))
+
+    assert classifier.received_evidence_texts is not None
+    sent = classifier.received_evidence_texts[0]
+    assert "newsletter" not in sent.lower()
+    assert "BERT" in sent
+    assert sent.count("NeuralMind treina") == 1
+
+
+@pytest.mark.anyio
 async def test_classify_startup_raises_when_startup_missing() -> None:
     uow = _make_uow()
     classifier = FakeClassifierPort(

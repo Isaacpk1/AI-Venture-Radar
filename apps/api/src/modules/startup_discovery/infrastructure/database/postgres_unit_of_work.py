@@ -6,7 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from apps.api.src.database.relational.session import AsyncSessionFactory
 from apps.api.src.modules.startup_discovery.domain.repositories import (
+    CandidateRepository,
     DiscoveryRunRepository,
+)
+from apps.api.src.modules.startup_discovery.infrastructure.database.repositories.postgres_candidate_repository import (
+    PostgresCandidateRepository,
 )
 from apps.api.src.modules.startup_discovery.infrastructure.database.repositories.postgres_discovery_run_repository import (
     PostgresDiscoveryRunRepository,
@@ -22,10 +26,12 @@ class PostgresDiscoveryUnitOfWork:
         self._session_factory = session_factory
         self._session: AsyncSession | None = None
         self.repository: DiscoveryRunRepository
+        self.candidate_repository: CandidateRepository
 
     async def __aenter__(self) -> "PostgresDiscoveryUnitOfWork":
         self._session = self._session_factory()
         self.repository = PostgresDiscoveryRunRepository(self._session)
+        self.candidate_repository = PostgresCandidateRepository(self._session)
         return self
 
     async def __aexit__(

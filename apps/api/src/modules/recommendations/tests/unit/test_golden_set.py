@@ -515,6 +515,206 @@ def test_archetype_enterprise_mlops_nemo_appears_with_training_signals() -> None
 
 
 # ---------------------------------------------------------------------------
+# Eval set — 4 arquétipos reais validados manualmente (tarefa_radar ground truth)
+#
+# Estes 4 casos foram analisados à mão com dados reais (GitHub, notícias,
+# perfis públicos). São a régua principal para detectar regressão no motor:
+# se um deles falhar, provavelmente houve mudança de threshold ou catálogo
+# que quebrou um perfil real do portfólio NVIDIA Brasil.
+# ---------------------------------------------------------------------------
+
+
+def test_eval_neuralmind_ai_native_nlp_gets_nim_triton_tensorrt_llm() -> None:
+    """NeuralMind: startup de pesquisa + deploy de LLMs em PT (BERTimbau, T5, RAG).
+
+    Parceira NVIDIA. Espera NIM/Triton/TensorRT-LLM no top-3; NeMo em alguma posição
+    (há sinal de training/fine-tuning). Sem healthcare, speech, robotics.
+    """
+    results = match_technologies(
+        sector="natural language processing",
+        description=(
+            "AI research lab building and deploying large language models for Portuguese. "
+            "Trains transformer models (BERT, T5) and serves them as API microservices "
+            "for production NLP inference. Develops RAG pipelines and LLM fine-tuning "
+            "with optimized token throughput."
+        ),
+        ai_maturity_level="ai_native",
+        ai_context=StartupAIContext(
+            ai_workload_type="nlp",
+            deployment_stage="production",
+            gpu_need="high",
+            has_operational_signal=True,
+        ),
+        evidence_signals=[
+            _evidence(
+                "language model llm inference api deployment model serving "
+                "pytorch onnx throughput token fine tuning training generative ai "
+                "microservice batching kubernetes"
+            ),
+        ],
+        technologies=FULL_CATALOG,
+    )
+
+    slugs = {r.technology.slug for r in results}
+
+    # Os 3 principais para deploy de LLMs devem aparecer
+    assert "nvidia-nim" in slugs, "NIM ausente — startup serve LLMs como API microservices"
+    assert "triton-inference-server" in slugs, "Triton ausente — startup usa model serving com PyTorch/ONNX"
+    assert "tensorrt-llm" in slugs, "TensorRT-LLM ausente — startup otimiza throughput/token de LLMs"
+    # NeMo porque há sinal de training/fine-tuning de LLMs
+    assert "nvidia-nemo" in slugs, "NeMo ausente — startup treina e faz fine-tuning de LLMs"
+
+    # Precision@3: pelo menos 2 dos 3 esperados no topo
+    assert _precision_at_k(results, ["nvidia-nim", "triton-inference-server", "tensorrt-llm"]) >= 0.66, (
+        f"top-3 obtido: {[r.technology.slug for r in results[:3]]}"
+    )
+
+    # Sem falsos positivos óbvios
+    assert _false_positive_slugs(results, ["monai", "nvidia-clara", "riva", "nvidia-isaac", "nvidia-omniverse"]) == set()
+
+
+def test_eval_dynadok_ai_native_idp_gets_nim_triton_tensorrt() -> None:
+    """Dynadok: IDP (Intelligent Document Processing) com visão+NLP, clientes enterprise.
+
+    Extrai dados estruturados de documentos via visão computacional e NLP.
+    Clientes Afya e Cenibra. Espera NIM/Triton/TensorRT.
+    """
+    results = match_technologies(
+        sector="intelligent document processing",
+        description=(
+            "AI platform for intelligent document processing combining computer vision "
+            "and NLP to extract structured data from invoices, contracts and medical records. "
+            "Deploys optimized inference models for enterprise clients with low-latency "
+            "document analysis. Uses PyTorch and ONNX for model optimization."
+        ),
+        ai_maturity_level="ai_native",
+        ai_context=StartupAIContext(
+            ai_workload_type="vision",
+            deployment_stage="production",
+            gpu_need="high",
+            has_operational_signal=True,
+        ),
+        evidence_signals=[
+            _evidence(
+                "inference optimization pytorch onnx latency model serving batching "
+                "deployment api document processing extraction"
+            ),
+        ],
+        technologies=FULL_CATALOG,
+    )
+
+    slugs = {r.technology.slug for r in results}
+
+    assert "triton-inference-server" in slugs, "Triton ausente — deploy com PyTorch/ONNX e batching"
+    assert "tensorrt" in slugs, "TensorRT ausente — otimização de latência com PyTorch/ONNX"
+    # NIM porque serve modelos como API com deployment
+    assert "nvidia-nim" in slugs, "NIM ausente — startup serve modelos como API microservices"
+
+    # TensorRT ou Triton no top-3
+    assert _precision_at_k(results, ["tensorrt", "triton-inference-server", "nvidia-nim"], k=3) >= 0.66, (
+        f"top-3 obtido: {[r.technology.slug for r in results[:3]]}"
+    )
+
+    # Sem healthcare (sem sinal médico direto) e sem robotics
+    assert _false_positive_slugs(results, ["monai", "nvidia-clara", "riva", "nvidia-isaac", "nvidia-omniverse"]) == set()
+
+
+def test_eval_noleak_ai_native_vision_rl_gets_tensorrt_triton() -> None:
+    """Noleak: visão computacional + RL para análise de vídeo em tempo real, GPU alta.
+
+    68 anos de vídeo processados. Edge inference com GPU. Espera TensorRT e Triton.
+    Sem healthcare nem speech.
+    """
+    results = match_technologies(
+        sector="computer vision",
+        description=(
+            "Real-time video intelligence platform using deep learning and reinforcement "
+            "learning for security and behavioral monitoring. Processes video streams at "
+            "the edge with GPU-accelerated inference. Uses PyTorch models exported to "
+            "ONNX for latency-optimized edge deployment."
+        ),
+        ai_maturity_level="ai_native",
+        ai_context=StartupAIContext(
+            ai_workload_type="vision",
+            deployment_stage="production",
+            gpu_need="high",
+            has_operational_signal=True,
+        ),
+        evidence_signals=[
+            _evidence(
+                "computer vision video real-time inference pytorch onnx optimization "
+                "latency edge batching model serving deployment"
+            ),
+        ],
+        technologies=FULL_CATALOG,
+    )
+
+    slugs = {r.technology.slug for r in results}
+
+    assert "tensorrt" in slugs, "TensorRT ausente — startup otimiza PyTorch/ONNX para edge com latência baixa"
+    assert "triton-inference-server" in slugs, "Triton ausente — model serving com PyTorch/ONNX e batching"
+
+    # Ambos no top-3
+    assert _precision_at_k(results, ["tensorrt", "triton-inference-server"], k=3) >= 0.66, (
+        f"top-3 obtido: {[r.technology.slug for r in results[:3]]}"
+    )
+
+    # Healthcare, speech e robotics industrial claramente fora do perfil de visão em segurança
+    assert _false_positive_slugs(results, ["monai", "nvidia-clara", "riva", "nvidia-isaac", "nvidia-omniverse"]) == set()
+
+
+def test_eval_driva_ai_enabled_analytics_gets_rapids_cudf_cuml() -> None:
+    """Driva: analytics financeiro + agentes de IA (AI-enabled, tabular).
+
+    Motor de recomendação para financiamento de veículos. Espera RAPIDS/cuDF/cuML.
+    NÃO deve receber infra pesada de treino de LLM (NeMo, TensorRT-LLM).
+    """
+    results = match_technologies(
+        sector="fintech",
+        description=(
+            "AI-enabled fintech platform for vehicle credit analysis using machine learning "
+            "on large tabular datasets. Accelerates data science pipelines with GPU-powered "
+            "pandas and dataframe operations. Builds recommendation and classification models "
+            "with scikit-learn compatible GPU APIs."
+        ),
+        ai_maturity_level="ai_enabled",
+        ai_context=StartupAIContext(
+            ai_workload_type="analytics",
+            deployment_stage="production",
+            gpu_need="high",
+            has_operational_signal=True,
+        ),
+        evidence_signals=[
+            _evidence(
+                "analytics dataframe pandas gpu data science machine learning "
+                "scikit-learn clustering classification rapids etl recommendation"
+            ),
+        ],
+        technologies=FULL_CATALOG,
+    )
+
+    slugs = {r.technology.slug for r in results}
+
+    assert "rapids" in slugs, "RAPIDS ausente — pipeline tabular GPU para data science"
+    assert "cudf" in slugs, "cuDF ausente — operações de dataframe/pandas em GPU"
+    assert "cuml" in slugs, "cuML ausente — ML clássico (scikit-learn) em GPU"
+
+    # Os 3 esperados devem dominar o top-3
+    assert _precision_at_k(results, ["rapids", "cudf", "cuml"]) >= 0.66, (
+        f"top-3 obtido: {[r.technology.slug for r in results[:3]]}"
+    )
+
+    # Infra pesada de treino de LLM não faz sentido para analytics tabular
+    heavy_training = _false_positive_slugs(results, ["nvidia-nemo", "tensorrt-llm"])
+    assert heavy_training == set(), (
+        f"Startup de analytics tabular não deveria receber infra de LLM: {heavy_training}"
+    )
+
+    # Healthcare e robotics claramente fora do perfil
+    assert _false_positive_slugs(results, ["monai", "nvidia-clara", "nvidia-isaac", "nvidia-omniverse"]) == set()
+
+
+# ---------------------------------------------------------------------------
 # Métricas consolidadas (relatório, não falha)
 # ---------------------------------------------------------------------------
 

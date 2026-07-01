@@ -27,6 +27,10 @@ from apps.api.src.modules.scraping.application.use_cases.get_scraping_job import
 from apps.api.src.modules.scraping.application.use_cases.get_scraping_result import (
     GetScrapingResult,
 )
+from apps.api.src.modules.scraping.application.public.result_reader import (
+    DefaultScrapingResultHtmlReader,
+    ScrapingResultHtmlReader,
+)
 from apps.api.src.modules.scraping.application.public.job_submitter import (
     DefaultScrapingJobSubmitter,
     ScrapingJobSubmitter,
@@ -198,6 +202,13 @@ class ScrapingFactory:
         """Cria o caso de uso de consulta do conteudo aprovado."""
 
         return GetScrapingResult(unit_of_work_factory=cls.create_unit_of_work)
+
+    @classmethod
+    def create_result_html_reader(cls) -> ScrapingResultHtmlReader:
+        """Cria o leitor de HTML bruto para enriquecimento de links (P0d)."""
+        return DefaultScrapingResultHtmlReader(
+            get_scraping_result=cls.create_get_scraping_result(),
+        )
 
     @classmethod
     def create_job_submitter(cls) -> ScrapingJobSubmitter:

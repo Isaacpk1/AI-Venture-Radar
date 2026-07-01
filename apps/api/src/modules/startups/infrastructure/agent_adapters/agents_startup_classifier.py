@@ -26,6 +26,7 @@ from apps.api.src.modules.startups.application.ports import (
     StartupClassifierPort,
 )
 from apps.api.src.modules.startups.domain.enums import AiMaturityLevel
+from apps.api.src.modules.startups.domain.policies import calibrate_ai_maturity_level
 
 
 class AgentsStartupClassifier(StartupClassifierPort):
@@ -61,5 +62,14 @@ class AgentsStartupClassifier(StartupClassifierPort):
         # string ("ai_native", "ai_enabled", "non_ai"), de proposito, para
         # que esta traducao seja so uma troca de tipo.
         level = AiMaturityLevel(agents_result.level.value)
+        level, reason = calibrate_ai_maturity_level(
+            level=level,
+            reason=agents_result.reason,
+            name=name,
+            sector=sector,
+            description=description,
+            website_url=website_url,
+            evidence_texts=evidence_texts,
+        )
 
-        return ClassificationOutcome(level=level, reason=agents_result.reason)
+        return ClassificationOutcome(level=level, reason=reason)

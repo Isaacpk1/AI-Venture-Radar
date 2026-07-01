@@ -211,6 +211,9 @@ def extraction_result_to_payload(result: ExtractionResult) -> dict[str, object]:
         "funding_stage": result.funding_stage.value,
         "funding_amount_usd": result.funding_amount_usd,
         "customers": list(result.customers),
+        "sector": result.sector,
+        "description": result.description,
+        "country": result.country,
     }
 
 
@@ -226,6 +229,15 @@ def extraction_result_from_payload(payload: dict[str, object]) -> ExtractionResu
             else None
         ),
         customers=[str(name) for name in payload.get("customers", [])],
+        sector=str(payload["sector"]) if payload.get("sector") is not None else None,
+        description=(
+            str(payload["description"])
+            if payload.get("description") is not None
+            else None
+        ),
+        country=(
+            str(payload["country"]) if payload.get("country") is not None else None
+        ),
     )
 
 

@@ -111,7 +111,9 @@ def suggest_next_actions(recommendations: list[RecommendationItem]) -> list[str]
 
 
 def _recommendation_strength(recommendation: RecommendationItem) -> str:
-    if recommendation.nivel in {"forte", "moderada", "exploratoria"}:
+    if recommendation.nivel in {
+        "forte", "moderada", "exploratoria", "hipotese_prioritaria"
+    }:
         return recommendation.nivel
     if recommendation.score >= 0.65 and recommendation.confidence >= 0.65:
         return "forte"
@@ -153,26 +155,51 @@ def _unknown(value: str | None) -> bool:
     return value is None or value.strip().lower() in {"", "unknown", "desconhecida"}
 
 
+def _confidence_suffix(
+    field_confidence: dict[str, float] | None,
+    field_name: str,
+) -> str:
+    if not field_confidence or field_name not in field_confidence:
+        return ""
+    return f" (confianca {field_confidence[field_name]:.0%})"
+
+
 def _profile_found_items(ai_profile: StartupAIProfileItem | None) -> list[str]:
     if ai_profile is None:
         return []
 
+    confidence = ai_profile.field_confidence or {}
     fields = [
-        ("Workload de IA", ai_profile.ai_workload_type),
-        ("Tipo de modelo", ai_profile.model_type),
-        ("Modalidade de dados", ai_profile.data_modality),
-        ("Estagio de deploy", ai_profile.deployment_stage),
-        ("Ambiente de infra", ai_profile.infra_environment),
-        ("Necessidade de GPU", ai_profile.gpu_need),
-        ("Latencia", ai_profile.latency_requirement),
+        ("Workload de IA", "ai_workload_type", ai_profile.ai_workload_type),
+        ("Tipo de modelo", "model_type", ai_profile.model_type),
+        ("Modalidade de dados", "data_modality", ai_profile.data_modality),
+        ("Estagio de deploy", "deployment_stage", ai_profile.deployment_stage),
+        ("Ambiente de infra", "infra_environment", ai_profile.infra_environment),
+        ("Necessidade de GPU", "gpu_need", ai_profile.gpu_need),
+        ("Latencia", "latency_requirement", ai_profile.latency_requirement),
     ]
-    items = [f"{label}: {value}" for label, value in fields if not _unknown(value)]
+    items = [
+        f"{label}: {value}{_confidence_suffix(confidence, field_name)}"
+        for label, field_name, value in fields
+        if not _unknown(value)
+    ]
     if ai_profile.scale_signal:
-        items.append(f"Sinal de escala: {ai_profile.scale_signal}")
+        items.append(
+            "Sinal de escala: "
+            f"{ai_profile.scale_signal}{_confidence_suffix(confidence, 'scale_signal')}"
+        )
     if ai_profile.current_tools:
-        items.append(f"Ferramentas atuais: {', '.join(ai_profile.current_tools)}")
+        items.append(
+            "Ferramentas atuais: "
+            f"{', '.join(ai_profile.current_tools)}"
+            f"{_confidence_suffix(confidence, 'current_tools')}"
+        )
     if ai_profile.business_goal:
-        items.append(f"Objetivo de negocio: {ai_profile.business_goal}")
+        items.append(
+            "Objetivo de negocio: "
+            f"{ai_profile.business_goal}"
+            f"{_confidence_suffix(confidence, 'business_goal')}"
+        )
     return items
 
 
@@ -276,8 +303,13 @@ def build_briefing_markdown(
     strong_recommendations = [
         r for r in recommendations if _recommendation_strength(r) == "forte"
     ]
+    hipotese_recommendations = [
+        r for r in recommendations
+        if _recommendation_strength(r) == "hipotese_prioritaria"
+    ]
     exploratory_recommendations = [
-        r for r in recommendations if _recommendation_strength(r) != "forte"
+        r for r in recommendations
+        if _recommendation_strength(r) not in {"forte", "hipotese_prioritaria"}
     ]
 
     lines = [f"# Briefing Executivo - {startup.name}", "", "## Resumo Executivo"]
@@ -292,10 +324,16 @@ def build_briefing_markdown(
 
     lines += ["", "## Tese de Fit NVIDIA"]
     lines.append(_best_recommendation_summary(recommendations))
-    if recommendations and _recommendation_strength(recommendations[0]) == "exploratoria":
+    top_strength = _recommendation_strength(recommendations[0]) if recommendations else None
+    if top_strength == "exploratoria":
         lines.append(
             "A recomendacao deve ser tratada como hipotese de qualificacao, "
             "nao como indicacao tecnica fechada."
+        )
+    elif top_strength == "hipotese_prioritaria":
+        lines.append(
+            "Fit relevante identificado mas evidencias insuficientes — "
+            "priorizar coleta de dados antes de proposta tecnica."
         )
 
     lines += ["", "## Nivel de Confianca Geral"]
@@ -336,7 +374,7 @@ def build_briefing_markdown(
     else:
         lines.append("- Nenhuma recomendacao gerada ainda.")
 
-    lines += ["", "## Recomendacoes Fortes"]
+    lines += ["", "## Recomendacoes Acionaveis"]
     if strong_recommendations:
         for recommendation in strong_recommendations:
             origins = (
@@ -351,20 +389,34 @@ def build_briefing_markdown(
     else:
         lines.append("- Nenhuma recomendacao forte com as evidencias atuais.")
 
-    lines += ["", "## Hipoteses Exploratorias"]
+    lines += ["", "## Hipoteses a Qualificar"]
+    if hipotese_recommendations:
+        for recommendation in hipotese_recommendations:
+            faltando = (
+                "; ".join(recommendation.faltando)
+                or "evidencias concretas sobre uso e maturidade da tecnologia"
+            )
+            lines.append(
+                f"- **{recommendation.technology_name}** (hipotese prioritaria — "
+                f"fit relevante, evidencias insuficientes): "
+                f"{recommendation.justification} Para confirmar: {faltando}."
+            )
+    else:
+        lines.append("- Nenhuma hipotese prioritaria identificada.")
+
+    lines += ["", "## O Que Coletar"]
     if exploratory_recommendations:
         for recommendation in exploratory_recommendations:
-            strength = _recommendation_strength(recommendation)
             faltando = (
                 "; ".join(recommendation.faltando)
                 or "mais evidencias sobre o workload e maturidade tecnica"
             )
             lines.append(
-                f"- **{recommendation.technology_name}** ({strength}): "
-                f"{recommendation.justification} Para elevar o nivel: {faltando}."
+                f"- **{recommendation.technology_name}**: "
+                f"Para elevar ao nivel de hipotese: {faltando}."
             )
     else:
-        lines.append("- Nenhuma hipotese exploratoria separada das recomendacoes fortes.")
+        lines.append("- Nenhuma recomendacao exploratoria adicional.")
 
     if nvidia_context:
         lines += ["", "## Contexto NVIDIA", nvidia_context]

@@ -1,10 +1,14 @@
 """Caso de uso para classificar a maturidade de IA de uma startup."""
 
+import asyncio
 from uuid import UUID
 
 from apps.api.src.modules.startups.application.dto import (
     ClassifyStartupInput,
     StartupView,
+)
+from apps.api.src.modules.startups.application.evidence_text_cleaner import (
+    compact_evidence_text,
 )
 from apps.api.src.modules.startups.application.ports import StartupClassifierPort
 from apps.api.src.modules.startups.application.public.classification_trigger import (
@@ -20,6 +24,11 @@ from apps.api.src.modules.startups.domain.exceptions import (
     StartupClassificationUnavailableError,
     StartupNotFoundError,
 )
+from apps.api.src.shared.logging import get_logger
+
+
+logger = get_logger(__name__)
+TRY_CLASSIFY_TIMEOUT_SECONDS = 45
 
 
 class ClassifyStartup(ClassificationTrigger):
@@ -35,8 +44,29 @@ class ClassifyStartup(ClassificationTrigger):
 
     async def try_classify(self, startup_id: UUID) -> None:
         try:
-            await self.execute(ClassifyStartupInput(startup_id=startup_id))
+            await asyncio.wait_for(
+                self.execute(ClassifyStartupInput(startup_id=startup_id)),
+                timeout=TRY_CLASSIFY_TIMEOUT_SECONDS,
+            )
         except StartupClassificationUnavailableError:
+            return
+        except (asyncio.TimeoutError, TimeoutError):
+            logger.warning(
+                "startup classification timed out",
+                extra={
+                    "startup_id": str(startup_id),
+                    "reason": f"timeout after {TRY_CLASSIFY_TIMEOUT_SECONDS}s",
+                },
+            )
+            return
+        except Exception as error:
+            logger.warning(
+                "startup classification skipped after best-effort failure",
+                extra={
+                    "startup_id": str(startup_id),
+                    "reason": str(error) or repr(error),
+                },
+            )
             return
 
     async def execute(self, classify_input: ClassifyStartupInput) -> StartupView:
@@ -58,7 +88,9 @@ class ClassifyStartup(ClassificationTrigger):
             )
 
             evidence_texts = [
-                f"{evidence.title or ''} {evidence.notes or ''}".strip()
+                compact_evidence_text(
+                    "\n".join([evidence.title or "", evidence.notes or ""])
+                )
                 for evidence in evidences
             ]
             outcome = await self._classifier.classify(

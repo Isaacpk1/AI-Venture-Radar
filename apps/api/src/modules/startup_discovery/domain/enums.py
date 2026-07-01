@@ -8,3 +8,11 @@ class DiscoveryRunStatus(str, Enum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class CandidateStatus(str, Enum):
+    DISCOVERED = "discovered"
+    ENRICHED = "enriched"
+    SUBMITTED = "submitted"
+    REJECTED = "rejected"
+    FAILED = "failed"

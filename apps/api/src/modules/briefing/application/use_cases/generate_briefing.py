@@ -1,5 +1,6 @@
 """Caso de uso para gerar o briefing executivo de uma startup."""
 
+import asyncio
 from uuid import UUID
 
 from apps.api.src.modules.briefing.application.dto import (
@@ -27,6 +28,11 @@ from apps.api.src.modules.briefing.domain.policies import (
     build_briefing_markdown,
     suggest_next_actions,
 )
+from apps.api.src.shared.logging import get_logger
+
+
+logger = get_logger(__name__)
+NVIDIA_CONTEXT_TIMEOUT_SECONDS = 30
 
 
 class GenerateBriefing(BriefingGenerator):
@@ -144,7 +150,18 @@ class GenerateBriefing(BriefingGenerator):
             return None
 
         technology_names = tuple(r.technology_name for r in recommendations)
-        grounded = await self._grounder.ground(sector, technology_names)
+        try:
+            grounded = await asyncio.wait_for(
+                self._grounder.ground(sector, technology_names),
+                timeout=NVIDIA_CONTEXT_TIMEOUT_SECONDS,
+            )
+        except Exception as error:
+            logger.warning(
+                "nvidia context grounding skipped after best-effort failure",
+                extra={"reason": str(error)},
+            )
+            return None
+
         if grounded is None:
             return None
 

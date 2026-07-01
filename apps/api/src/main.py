@@ -1,6 +1,8 @@
 """Ponto de entrada HTTP da aplicacao."""
 
 import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -40,15 +42,33 @@ from apps.api.src.modules.scraping.presentation.routes import (
 from apps.api.src.modules.startup_discovery.presentation.router import (
     router as startup_discovery_router,
 )
+from apps.api.src.modules.startup_discovery.factories.startup_discovery_factory import (
+    StartupDiscoveryFactory,
+)
 from apps.api.src.modules.startups.presentation.routes import (
     router as startups_router,
 )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    scheduler = StartupDiscoveryFactory.create_scheduler()
+    if scheduler is not None:
+        scheduler.start()
+        app.state.startup_discovery_scheduler = scheduler
+
+    try:
+        yield
+    finally:
+        if scheduler is not None:
+            await scheduler.stop()
 
 
 app = FastAPI(
     title="NVIDIA Startup AI Radar",
     version="0.1.0",
     description="API para coleta e analise de dados publicos de startups.",
+    lifespan=lifespan,
 )
 
 

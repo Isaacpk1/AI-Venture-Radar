@@ -161,6 +161,21 @@ async def test_create_startup_persists_and_returns_view() -> None:
 
 
 @pytest.mark.anyio
+async def test_create_startup_infers_brazil_from_br_domain() -> None:
+    uow = _make_uow()
+    use_case = CreateStartup(lambda: uow)
+
+    view = await use_case.execute(
+        CreateStartupInput(
+            name="Acme Brasil AI",
+            website_url="https://acme.com.br",
+        )
+    )
+
+    assert view.country == "BR"
+
+
+@pytest.mark.anyio
 async def test_create_startup_via_public_contract_returns_id() -> None:
     uow = _make_uow()
     use_case = CreateStartup(lambda: uow)
@@ -356,3 +371,70 @@ async def test_add_and_list_startup_evidences() -> None:
     assert evidence_view.evidence_type is StartupEvidenceType.NEWS
     assert len(evidences) == 1
     assert evidences[0].id == evidence_view.id
+
+
+@pytest.mark.anyio
+async def test_add_startup_evidence_infers_technical_type_from_jobs_and_github() -> None:
+    uow = _make_uow()
+    startup = Startup(name="Acme AI")
+    await uow.startup_repository.save(startup)
+
+    evidence_view = await AddStartupEvidence(lambda: uow).execute(
+        AddStartupEvidenceInput(
+            startup_id=startup.id,
+            scraping_result_id=uuid4(),
+            source_url="https://github.com/acme-ai/platform",
+            title="Acme AI platform",
+            notes="requirements.txt includes PyTorch and CUDA.",
+        )
+    )
+
+    assert evidence_view.evidence_type is StartupEvidenceType.TECHNICAL
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.terra.com.br/noticias/dino/neuralmind",
+        "https://revistapesquisa.fapesp.br/cresce-o-apoio-a-startups",
+        "https://bhtec.org.br/2025/10/10/neuralmind",
+        "https://parque.inova.unicamp.br/neuralmind-programa-google",
+    ],
+)
+async def test_add_startup_evidence_infers_news_type_from_news_hosts(
+    url: str,
+) -> None:
+    uow = _make_uow()
+    startup = Startup(name="NeuralMind")
+    await uow.startup_repository.save(startup)
+
+    evidence_view = await AddStartupEvidence(lambda: uow).execute(
+        AddStartupEvidenceInput(
+            startup_id=startup.id,
+            scraping_result_id=uuid4(),
+            source_url=url,
+            title="NeuralMind recebe apoio para IA",
+            notes="Empresa treina modelos BERT em portugues.",
+        )
+    )
+
+    assert evidence_view.evidence_type is StartupEvidenceType.NEWS
+
+
+@pytest.mark.anyio
+async def test_add_startup_evidence_infers_website_type_for_plain_site() -> None:
+    uow = _make_uow()
+    startup = Startup(name="Acme AI")
+    await uow.startup_repository.save(startup)
+
+    evidence_view = await AddStartupEvidence(lambda: uow).execute(
+        AddStartupEvidenceInput(
+            startup_id=startup.id,
+            scraping_result_id=uuid4(),
+            source_url="https://acme.example.com/about",
+            title="About Acme",
+        )
+    )
+
+    assert evidence_view.evidence_type is StartupEvidenceType.WEBSITE
