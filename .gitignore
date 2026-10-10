@@ -40,3 +40,6 @@ Thumbs.db
 .claude/
 .CLAUDE/
 CLAUDE.md
+
+# Build cache do TypeScript
+*.tsbuildinfo
