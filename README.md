@@ -1,4 +1,6 @@
-# NVIDIA Startup AI Radar
+# AI Venture Radar
+
+[![CI](https://github.com/Isaacpk1/AI-Venture-Radar/actions/workflows/ci.yml/badge.svg)](https://github.com/Isaacpk1/AI-Venture-Radar/actions/workflows/ci.yml)
 
 Plataforma para transformar fontes publicas sobre startups em evidencias rastreaveis, perfis estruturados, recomendacoes de tecnologias NVIDIA e briefings executivos.
 
@@ -21,6 +23,14 @@ URL ou descoberta publica
 ```
 
 Ao final, o sistema apresenta perfil da startup, evidencias coletadas, maturidade de IA, recomendacoes fundamentadas, lacunas de informacao e briefing em Markdown/PDF.
+
+### Destaques
+
+- **RAG hibrido com citacoes**: busca vetorial no Qdrant combinada com busca textual no PostgreSQL/ParadeDB e rerank opcional, com toda resposta apontando para a evidencia de origem.
+- **Agentes com LangGraph** para extracao, classificacao de maturidade de IA e recomendacao, rodando fora do request HTTP em workers Dramatiq.
+- **Monolito modular** em FastAPI com 11 modulos de dominio, cada um com suas proprias camadas e testes.
+- **Mais de 860 testes automatizados** (830 no backend e 37 no frontend) que rodam no CI sem depender de infraestrutura.
+- **Frontend operacional** em Next.js para enviar URLs, acompanhar jobs, comparar startups e consultar o conhecimento NVIDIA.
 
 ## Arquitetura
 
@@ -56,7 +66,7 @@ apps/
   web/        Frontend Next.js e BFF /api/radar
 workers/      Workers Dramatiq para tarefas assincronas
 infra/        Docker Compose de dependencias locais
-packages/     Artefatos compartilhados
+scripts/      Scripts de manutencao de jobs
 docs/         Documentacao tecnica e historico por modulo
 ```
 
@@ -178,7 +188,8 @@ Frontend:
 Backend:
 
 ```powershell
-pytest
+pytest                                                        # tudo (exige a infra do Docker)
+pytest -m "not integration and not postgres and not qdrant and not redis and not ragas_eval"   # so unitarios
 ```
 
 Frontend:
@@ -212,3 +223,7 @@ Para entender o projeto rapidamente, leia nesta ordem:
 - Arquivos `.env` nao devem ser versionados.
 - O Docker Compose atual cobre dependencias de infraestrutura; API, workers e frontend rodam localmente em processos separados.
 - A dockerizacao completa da aplicacao e hardening de producao aparecem como evolucao futura.
+
+## Autor
+
+**Isaac Nicolas Alves da Silva** · [LinkedIn](https://www.linkedin.com/in/isaac-nicolas-alves-da-silva-9787592a4/) · [GitHub](https://github.com/Isaacpk1)
